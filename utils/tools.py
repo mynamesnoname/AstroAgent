@@ -453,12 +453,21 @@ def _convert_to_spectrum(points, gray, x_axis, y_axis):
     # 计算加权平均flux
     unique_wavelength, weighted_flux = weighted_average_flux(wavelength, flux, gray)
 
+    max_unresolved_flux = []
+    min_unresolved_flux = []
+    for i, w in enumerate(unique_wavelength):
+        unresolved_flux = flux[wavelength == w]
+        max_unresolved_flux.append(np.max(unresolved_flux))
+        min_unresolved_flux.append(np.min(unresolved_flux))
+
     # 构造最终结果
     spectrum_dict = {
         'flux': flux.tolist(),
         'wavelength': wavelength.tolist(),
         'new_wavelength': unique_wavelength.tolist(),
-        'weighted_flux': weighted_flux.tolist()
+        'weighted_flux': weighted_flux.tolist(),
+        'max_unresolved_flux': max_unresolved_flux,
+        'min_unresolved_flux': min_unresolved_flux
     }
 
     return spectrum_dict
@@ -495,7 +504,6 @@ def convert_to_spectrum() -> str:
         # 调用核心函数进行转换
         spectrum_dict = _convert_to_spectrum(points, gray, x_axis_dict, y_axis_dict)
 
-        # 存储到 LOCAL_VARS（这里暂时示范不存储为 LOCAL_VARS）
         _set_var('spectrum', spectrum_dict)
 
         # 返回结果
@@ -518,6 +526,7 @@ def _detect_peaks_on_flux(flux, sigma, height=None, prominence=None, distance=No
     for i, p in enumerate(peaks):
         info = {
             "index": int(p),
+            "wavelength": float(flux_smooth[p]),
             "flux": float(flux_smooth[p]),
             "prominence": float(props["prominences"][i]) if "prominences" in props else None,
             "peak_height": float(props["peak_heights"][i]) if "peak_heights" in props else None,
