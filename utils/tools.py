@@ -488,18 +488,18 @@ def convert_to_spectrum() -> str:
     输出：
     - 返回一个 JSON 字符串，包含波长（wavelength）、光谱强度（flux）和加权平均后的波长及flux
     """
-    curve_points = _get_var('curve_points')    
-    curve_gray_values = _get_var('curve_gray_values')
+    # curve_points = _get_var('curve_points')
+    # curve_gray_values = _get_var('curve_gray_values')
 
-    x_axis_info = _get_var('x')
-    y_axis_info = _get_var('y')
+    # x_axis_info = _get_var('x')
+    # y_axis_info = _get_var('y')
 
     try:
         # 解析输入数据
-        points = np.array(json.loads(curve_points))
-        gray = np.array(json.loads(curve_gray_values)).astype(np.float64)
-        x_axis_dict = json.loads(x_axis_info)
-        y_axis_dict = json.loads(y_axis_info)
+        points = np.array(LOCAL_VARS['curve_points'])
+        gray = np.array(LOCAL_VARS['curve_gray_values']).astype(np.float64)
+        x_axis_dict = LOCAL_VARS['x']
+        y_axis_dict = LOCAL_VARS['y']
 
         # 调用核心函数进行转换
         spectrum_dict = _convert_to_spectrum(points, gray, x_axis_dict, y_axis_dict)
@@ -513,14 +513,18 @@ def convert_to_spectrum() -> str:
         return json.dumps({"error": str(e)}, ensure_ascii=False)
 
 
-def _detect_peaks_on_flux(flux, sigma, height=None, prominence=None, distance=None):
+def _detect_features_on_flux(feature, flux, sigma, height=None, prominence=None):
     """平滑后检测峰，返回峰索引及属性"""
+
+    if feature == "trough":
+        flux = -flux
+
     if sigma > 0:
         flux_smooth = gaussian_filter1d(flux, sigma=sigma)
     else:
         flux_smooth = flux.copy()
 
-    peaks, props = find_peaks(flux_smooth, height=height, prominence=prominence, distance=distance)
+    peaks, props = find_peaks(flux_smooth, height=height, prominence=prominence, distance=None)
     widths_res = peak_widths(flux_smooth, peaks, rel_height=0.5)
     peaks_info = []
     for i, p in enumerate(peaks):
@@ -529,21 +533,20 @@ def _detect_peaks_on_flux(flux, sigma, height=None, prominence=None, distance=No
             "wavelength": float(flux_smooth[p]),
             "flux": float(flux_smooth[p]),
             "prominence": float(props["prominences"][i]) if "prominences" in props else None,
-            "peak_height": float(props["peak_heights"][i]) if "peak_heights" in props else None,
             "width_pixels": float(widths_res[0][i])
         }
         peaks_info.append(info)
     return flux_smooth, peaks_info
 
 
-def _merge_peaks_across_scales(wavelengths, peaks_by_scale, tol_pixels=5, weight_original=5.0):
+def _merge_peaks_across_sigmas(feature, wavelengths, peaks_by_sigma, tol_pixels=5, weight_original=5.0):
     """
     合并不同scale的峰，原始光谱权重最高。
-    peaks_by_scale: list of dicts [{"sigma":..., "peaks": [...]}]
+    peaks_by_sigma: list of dicts [{"sigma":..., "peaks": [...]}]
     返回 consensus 列表
     """
     merged = []
-    for scale_entry in peaks_by_scale:
+    for scale_entry in peaks_by_sigma:
         sigma = scale_entry["sigma"]
         for p in scale_entry["peaks"]:
             idx = p["index"]
@@ -568,10 +571,12 @@ def _merge_peaks_across_scales(wavelengths, peaks_by_scale, tol_pixels=5, weight
         weighted_sum = 0.0
         weight_total = 0.0
         max_sigma = 0.0  # 最大平滑度
+        min_sigma = np.inf  # 最小平滑度
         for inf in infos:
             sigma = inf["sigma"]
             idx = inf["index"]
             max_sigma = max(max_sigma, sigma)
+            min_sigma = min(min_sigma, sigma)
             if sigma == 0:  # 原始光谱，权重大
                 w = weight_original
             else:
@@ -587,67 +592,97 @@ def _merge_peaks_across_scales(wavelengths, peaks_by_scale, tol_pixels=5, weight
         widths = [inf.get("width_pixels") or 0.0 for inf in infos]
         scales = list({inf["sigma"] for inf in infos})
 
-        consensus.append({
-            "rep_index": rep_idx,
-            "wavelength": wlen,
-            "appearances": appearances,
-            "max_prominence": float(max_prom),
-            "mean_flux": mean_flux,
-            "width_mean": float(np.mean(widths)),
-            "scales_seen": scales,
-            "max_sigma_seen": max_sigma,  # 最大平滑度
-            "details": infos
-        })
+        if feature == "peak":
+            consensus.append({
+                "rep_index": rep_idx,
+                "wavelength": wlen,
+                "appearances": appearances,
+                "max_prominence": float(max_prom),
+                "mean_flux": mean_flux,
+                "width_mean": float(np.mean(widths)),
+                "scales_seen": scales,
+                "max_sigma_seen": max_sigma,  # 最大平滑度
+                "details": infos
+            })
+        else:  # trough
+            consensus.append({
+                "rep_index": rep_idx,
+                "wavelength": wlen,
+                "appearances": appearances,
+                "max_prominence": float(max_prom),
+                "mean_flux": mean_flux,
+                "width_mean": float(np.mean(widths)),
+                "scales_seen": scales,
+                "min_sigma_seen": min_sigma,  # 最大平滑度
+                "details": infos
+            })
 
     # 排序：先按 max_sigma（平滑度）降序，再按 appearances 降序，再按 max_prominence 降序
-    consensus = sorted(
-        consensus,
-        key=lambda x: (x["max_sigma_seen"], x["max_prominence"], x["appearances"]),
-        reverse=True
-    )
+    if feature == "peak":
+        consensus = sorted(
+            consensus,
+            key=lambda x: (x["max_sigma_seen"], x["max_prominence"], x["appearances"]),
+            reverse=True
+        )
+    elif feature == "trough":
+        consensus = sorted(
+            consensus,
+            key=lambda x: (x["min_sigma_seen"], x["max_prominence"], x["appearances"]),
+            reverse=True
+        )
     return consensus
 
 
-@tool("find_peaks_multiscale", return_direct=True)
-def find_peaks_multiscale(sigma_list: str = "[2,4,16]", prom: float = 0.01, tol_pixels: int = 3, distance: int = None) -> str:
+@tool("find_features_multiscale", return_direct=True)
+def find_features_multiscale(feature: str = "peak", sigma_list: str = "[2,4,16]", prom: float = 0.01, tol_pixels: int = 3) -> str:
     """
     Multiscale peak finder.
     - sigma_list: JSON list of sigma values (in pixels), e.g. "[2,4,16]"
     - prom: prominence threshold passed to find_peaks
     - tol_pixels: tolerance in pixels for merging peaks across scales
     - distance: minimal distance in points between peaks (optional)
+    - feature: "peak" or "trough"
     """
     try:
-        spec_js = _get_var("spectrum")
-        spec = json.loads(spec_js)
+        # spec_js = _get_var("spectrum")
+        spec = LOCAL_VARS["spectrum"]
         wavelengths = np.array(spec["new_wavelength"])
         flux = np.array(spec["weighted_flux"])
 
         sigma_list = json.loads(sigma_list) if isinstance(sigma_list, str) else list(sigma_list)
-        sigma_list = [0] + sigma_list  # 加入原始光谱
+        if feature == "peak":
+            sigma_list = [0] + sigma_list  # 加入原始光谱
 
-        peaks_by_scale = []
+        peaks_by_sigma = []
         for s in sigma_list:
-            flux_smooth, peaks_info = _detect_peaks_on_flux(flux, sigma=float(s), prominence=prom, distance=distance, height=None)
-            peaks_by_scale.append({
+            flux_smooth, peaks_info = _detect_features_on_flux(feature, flux, sigma=float(s), prominence=prom, height=None)
+
+            if feature == "trough":
+                peaks_info = [
+                    t for t in peaks_info
+                    if (t["prominence"] > 0.02 and t["width_pixels"] < 50)
+                ]
+
+            peaks_by_sigma.append({
                 "sigma": float(s),
                 "flux_smooth": flux_smooth.tolist(),
                 "peaks": peaks_info
             })
-            _set_var(f"spectrum_smooth_sigma_{int(s)}", {
+            _set_var(f"{feature}_spectrum_smooth_sigma_{int(s)}", {
                 "wavelength": wavelengths.tolist(),
                 "flux_smooth": flux_smooth.tolist()
             })
+        
 
-        consensus = _merge_peaks_across_scales(wavelengths, peaks_by_scale, tol_pixels=tol_pixels)
+        consensus = _merge_peaks_across_sigmas(feature, wavelengths, peaks_by_sigma, tol_pixels=tol_pixels)
 
-        _set_var("peaks_multiscale", peaks_by_scale)
-        _set_var("peaks_consensus", consensus)
+        _set_var(f"{feature}s_multiscale", peaks_by_sigma)
+        _set_var(f"{feature}s_consensus", consensus)
 
         return json.dumps({
             "status": "ok",
             "sigma_list": sigma_list,
-            "peaks_counts": {str(int(p["sigma"])): len(p["peaks"]) for p in peaks_by_scale},
+            "peaks_counts": {str(int(p["sigma"])): len(p["peaks"]) for p in peaks_by_sigma},
             "consensus_count": len(consensus)
         }, ensure_ascii=False)
 
@@ -739,127 +774,97 @@ def find_peaks_multiscale(sigma_list: str = "[2,4,16]", prom: float = 0.01, tol_
 #     "[FeXI] 7894": 7894.00
 # }
 
-# 常见天文发射线字典（精简版）
-emission_lines = {
-    "Ly β": 1025.72,
-    "Ly α": 1215.67,
-    "CIII 977": 977.02,
-    "NV 1240": 1240.14,
-    "SiII 1263": 1262.59,
-    "OI 1304": 1304.35,
-    "SiII 1307": 1306.82,
-    "CII 1335": 1335.30,
-    "SiIV 1393": 1393.76,
-    "SiIV 1402": 1402.77,
-    "OIV] 1401": 1401.0,
-    "CIV 1549": 1549.06,
-    "HeII 1640": 1640.42,
-    "OIII] 1663": 1663.48,
-    "AlII 1671": 1670.79,
-    "NIV 1718": 1718.55,
-    "NIII] 1750": 1750.26,
-    "AlIII 1857": 1857.40,
-    "SiIII] 1892": 1892.03,
-    "CIII] 1909": 1908.73,
-    "[OII] 2471": 2471.03,
-    "MgII 2799": 2798.75,
-    "OIII 3134": 3133.70,
-    "HeI 3189": 3188.67,
-    "[NeV] 3426": 3426.84,
-    "[NeIII] 3869": 3869.85,
-    "HeI 3889": 3889.74,
-    "H δ": 4102.89,
-    "H γ": 4341.68,
-    "[OIII] 4363": 4364.44,
-    "HeI 4472": 4472.76,
-    "HeII 4686": 4687.02,
-    "H β": 4862.68,
-    "[OIII] 4959": 4960.30,
-    "[OIII] 5007": 5008.24,
-    "[NI] 5200": 5200.53,
-    "HeI 5876": 5876.0,
-    "[OI] 6300": 6300.30,
-    "[OI] 6364": 6365.54,
-    "[NII] 6549": 6549.85,
-    "H α": 6564.61,
-    "[NII] 6585": 6585.28,
-    "[SII] 6716": 6716.0,
-    "[SII] 6731": 6731.0,
-    "HeI 7067": 7067.20,
-    "[ArIII] 7138": 7137.80,
-    "[OII] 7320+7330": 7321.48,
-}
+# # 常见天文发射线字典（精简版）
+# emission_lines = {
+#     "Ly β": 1025.72,
+#     "Ly α": 1215.67,
+#     "CIII 977": 977.02,
+#     "NV 1240": 1240.14,
+#     "SiII 1263": 1262.59,
+#     "OI 1304": 1304.35,
+#     "SiII 1307": 1306.82,
+#     "CII 1335": 1335.30,
+#     "SiIV 1393": 1393.76,
+#     "SiIV 1402": 1402.77,
+#     "OIV] 1401": 1401.0,
+#     "CIV 1549": 1549.06,
+#     "HeII 1640": 1640.42,
+#     "OIII] 1663": 1663.48,
+#     "AlII 1671": 1670.79,
+#     "NIV 1718": 1718.55,
+#     "NIII] 1750": 1750.26,
+#     "AlIII 1857": 1857.40,
+#     "SiIII] 1892": 1892.03,
+#     "CIII] 1909": 1908.73,
+#     "[OII] 2471": 2471.03,
+#     "MgII 2799": 2798.75,
+#     "OIII 3134": 3133.70,
+#     "HeI 3189": 3188.67,
+#     "[NeV] 3426": 3426.84,
+#     "[NeIII] 3869": 3869.85,
+#     "HeI 3889": 3889.74,
+#     "H δ": 4102.89,
+#     "H γ": 4341.68,
+#     "[OIII] 4363": 4364.44,
+#     "HeI 4472": 4472.76,
+#     "HeII 4686": 4687.02,
+#     "H β": 4862.68,
+#     "[OIII] 4959": 4960.30,
+#     "[OIII] 5007": 5008.24,
+#     "[NI] 5200": 5200.53,
+#     "HeI 5876": 5876.0,
+#     "[OI] 6300": 6300.30,
+#     "[OI] 6364": 6365.54,
+#     "[NII] 6549": 6549.85,
+#     "H α": 6564.61,
+#     "[NII] 6585": 6585.28,
+#     "[SII] 6716": 6716.0,
+#     "[SII] 6731": 6731.0,
+#     "HeI 7067": 7067.20,
+#     "[ArIII] 7138": 7137.80,
+#     "[OII] 7320+7330": 7321.48,
+# }
 
 
-def _calculate_redshifts_for_peaks(observed_wavelengths, delta_lambda, line_dict=emission_lines, z_min=0.0, z_max=10.0):
-    """
-    根据发射线表，对每个观测波长逐一计算可能的红移，并只保留 z 在 [z_min, z_max] 范围内的结果。
-    """
-    results = []
+# def _calculate_redshifts_for_peaks(observed_wavelengths, delta_lambda, line_dict=emission_lines, z_min=0.0, z_max=10.0):
+#     """
+#     根据发射线表，对每个观测波长逐一计算可能的红移，并只保留 z 在 [z_min, z_max] 范围内的结果。
+#     """
+#     results = []
 
-    for lam_obs in observed_wavelengths:
-        peak_info = {"lambda_obs": lam_obs, "redshifts": []}
+#     for lam_obs in observed_wavelengths:
+#         peak_info = {"lambda_obs": lam_obs, "redshifts": []}
 
-        for line_name, lambda_rest in line_dict.items():
-            z = lam_obs / lambda_rest - 1
-            z_left = (lam_obs - delta_lambda) / lambda_rest - 1
-            z_right = (lam_obs + delta_lambda) / lambda_rest - 1
-            if z_min <= z <= z_max:
-                peak_info["redshifts"].append({
-                    "line": line_name,
-                    "lambda_rest": lambda_rest,
-                    "z": z,
-                    "z_range": [z_left, z_right]
-                })
+#         for line_name, lambda_rest in line_dict.items():
+#             z = lam_obs / lambda_rest - 1
+#             z_left = (lam_obs - delta_lambda) / lambda_rest - 1
+#             z_right = (lam_obs + delta_lambda) / lambda_rest - 1
+#             if z_min <= z <= z_max:
+#                 peak_info["redshifts"].append({
+#                     "line": line_name,
+#                     "lambda_rest": lambda_rest,
+#                     "z": z,
+#                     "z_range": [z_left, z_right]
+#                 })
 
-        results.append(peak_info)
+#         results.append(peak_info)
 
-    _set_var("redshift_results", results)
-    return results
+#     _set_var("redshift_results", results)
+#     return results
 
-# LangChain 工具封装
-# @tool("calculate_redshifts_for_peaks", return_direct=True)
-def calculate_redshifts_for_peaks(observed_wavelengths_json: str, delta_lambda: float, z_min: float = 0.0, z_max: float = 10.0) -> str:
-    """
-    LangChain 工具封装，输入 JSON 字符串的观测波长列表，输出 JSON 字符串的红移字典。
-    支持 z_min 和 z_max 参数，只保留在该范围内的红移结果。
-    """
-    try:
-        observed_wavelengths = json.loads(observed_wavelengths_json)
-        res = _calculate_redshifts_for_peaks(observed_wavelengths, delta_lambda, z_min=z_min, z_max=z_max)
-        return json.dumps(res, ensure_ascii=False)
-    except Exception as e:
-        return json.dumps({"error": str(e)}, ensure_ascii=False)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+# # LangChain 工具封装
+# # @tool("calculate_redshifts_for_peaks", return_direct=True)
+# def calculate_redshifts_for_peaks(observed_wavelengths_json: str, delta_lambda: float, z_min: float = 0.0, z_max: float = 10.0) -> str:
+#     """
+#     LangChain 工具封装，输入 JSON 字符串的观测波长列表，输出 JSON 字符串的红移字典。
+#     支持 z_min 和 z_max 参数，只保留在该范围内的红移结果。
+#     """
+#     try:
+#         observed_wavelengths = json.loads(observed_wavelengths_json)
+#         res = _calculate_redshifts_for_peaks(observed_wavelengths, delta_lambda, z_min=z_min, z_max=z_max)
+#         return json.dumps(res, ensure_ascii=False)
+#     except Exception as e:
+#         return json.dumps({"error": str(e)}, ensure_ascii=False)
 
 
 
@@ -878,7 +883,7 @@ TOOLS = [
     pixel_tickvalue_fitting, 
     detect_chart_border, 
     remap_to_cropped_canvas, process_and_extract_curve_points, 
-    convert_to_spectrum, find_peaks_multiscale
+    convert_to_spectrum, find_features_multiscale
 ]
 
 # 构建工具映射
@@ -1074,3 +1079,4 @@ def run_with_tools(llm_bound, messages):
 #         response = llm_bound.invoke(messages)
 
 #     return response
+
