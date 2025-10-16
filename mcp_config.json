@@ -1,0 +1,11 @@
+{
+  "servers": {
+    "finance-mcp": {
+      "transport": "streamable_http",
+      "url": "http://47.79.147.241:3100/mcp",
+      "headers": {
+        "X-Tushare-Token": "Your-Tushare-APIKEY-Here"
+      }
+    }
+  }
+}

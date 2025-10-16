@@ -4,7 +4,7 @@ import json
 import numpy as np
 import pandas as pd
 
-from typing import Any, Dict
+from typing import Any, Dict, Union
 from scipy.optimize import curve_fit
 from scipy.ndimage import gaussian_filter1d
 from scipy.signal import find_peaks, peak_widths
@@ -539,7 +539,7 @@ def _detect_features_on_flux(feature, flux, sigma, height=None, prominence=None)
     return flux_smooth, peaks_info
 
 
-def _merge_peaks_across_sigmas(feature, wavelengths, peaks_by_sigma, tol_pixels=5, weight_original=5.0):
+def _merge_peaks_across_sigmas(feature, wavelengths, peaks_by_sigma, tol_pixels=5, weight_original=1.0):
     """
     合并不同scale的峰，原始光谱权重最高。
     peaks_by_sigma: list of dicts [{"sigma":..., "peaks": [...]}]
@@ -580,7 +580,7 @@ def _merge_peaks_across_sigmas(feature, wavelengths, peaks_by_sigma, tol_pixels=
             if sigma == 0:  # 原始光谱，权重大
                 w = weight_original
             else:
-                w = 1.0 / sigma
+                w = 1.0 / np.sqrt(sigma)
             weighted_sum += idx * w
             weight_total += w
         rep_idx = int(np.round(weighted_sum / weight_total))
@@ -645,6 +645,7 @@ def find_features_multiscale(feature: str = "peak", sigma_list: str = "[2,4,16]"
     """
     try:
         # spec_js = _get_var("spectrum")
+        # spec = json.loads(spec_js)
         spec = LOCAL_VARS["spectrum"]
         wavelengths = np.array(spec["new_wavelength"])
         flux = np.array(spec["weighted_flux"])
@@ -690,6 +691,67 @@ def find_features_multiscale(feature: str = "peak", sigma_list: str = "[2,4,16]"
         return json.dumps({"error": str(e)}, ensure_ascii=False)
     
 
+def _calculate_redshift(obs_wavelength: Union[float, List[float]], rest_wavelength: Union[float, List[float]]) -> Union[float, List[float]]:
+    """
+    根据观测波长和谱线本征波长计算红移
+    输入: float 或 list
+    输出: float 或 list
+    """
+    # 单值
+    if isinstance(obs_wavelength, (int, float)):
+        return obs_wavelength / rest_wavelength - 1
+    # 列表
+    return [o / r - 1 for o, r in zip(obs_wavelength, rest_wavelength)]
+
+
+# LangChain 工具封装，接收 JSON 字符串
+@tool("calculate_redshift", return_direct=True)
+def calculate_redshift(obs_wavelength: str, rest_wavelength: str) -> str:
+    """
+    LangChain 工具封装
+    输入 JSON:
+        "obs_wavelength": float 或 [float, ...],
+        "rest_wavelength": float 或 [float, ...]
+
+    输出 JSON:
+        "redshift": float 或 [float, ...]
+    """
+    try:
+        obs = json.loads(obs_wavelength)
+        rest = json.loads(rest_wavelength)
+        z = _calculate_redshift(obs, rest)
+        return json.dumps({"redshift": z}, ensure_ascii=False)
+    except Exception as e:
+        return json.dumps({"error": str(e)}, ensure_ascii=False)
+
+
+def _predict_obs_wavelength(redshift: Union[float, List[float]], rest_wavelength: Union[float, List[float]]) -> Union[float, List[float]]:
+    """
+    根据红移和谱线本征波长计算观测波长
+    输入: float 或 list
+    输出: float 或 list
+    """
+    return rest_wavelength * (redshift + 1)
+
+
+# LangChain 工具封装，接收 JSON 字符串
+@tool("predict_obs_wavelength", return_direct=True)
+def predict_obs_wavelength(redshift: str, rest_wavelength: str) -> str:
+    """
+    LangChain 工具封装
+    输入 JSON:
+        "rest_wavelength": float 或 [float, ...]
+        "redshift": float
+    输出 JSON:
+        "redshift": float 或 [float, ...]
+    """
+    try:
+        redshift = json.loads(redshift)
+        rest_wavelength = json.loads(rest_wavelength)
+        z = _predict_obs_wavelength(redshift, rest_wavelength)
+        return json.dumps({"redshift": z}, ensure_ascii=False)
+    except Exception as e:
+        return json.dumps({"error": str(e)}, ensure_ascii=False)
 # # 扁平化的常见天文发射线字典（来自修正版本）
 # emission_lines = {
 #     "Ly ε": 937.80,
@@ -883,7 +945,8 @@ TOOLS = [
     pixel_tickvalue_fitting, 
     detect_chart_border, 
     remap_to_cropped_canvas, process_and_extract_curve_points, 
-    convert_to_spectrum, find_features_multiscale
+    convert_to_spectrum, find_features_multiscale,
+    calculate_redshift, predict_obs_wavelength
 ]
 
 # 构建工具映射
@@ -978,7 +1041,7 @@ def run_with_tools(llm_bound, messages):
 
         # 回写给 LLM
         tool_message = ToolMessage(content=tool_output, tool_call_id=tool_call["id"])
-        messages = messages + [response, tool_message]
+        messages = messages[:6] + [response, tool_message]
 
         # 继续让 LLM 处理新的上下文
         response = llm_bound.invoke(messages)
