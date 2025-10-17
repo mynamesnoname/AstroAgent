@@ -2,6 +2,7 @@ import json
 import numpy as np
 from dataclasses import dataclass, field, fields
 from typing import Any, Dict, Optional, List, Union
+from matplotlib.figure import Figure
 
 @dataclass
 class SpectroContext:
@@ -10,6 +11,7 @@ class SpectroContext:
     """
     # 原始输入
     image_path: Optional[str] = None
+    output_path: Optional[str] = None
     crop_path: Optional[str] = None
 
     # 使用 field() 提供更灵活的默认值
@@ -25,11 +27,17 @@ class SpectroContext:
     peaks: List[dict[float]] = field(default=None)
     troughs: List[dict[float]] = field(default=None)
 
-    visual_interpretation: Optional[str] = field(default=None)
-    preliminary_classification: Optional[str] = field(default=None)
+    spectrum_fig: Figure = field(default=None)
+    features_fig: Figure = field(default=None)
 
     # 历史记录
+    # SpectralRuleAnalyst
+    visual_interpretation: Optional[str] = field(default=None)
+    preliminary_classification: Optional[str] = field(default=None)
     rule_analysis: Optional[dict] = field(default=None)
+    # other Analysts
+    auditing_history: Optional[dict] = field(default=None)
+    refine_history: Optional[dict] = field(default=None)
 
     def set(self, name: str, value: Any):
         """

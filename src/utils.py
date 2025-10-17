@@ -12,6 +12,8 @@ from scipy.optimize import curve_fit
 from scipy.ndimage import gaussian_filter1d
 from scipy.signal import find_peaks, peak_widths
 
+import os
+
 
 
 def image_to_base64(image_path):
@@ -346,7 +348,7 @@ def _convert_to_spectrum(points, gray, axis_fitting_info):
     return spectrum_dict
 
 
-def _detect_features_on_flux(feature, flux, sigma, height=None, prominence=None):
+def _detect_features_on_flux(feature, flux, x_axis_slope, sigma, prominence=None, height=None):
     """平滑后检测峰，返回峰索引及属性"""
 
     if feature == "trough":
@@ -359,6 +361,7 @@ def _detect_features_on_flux(feature, flux, sigma, height=None, prominence=None)
 
     peaks, props = find_peaks(flux_smooth, height=height, prominence=prominence, distance=None)
     widths_res = peak_widths(flux_smooth, peaks, rel_height=0.5)
+
     peaks_info = []
     for i, p in enumerate(peaks):
         info = {
@@ -366,7 +369,7 @@ def _detect_features_on_flux(feature, flux, sigma, height=None, prominence=None)
             "wavelength": float(flux_smooth[p]),
             "flux": float(flux_smooth[p]),
             "prominence": float(props["prominences"][i]) if "prominences" in props else None,
-            "width_pixels": float(widths_res[0][i])
+            "width_wavelength": float(x_axis_slope * widths_res[0][i])
         }
         peaks_info.append(info)
     return flux_smooth, peaks_info
@@ -422,7 +425,7 @@ def _merge_peaks_across_sigmas(feature, wavelengths, peaks_by_sigma, tol_pixels=
         appearances = len(infos)
         max_prom = max([inf.get("prominence") or 0.0 for inf in infos])
         mean_flux = float(np.mean([inf["flux"] for inf in infos]))
-        widths = [inf.get("width_pixels") or 0.0 for inf in infos]
+        widths = [inf.get("width_wavelength") or 0.0 for inf in infos]
         scales = list({inf["sigma"] for inf in infos})
 
         if feature == "peak":
@@ -466,7 +469,7 @@ def _merge_peaks_across_sigmas(feature, wavelengths, peaks_by_sigma, tol_pixels=
     return consensus
 
 
-def _find_features_multiscale(ctx, feature: str = "peak", sigma_list: str = "[2,4,16]", prom: float = 0.01, tol_pixels: int = 3) -> str:
+def _find_features_multiscale(ctx, feature: str = "peak", sigma_list: str = [2,4,16], prom: float = 0.01, tol_pixels: int = 3) -> str:
     """
     Multiscale peak finder.
     - sigma_list: JSON list of sigma values (in pixels), e.g. "[2,4,16]"
@@ -476,22 +479,22 @@ def _find_features_multiscale(ctx, feature: str = "peak", sigma_list: str = "[2,
     - feature: "peak" or "trough"
     """
     try:
+        x_axis_slope = ctx.pixel_to_value['x']['a']
         spec = ctx.spectrum
         wavelengths = np.array(spec["new_wavelength"])
         flux = np.array(spec["weighted_flux"])
 
-        sigma_list = json.loads(sigma_list) if isinstance(sigma_list, str) else list(sigma_list)
         if feature == "peak":
             sigma_list = [0] + sigma_list  # 加入原始光谱
 
         peaks_by_sigma = []
         for s in sigma_list:
-            flux_smooth, peaks_info = _detect_features_on_flux(feature, flux, sigma=float(s), prominence=prom, height=None)
+            flux_smooth, peaks_info = _detect_features_on_flux(feature, flux, x_axis_slope, sigma=float(s), prominence=prom, height=None)
 
             if feature == "trough":
                 peaks_info = [
                     t for t in peaks_info
-                    if (t["prominence"] > 0.02 and t["width_pixels"] < 50)
+                    if (t["prominence"] > 0.02 and t["width_wavelength"] < 50)
                 ]
 
             peaks_by_sigma.append({
@@ -507,7 +510,21 @@ def _find_features_multiscale(ctx, feature: str = "peak", sigma_list: str = "[2,
 
     except Exception as e:
         return json.dumps({"error": str(e)}, ensure_ascii=False)
+
+def savefig_unique(fig, filename, **kwargs):
+    """
+    保存图片，如果文件已存在则自动添加数字后缀
+    """
+    base, ext = os.path.splitext(filename)
+    counter = 1
+    new_filename = filename
     
+    while os.path.exists(new_filename):
+        new_filename = f"{base}_{counter}{ext}"
+        counter += 1
+    
+    fig.savefig(new_filename, **kwargs)
+    print(f"图片已保存为: {new_filename}")
 
 def _plot_spectrum(ctx):
     # if effective_SNR:
@@ -529,13 +546,17 @@ def _plot_spectrum(ctx):
     axs[1].set_xlabel('wavelength')
     axs[1].legend(fontsize=15)  # 设置字号为12
 
-    img = cv2.imread(ctx.crop_path)
-    plt.figure(figsize=(10,3))
-    plt.imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
-    plt.title('Original Image')
+    savefig_unique(fig, os.path.join(ctx.output_path, 'spectrum.png'))
+
+    # img = cv2.imread(ctx.crop_path)
+    # plt.figure(figsize=(10,3))
+    # plt.imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+    # plt.title('Original Image')
+
+    return fig
 
 def _plot_features(ctx, feature='peak and trough', feature_number=[10,15]):
-    plt.figure(figsize=(10,3))
+    fig = plt.figure(figsize=(10,3))
 
     plt.plot(ctx.spectrum['new_wavelength'], ctx.spectrum['weighted_flux'], label='original', c='k', alpha=0.7)
 
@@ -543,15 +564,23 @@ def _plot_features(ctx, feature='peak and trough', feature_number=[10,15]):
     sigma_4 = gaussian_filter1d(ctx.spectrum['weighted_flux'], sigma=4)
     sigma_16 = gaussian_filter1d(ctx.spectrum['weighted_flux'], sigma=16)
     plt.plot(ctx.spectrum['new_wavelength'], sigma_2, alpha=0.7, c='orange', label=r'$\sigma=2$')
-    plt.plot(ctx.spectrum['new_wavelength'], sigma_4, alpha=0.7, c='green', label=r'$\sigma=2$')
-    plt.plot(ctx.spectrum['new_wavelength'], sigma_16, alpha=0.7, c='blue', label=r'$\sigma=2$')
+    plt.plot(ctx.spectrum['new_wavelength'], sigma_4, alpha=0.7, c='green', label=r'$\sigma=4$')
+    plt.plot(ctx.spectrum['new_wavelength'], sigma_16, alpha=0.7, c='blue', label=r'$\sigma=16$')
 
     if feature == 'peak and trough':
+        # 安全地绘制峰值线
+        # peaks_to_plot = min(feature_number[0], len(ctx.peaks))
         for i in range(feature_number[0]):
             plt.axvline(ctx.peaks[i]['wavelength'], linestyle='-', c='red', alpha=0.5)
+        
+        # 安全地绘制谷值线
+        # troughs_to_plot = min(feature_number[1], len(ctx.troughs))
         for i in range(feature_number[1]):
-            plt.axvline(ctx.troughs[i]['wavelength'], linestyle=':', c='red', alpha=0.5)
+            plt.axvline(ctx.troughs[i]['wavelength'], linestyle=':', c='red', alpha=0.5)  # 注意：这里应该是红色还是蓝色？
 
     plt.plot([], [], linestyle='-', c='red', alpha=0.5, label='peaks')
-    plt.plot([], [], linestyle=':', c='blue', alpha=0.5, label='troughs')
+    plt.plot([], [], linestyle=':', c='blue', alpha=0.5, label='troughs')  # 注意：图例颜色与实际线条颜色的一致性
     plt.legend()
+
+    savefig_unique(fig, os.path.join(ctx.output_path, 'features.png'))
+    return fig  # 建议返回 fig 对象

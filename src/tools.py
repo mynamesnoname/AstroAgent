@@ -23,3 +23,31 @@ def _predict_obs_wavelength(redshift: Union[float, List[float]], rest_wavelength
         return obs
     except Exception as e:
         return {"error": str(e)}
+    
+def _weighted_average(redshift: List[float], flux: List[float]) -> float:
+    """
+    计算加权平均红移值
+    
+    Args:
+        redshift: 红移值列表
+        flux: 对应的置信度列表（作为权重）
+    
+    Returns:
+        加权平均红移值
+    """
+    if len(redshift) != len(flux):
+        raise ValueError("redshift and flux must have the same length")
+    
+    if not redshift:
+        raise ValueError("Input lists cannot be empty")
+    
+    # 计算加权总和
+    weighted_sum = sum(z * conf for z, conf in zip(redshift, flux))
+    
+    # 计算权重总和
+    total_weight = sum(flux)
+    
+    if total_weight == 0:
+        raise ValueError("Sum of confidence levels cannot be zero")
+    
+    return weighted_sum / total_weight

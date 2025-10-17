@@ -178,15 +178,30 @@ OCR/Opencv 工具给出的刻度结果是：
 
         # 11 检测峰值
 
-        peaks = _find_features_multiscale(ctx, feature="peak", sigma_list="[2,4,16]", prom=0.01, tol_pixels=3)
-        troughs = _find_features_multiscale(ctx, feature="trough", sigma_list="[2,4,16]", prom=0.01, tol_pixels=3)
+        peaks = _find_features_multiscale(ctx, feature="peak", sigma_list=[2,4,16], prom=0.01, tol_pixels=3)
+        troughs = _find_features_multiscale(ctx, feature="trough", sigma_list=[2,4,16], prom=0.01, tol_pixels=3)
         ctx.set('peaks', peaks)
         ctx.set('troughs', troughs)
 
         if plot:
-            _plot_spectrum(ctx)
-            _plot_features(ctx)
+            a = _plot_spectrum(ctx)
+            b = _plot_features(ctx)
+            ctx.set('spectrum_fig', a)
+            ctx.set('features_fig', b)
         return 0
+    
+
+
+# ---------------------------------------------------------
+# 2. Rule-based Analyst — 负责基于规则的物理分析
+# ---------------------------------------------------------
+class SpectralRuleAnalyst:
+    """规则驱动型分析师：基于给定的物理与谱线知识进行定性分析"""
+
+    def __init__(self, agents):
+        self.main_agent = agents['main']
+        self.vis_llm = agents['vis']
+
     
     async def describe_spectrum_picture(self, ctx: SpectroContext):
         prompt = f"""
@@ -278,22 +293,169 @@ OCR/Opencv 工具给出的刻度结果是：
         ctx.set('preliminary_classification', response.content)
         return 0
 
+    def _common_prompt_header(self, ctx, include_rule_analysis=True):
+        """构造每个 step 公共的 prompt 前段"""
+        visual_json = json.dumps(ctx.visual_interpretation, ensure_ascii=False)
+        peak_json = json.dumps(ctx.peaks[:10], ensure_ascii=False)
+        trough_json = json.dumps(ctx.troughs, ensure_ascii=False)
 
-# ---------------------------------------------------------
-# 2. Rule-based Analyst — 负责基于规则的物理分析
-# ---------------------------------------------------------
-class SpectralRuleAnalyst:
-    """规则驱动型分析师：基于给定的物理与谱线知识进行定性分析"""
+        header = f"""
+你是一位天文学光谱分析助手。
 
-    def get_system_prompt(self) -> str:
-        return f"""
-你是一位专业的【天文学光谱分析师】，熟悉恒星、星系和类星体等的典型光谱特征。
+以下信息可能来自于一个未知红移的 QSO 光谱。
 
-工作原则：
-- 遵循给定的物理规则和假设进行判断，不主观操作
-- 允许轻微推断，但必须指出依据
-- 如果信息不足以推进流程，应给出“不确定”的合理说明
+之前的助手已经对这个光谱进行了初步描述：
+{visual_json}
 """
+
+        if include_rule_analysis and ctx.rule_analysis:
+            rule_json = json.dumps("\n".join(str(item) for item in ctx.rule_analysis), ensure_ascii=False)
+            header += f"\n之前的助手已经在假设光谱中存在 lyα 谱线的情况下进行了初步分析:\n{rule_json}\n"
+
+        header += f"""
+综合原曲线和 sigma=2、sigma=4、sigma=16 三条高斯平滑曲线，使用 scipy 函数进行了峰/谷识别。
+关于峰/谷的讨论以以下数据为准：
+- 代表性的前 10 条发射线：
+{peak_json}
+- 可能的吸收线：
+{trough_json}
+"""
+        return header
+
+    def _common_prompt_tail(self, step_title, extra_notes=""):
+        """构造每个 step 公共尾部，保留 step 特有输出/分析指示"""
+        tail = f"""
+---
+
+输出格式为：
+{step_title}
+...
+
+---
+
+🧭 注意：
+- 计算得来的非原始数据，最终保留3位小数。
+- 不需要进行重复总结。
+- 不需要逐行地重复输入数据；
+- 重点在物理推理与合理解释；
+- 请保证最终输出完整，不要中途截断。
+"""
+        if extra_notes:
+            tail = extra_notes + "\n" + tail
+        return tail
+    
+    async def step_1(self, ctx):
+        header = self._common_prompt_header(ctx, include_rule_analysis=False)
+        tail = self._common_prompt_tail("Step 1: Lyα 分析")
+
+        prompt = header + """
+请按以下步骤分析:
+
+Step 1: Lyα 谱线检测
+假设该光谱中存在 Lyα 发射线（λ_rest = 1216 Å）：
+1. 找出最可能对应 Lyα 的观测发射线（从提供的峰列表中选择）。
+2. 输出：
+   - λ_obs (观测波长)
+   - 光强（可取相对强度或定性描述）
+   - 线宽（FWHM 或像素宽度近似）
+3. 使用工具 calculate_redshift 计算基于该发射线的红移 z。
+4. 检查蓝端（短波长方向）是否存在 Lyα forest 特征：  
+   若吸收线相对更密集、较窄且分布在 Lyα 蓝端附近，请指出并给出简短说明。
+""" + tail
+        
+        # messages = user_query(prompt, ctx.image_path)
+        messages = user_query(prompt)
+        response = await self.main_agent.ainvoke({"messages": messages}, config={"recursion_limit": 75})
+        ctx.append('rule_analysis', response['messages'][-1].content)
+
+########################################
+
+#     async def step_1_5(self, ctx):
+#         header = self._common_prompt_header(ctx, include_rule_analysis=False)
+#         tail = self._common_prompt_tail("Step 1.5: Lyα forest 检测")
+
+#         prompt = header + """
+# 请按以下步骤分析:
+
+# Step 1.5: Lyα forest 检测
+# 1. 检查蓝端（短波长方向）是否存在 Lyα forest 特征：  
+#    若吸收线相对更密集、较窄且分布在 Lyα 蓝端附近，请指出并给出简短说明。
+# """ + tail
+        
+#         message = user_query(prompt, ctx.image_path)
+#         response = self.vis_agent.invoke([message])
+#         ctx.append('rule_analysis', response.content)
+
+#########################################
+
+    async def step_2(self, ctx):
+        header = self._common_prompt_header(ctx)
+        tail = self._common_prompt_tail("Step 2: 其他显著发射线分析")
+
+        prompt = header + """
+请继续分析:
+
+Step 2: 其他显著发射线分析
+1. 以 Step 1 得到的红移为标准，使用工具 predict_obs_wavelength 检查光谱中是否可能存在其他显著发射线（如 C IV 1549, C III] 1909, Mg II 2799, Hβ, Hα 等）。不要自行计算。
+2. 还有什么需要注意的发射线？
+""" + tail
+
+        response = self.main_agent.invoke({"messages": prompt}, config={"recursion_limit": 75})
+        ctx.append('rule_analysis', response['messages'][-1].content)
+
+    async def step_3(self, ctx):
+        header = self._common_prompt_header(ctx)
+        tail = self._common_prompt_tail("Step 3: 综合判断")
+
+        prompt = header + """
+请继续分析:
+
+Step 3: 综合判断
+- 在 Step 1 到 Step 2 中，如果 Lyα 的存在证据不足（例如对应波长没有明显峰值或红移与其他谱线不一致），请**优先假设 Lyα 不存在**，并结束分析。  
+- 仅在 Lyα 的存在有充分证据（显著峰值 + 红移与其他谱线一致）时，才将 Lyα 纳入综合红移计算。
+- 如果 Step 1 和 Step 2 的红移计算结果一致，请综合 Step 1 到 Step 2 的分析，使用 Step 1 和 Step 2 得到的谱线匹配，给出：
+    - 各个谱线的红移
+    - 由各谱线在 sigma=2 平滑下的强度 flux 作为权重，使用工具 weighted_average 进行加权平均，输出得到的加权红移值 z
+    - 可能的红移范围 Δz
+    - 涉及计算红移的流程必须使用工具 calculate_redshift，不允许自行计算。
+- 给出该红移下，你能确定的各个发射线的波长和发射线名。
+""" + tail
+
+        response = self.main_agent.invoke({"messages": prompt}, config={"recursion_limit": 100})
+        ctx.append('rule_analysis', response['messages'][-1].content)
+
+    async def step_4(self, ctx):
+        header = self._common_prompt_header(ctx)
+        tail = self._common_prompt_tail("Step 4: 补充步骤（假设 lyα 不存在时的主要谱线推测）")
+
+        prompt = header + """
+请继续分析:
+
+Step 4: 补充步骤（假设最高发射线不是 lyα 时的主要谱线推测）
+- 根据 QSO 的典型谱线特征，找出光谱中**强度最高的峰值**。
+- 猜测该峰值可能对应的谱线（例如 C IV, C III], Mg II, Hβ, Hα 等）。
+- 仿照 Step1-3 的逻辑进行判断。涉及红移计算的请使用工具 calculate_redshift；涉及观测线波长计算的请使用工具 predict_obs_wavelength。不允许自行计算。
+    - 输出该峰对应谱线的信息：
+        - 谱线名
+        - λ_obs
+        - 光强
+        - 谱线宽度
+        - 根据 λ_rest 初步计算红移 z。不允许自行计算。
+    - 如果可能，推测其他可见发射线，并计算红移
+    - 综合所有谱线，给出最可能的红移和红移范围
+- 以上判断是否支持 lyα 不存在的假设？
+""" + tail
+
+        response = self.main_agent.invoke({"messages": prompt}, config={"recursion_limit": 75})
+        ctx.append('rule_analysis', response['messages'][-1].content)
+
+    async def run(self, ctx):
+        await self.step_1(ctx)
+        # await self.step_1_5(ctx)
+        await self.step_2(ctx)
+        await self.step_3(ctx)
+        await self.step_4(ctx)
+
 
 
 # ---------------------------------------------------------
