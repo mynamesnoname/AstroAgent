@@ -20,14 +20,20 @@ def image_to_base64(image_path):
     with open(image_path, "rb") as f:
         return base64.b64encode(f.read()).decode("utf-8")
 
+[{"role": "user", "content": "what's (3 + 5) x 12?"}]
 
 def user_query(prompt, image_path=None):
     if not image_path:
-        return HumanMessage(content=[{"type": "text", "text": prompt}])
+        return [{"role": "user", "content": prompt}]
+        # return HumanMessage(content=[{"type": "text", "text": prompt}])
     
     # 处理单张图片或多张图片的情况
     base64_image = image_to_base64(image_path)
-    
+
+    prompt_ = prompt + f"""
+光谱图为
+{base64_image}
+"""
     # 构建消息内容
     content = [{"type": "text", "text": prompt}]
     content.append({
@@ -36,8 +42,33 @@ def user_query(prompt, image_path=None):
             "url": f"data:image/jpeg;base64,{base64_image}"
         }
     })
+    return [{"role": "user", "content": content}]
     
-    return HumanMessage(content=content)
+def parse_list(val, default):
+    if not val or not val.strip():
+        return default
+    try:
+        cleaned = val.strip().strip("[]")
+        if not cleaned:
+            return default
+        return [int(x.strip()) for x in cleaned.split(",")]
+    except Exception:
+        print(f"⚠️ SIGMA_LIST 格式错误: {val}，使用默认值 {default}")
+        return default
+
+def getenv_int(name, default):
+    val = os.getenv(name)
+    if val and val.strip():
+        try: return int(val.strip())
+        except Exception: print(f"⚠️ {name} 格式错误: {val}，使用默认值 {default}")
+    return default
+
+def getenv_float(name, default):
+    val = os.getenv(name)
+    if val and val.strip():
+        try: return float(val.strip())
+        except Exception: print(f"⚠️ {name} 格式错误: {val}，使用默认值 {default}")
+    return default
 
 
 def _detect_axis_ticks(image_path, config=None):
@@ -155,19 +186,19 @@ def _remap_to_cropped_canvas(old_info, chart_border):
 
         new_d = d.copy()
 
-        if ox is None or oy is None:
-            # 如果原始坐标缺失，保持原值或设为 None
-            new_d["position_x"] = ox
-            new_d["position_y"] = oy
-        else:
-            # 重映射到裁剪画布
-            nx = ox - x0
-            ny = oy - y0
-            # 越界裁剪
-            nx = max(0, min(nx, w - 1))
-            ny = max(0, min(ny, h - 1))
-            new_d["position_x"] = nx
-            new_d["position_y"] = ny
+        # if ox is None or oy is None:
+        #     # 如果原始坐标缺失，保持原值或设为 None
+        #     new_d["position_x"] = ox
+        #     new_d["position_y"] = oy
+        # else:
+        # 重映射到裁剪画布
+        nx = ox - x0 if ox is not None else None
+        ny = oy - y0 if oy is not None else None
+        # 越界裁剪
+        nx = max(0, min(nx, w - 1)) if ox is not None else None
+        ny = max(0, min(ny, h - 1)) if oy is not None else None
+        new_d["position_x"] = nx
+        new_d["position_y"] = ny
 
         new_info.append(new_d)
 
@@ -188,7 +219,7 @@ def _pixel_tickvalue_fitting(arr: list) -> dict:
         # 提取有效数据
         values, pixels, sigmas, confs = [], [], [], []
         for d in arr:
-            if d["axis"] == axis and d["position_x"] is not None and d["position_y"] is not None:
+            if d["axis"] == axis and d[f'position_{axis}'] is not None:
                 values.append(float(d["value"]))
                 pixels.append(float(d["position_x"] if axis == 'x' else d["position_y"]))
                 sigmas.append(float(d["sigma_pixel"]) if d["sigma_pixel"] is not None else np.inf)
@@ -233,7 +264,7 @@ def _process_and_extract_curve_points(input_path: str):
     
     参数：
     - input_path：原始图像文件路径
-    - output_path：处理后图像保存路径
+    - output_dir：处理后图像保存路径
     
     返回：
     - curve_points: 曲线像素点云（列表形式，包含每个点的(x, y)坐标）
@@ -280,7 +311,6 @@ def weighted_average_flux(wavelength, flux, gray):
     - new_wavelength: 每个唯一波长的数组
     - weighted_flux: 每个波长对应的加权平均flux值
     """
-    # 使用 pandas 来简化操作
     df = pd.DataFrame({
         'wavelength': wavelength,
         'flux': flux,
@@ -288,11 +318,11 @@ def weighted_average_flux(wavelength, flux, gray):
     })
 
     # 对每个唯一的波长进行加权平均
-    weighted_flux = df.groupby('wavelength').apply(
-        lambda x: np.sum(x['flux'] * x['gray']) / np.sum(x['gray'])
+    weighted_flux = df.groupby('wavelength', group_keys=False).apply(
+        lambda x: np.sum(x['flux'] * x['gray']) / np.sum(x['gray']),
+        include_groups=False
     )
 
-    # 获取唯一的波长
     unique_wavelength = weighted_flux.index.to_numpy()
     return unique_wavelength, weighted_flux.to_numpy()
 
@@ -335,6 +365,8 @@ def _convert_to_spectrum(points, gray, axis_fitting_info):
         max_unresolved_flux.append(np.max(unresolved_flux))
         min_unresolved_flux.append(np.min(unresolved_flux))
 
+    effective_snr = np.array(weighted_flux.tolist())/(np.array(max_unresolved_flux) - np.array(min_unresolved_flux))
+
     # 构造最终结果
     spectrum_dict = {
         'flux': flux.tolist(),
@@ -342,7 +374,8 @@ def _convert_to_spectrum(points, gray, axis_fitting_info):
         'new_wavelength': unique_wavelength.tolist(),
         'weighted_flux': weighted_flux.tolist(),
         'max_unresolved_flux': max_unresolved_flux,
-        'min_unresolved_flux': min_unresolved_flux
+        'min_unresolved_flux': min_unresolved_flux, 
+        'effective_snr': effective_snr
     }
 
     return spectrum_dict
@@ -436,9 +469,9 @@ def _merge_peaks_across_sigmas(feature, wavelengths, peaks_by_sigma, tol_pixels=
                 "max_prominence": float(max_prom),
                 "mean_flux": mean_flux,
                 "width_mean": float(np.mean(widths)),
-                "scales_seen": scales,
+                "seen_in_scales_of_sigma": scales,
                 "max_sigma_seen": max_sigma,  # 最大平滑度
-                "details": infos
+                # "details": infos
             })
         else:  # trough
             consensus.append({
@@ -448,9 +481,9 @@ def _merge_peaks_across_sigmas(feature, wavelengths, peaks_by_sigma, tol_pixels=
                 "max_prominence": float(max_prom),
                 "mean_flux": mean_flux,
                 "width_mean": float(np.mean(widths)),
-                "scales_seen": scales,
+                "seen_in_scales_of_sigma": scales,
                 "min_sigma_seen": min_sigma,  # 最大平滑度
-                "details": infos
+                # "details": infos
             })
 
     # 排序：先按 max_sigma（平滑度）降序，再按 appearances 降序，再按 max_prominence 降序
@@ -469,7 +502,11 @@ def _merge_peaks_across_sigmas(feature, wavelengths, peaks_by_sigma, tol_pixels=
     return consensus
 
 
-def _find_features_multiscale(ctx, feature: str = "peak", sigma_list: str = [2,4,16], prom: float = 0.01, tol_pixels: int = 3) -> str:
+def _find_features_multiscale(
+        state, feature: str = "peak", sigma_list: str = [2,4,16], 
+        prom: float = 0.01, tol_pixels: int = 3, 
+        weight_original = 1.0
+        ) -> str:
     """
     Multiscale peak finder.
     - sigma_list: JSON list of sigma values (in pixels), e.g. "[2,4,16]"
@@ -479,8 +516,8 @@ def _find_features_multiscale(ctx, feature: str = "peak", sigma_list: str = [2,4
     - feature: "peak" or "trough"
     """
     try:
-        x_axis_slope = ctx.pixel_to_value['x']['a']
-        spec = ctx.spectrum
+        x_axis_slope = state['pixel_to_value']['x']['a']
+        spec = state['spectrum']
         wavelengths = np.array(spec["new_wavelength"])
         flux = np.array(spec["weighted_flux"])
 
@@ -504,7 +541,7 @@ def _find_features_multiscale(ctx, feature: str = "peak", sigma_list: str = [2,4
             })
         
 
-        consensus = _merge_peaks_across_sigmas(feature, wavelengths, peaks_by_sigma, tol_pixels=tol_pixels)
+        consensus = _merge_peaks_across_sigmas(feature, wavelengths, peaks_by_sigma, tol_pixels=tol_pixels, weight_original=weight_original)
 
         return consensus
 
@@ -523,64 +560,75 @@ def savefig_unique(fig, filename, **kwargs):
         new_filename = f"{base}_{counter}{ext}"
         counter += 1
     
-    fig.savefig(new_filename, **kwargs)
+    fig.savefig(new_filename, bbox_inches='tight', **kwargs)
     print(f"图片已保存为: {new_filename}")
 
-def _plot_spectrum(ctx):
+def _plot_spectrum(state):
     # if effective_SNR:
-    wavelength = ctx.spectrum['new_wavelength']
-    flux = ctx.spectrum['weighted_flux']
-    flux_top = ctx.spectrum['max_unresolved_flux']
-    flux_bottom = ctx.spectrum['min_unresolved_flux']
-    effective_snr = np.array(flux)/(np.array(flux_top) - np.array(flux_bottom))
+    wavelength = state['spectrum']['new_wavelength']
+    flux = state['spectrum']['weighted_flux']
+    flux_top = state['spectrum']['max_unresolved_flux']
+    flux_bottom = state['spectrum']['min_unresolved_flux']
+    effective_snr = state['spectrum']['effective_snr']
+    # effective_snr = np.array(flux)/(np.array(flux_top) - np.array(flux_bottom))
 
     fig, axs = plt.subplots(2, 1, figsize=(10, 7))
 
-    axs[0].plot(wavelength, flux)
-    axs[0].fill_between(wavelength, flux_top, flux_bottom, alpha=0.4, color='gray')
+    axs[0].plot(wavelength, flux, color='b', label=r'$\bar F$: signal extracted from picture')
+    axs[0].fill_between(wavelength, flux_top, flux_bottom, alpha=0.4, color='gray', label='information lossed in Opencv processing')
     axs[0].set_ylabel('flux')
     axs[0].set_xlabel('wavelength')
+    axs[0].legend()  # 设置字号为12
 
     axs[1].plot(wavelength, effective_snr, c='orange', label=r'$\frac{\bar F}{F_\mathrm{top}-F_\mathrm{bottom}}$')
     axs[1].set_ylabel('Effective SNR')
     axs[1].set_xlabel('wavelength')
     axs[1].legend(fontsize=15)  # 设置字号为12
 
-    savefig_unique(fig, os.path.join(ctx.output_path, 'spectrum.png'))
+    # savefig_unique(fig, os.path.join(state['output_dir'], f'{state['image_name']}_spectrum.png'))
+    fig.savefig(os.path.join(state['output_dir'], f'{state['image_name']}_spectrum.png'), bbox_inches='tight')
 
-    # img = cv2.imread(ctx.crop_path)
+    # img = cv2.imread(state.crop_path)
     # plt.figure(figsize=(10,3))
     # plt.imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
     # plt.title('Original Image')
 
     return fig
 
-def _plot_features(ctx, feature='peak and trough', feature_number=[10,15]):
+def _plot_features(state, sigma_list=[2,4,16], feature_number=[10,15]):
     fig = plt.figure(figsize=(10,3))
 
-    plt.plot(ctx.spectrum['new_wavelength'], ctx.spectrum['weighted_flux'], label='original', c='k', alpha=0.7)
+    plt.plot(state['spectrum']['new_wavelength'], state['spectrum']['weighted_flux'], label='original', c='k', alpha=0.7)
 
-    sigma_2 = gaussian_filter1d(ctx.spectrum['weighted_flux'], sigma=2)
-    sigma_4 = gaussian_filter1d(ctx.spectrum['weighted_flux'], sigma=4)
-    sigma_16 = gaussian_filter1d(ctx.spectrum['weighted_flux'], sigma=16)
-    plt.plot(ctx.spectrum['new_wavelength'], sigma_2, alpha=0.7, c='orange', label=r'$\sigma=2$')
-    plt.plot(ctx.spectrum['new_wavelength'], sigma_4, alpha=0.7, c='green', label=r'$\sigma=4$')
-    plt.plot(ctx.spectrum['new_wavelength'], sigma_16, alpha=0.7, c='blue', label=r'$\sigma=16$')
+    for sigma in sigma_list:
+        sigma_smooth = gaussian_filter1d(state['spectrum']['weighted_flux'], sigma=sigma)
+        plt.plot(state['spectrum']['new_wavelength'], sigma_smooth, alpha=0.7, label=rf'$\sigma={sigma}$')
 
-    if feature == 'peak and trough':
-        # 安全地绘制峰值线
-        # peaks_to_plot = min(feature_number[0], len(ctx.peaks))
-        for i in range(feature_number[0]):
-            plt.axvline(ctx.peaks[i]['wavelength'], linestyle='-', c='red', alpha=0.5)
-        
-        # 安全地绘制谷值线
-        # troughs_to_plot = min(feature_number[1], len(ctx.troughs))
-        for i in range(feature_number[1]):
-            plt.axvline(ctx.troughs[i]['wavelength'], linestyle=':', c='red', alpha=0.5)  # 注意：这里应该是红色还是蓝色？
+    # sigma_2 = gaussian_filter1d(state['spectrum']['weighted_flux'], sigma=2)
+    # sigma_4 = gaussian_filter1d(state['spectrum']['weighted_flux'], sigma=4)
+    # sigma_16 = gaussian_filter1d(state['spectrum']['weighted_flux'], sigma=16)
+    
+    # plt.plot(state['spectrum']['new_wavelength'], sigma_4, alpha=0.7, c='green', label=r'$\sigma=4$')
+    # plt.plot(state['spectrum']['new_wavelength'], sigma_16, alpha=0.7, c='blue', label=r'$\sigma=16$')
+
+    # 安全地绘制峰值线
+    peaks_to_plot = min(feature_number[0], len(state['peaks']))
+    for i in range(peaks_to_plot):
+        plt.axvline(state['peaks'][i]['wavelength'], linestyle='-', c='red', alpha=0.5)
+    
+    # 安全地绘制谷值线
+    troughs_to_plot = min(feature_number[1], len(state['troughs']))
+    for i in range(troughs_to_plot):
+        plt.axvline(state['troughs'][i]['wavelength'], linestyle=':', c='red', alpha=0.5)
 
     plt.plot([], [], linestyle='-', c='red', alpha=0.5, label='peaks')
     plt.plot([], [], linestyle=':', c='blue', alpha=0.5, label='troughs')  # 注意：图例颜色与实际线条颜色的一致性
+    plt.ylabel('flux')
+    plt.xlabel('wavelength')
     plt.legend()
 
-    savefig_unique(fig, os.path.join(ctx.output_path, 'features.png'))
+    print(f'Plot {peaks_to_plot} peaks and {troughs_to_plot} troughs.')
+
+    # savefig_unique(fig, os.path.join(state['output_dir'], f'{state['image_name']}_features.png'))
+    fig.savefig( os.path.join(state['output_dir'], f'{state['image_name']}_features.png'), bbox_inches='tight')
     return fig  # 建议返回 fig 对象

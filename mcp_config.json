@@ -1,11 +1,7 @@
 {
-  "servers": {
-    "finance-mcp": {
-      "transport": "streamable_http",
-      "url": "http://47.79.147.241:3100/mcp",
-      "headers": {
-        "X-Tushare-Token": "Your-Tushare-APIKEY-Here"
-      }
+    "spectro_tools": {
+        "command": "python",
+        "args": ["-m", "src.mcp_server_tools"],  
+        "transport": "stdio"
     }
-  }
 }

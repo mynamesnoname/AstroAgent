@@ -1,7 +1,11 @@
 import json
 import os
 
-from .context_manager import SpectroState
+from .context_manager import SpectroContext
+from .base_agent import BaseAgent
+from .mcp_manager import MCPManager
+
+from .context_manager import SpectroContext
 from .base_agent import BaseAgent
 from .mcp_manager import MCPManager
 
@@ -9,8 +13,7 @@ from .utils import (
     _detect_axis_ticks, _detect_chart_border, _crop_img,
     _remap_to_cropped_canvas, _pixel_tickvalue_fitting,
     _process_and_extract_curve_points, _convert_to_spectrum,
-    _find_features_multiscale, _plot_spectrum, _plot_features,
-    parse_list, getenv_float, getenv_int
+    _find_features_multiscale, _plot_spectrum, _plot_features
 )
 
 # ---------------------------------------------------------
@@ -32,12 +35,12 @@ class SpectralVisualInterpreter(BaseAgent):
     # --------------------------
     # Step 1.1: 检测坐标轴刻度
     # --------------------------
-    async def detect_axis_ticks(self, state: SpectroState):
+    async def detect_axis_ticks(self, ctx: SpectroContext):
         """调用视觉 LLM 检测坐标轴刻度，如果无图像或非光谱图报错"""
         class NoImageError(Exception): pass
         class NotSpectralImageError(Exception): pass
 
-        if not state['image_path'] or not os.path.exists(state['image_path']):
+        if not ctx.image_path or not os.path.exists(ctx.image_path):
             raise NoImageError("❌ 未输入图像或图像路径不存在")
 
         prompt = """
@@ -60,7 +63,7 @@ class SpectralVisualInterpreter(BaseAgent):
 
         axis_info = await self.call_llm_with_context(
             prompt,
-            image_path=state['image_path'],
+            image_path=ctx.image_path,
             parse_json=True,
             description="坐标轴信息"
         )
@@ -68,16 +71,15 @@ class SpectralVisualInterpreter(BaseAgent):
         if axis_info in ["未输入图像", "非光谱图"]:
             raise NotSpectralImageError(f"❌ 图像不是光谱图，LLM 输出: {axis_info}")
 
-        state["axis_info"] = axis_info
-        return state
+        ctx.set("axis_info", axis_info)
 
     # --------------------------
     # Step 1.2~1.3: 合并视觉+OCR刻度
     # --------------------------
-    async def combine_axis_mapping(self, state: SpectroState):
+    async def combine_axis_mapping(self, ctx: SpectroContext):
         """结合视觉结果与 OCR 结果生成像素-数值映射"""
-        axis_info_json = json.dumps(state['axis_info'], ensure_ascii=False)
-        ocr_json = json.dumps(state['OCR_detected_ticks'], ensure_ascii=False)
+        axis_info_json = json.dumps(ctx.axis_info, ensure_ascii=False)
+        ocr_json = json.dumps(ctx.OCR_detected_ticks, ensure_ascii=False)
 
         prompt = f"""
 你是科学图表阅读助手。
@@ -102,20 +104,19 @@ class SpectralVisualInterpreter(BaseAgent):
 """
         tick_pixel_raw = await self.call_llm_with_context(
             prompt,
-            image_path=state['image_path'],
+            image_path=ctx.image_path,
             parse_json=True,
             description="刻度-像素映射"
         )
 
-        state["tick_pixel_raw"] = tick_pixel_raw
-        return state
+        ctx.set("tick_pixel_raw", tick_pixel_raw)
 
     # --------------------------
     # Step 1.4: 校验与修正
     # --------------------------
-    async def revise_axis_mapping(self, state: SpectroState):
+    async def revise_axis_mapping(self, ctx: SpectroContext):
         """检查并修正刻度值与像素位置匹配关系"""
-        axis_mapping_json = json.dumps(state['tick_pixel_raw'], ensure_ascii=False)
+        axis_mapping_json = json.dumps(ctx.tick_pixel_raw, ensure_ascii=False)
 
         prompt = f"""
 你是科学图表阅读助手。
@@ -132,18 +133,44 @@ class SpectralVisualInterpreter(BaseAgent):
 
         tick_pixel_revised = await self.call_llm_with_context(
             prompt,
-            image_path=state['image_path'],
+            image_path=ctx.image_path,
             parse_json=True,
             description="修正后的刻度映射"
         )
 
-        state["tick_pixel_raw"] = tick_pixel_revised
+        ctx.set("tick_pixel_raw", tick_pixel_revised)
 
     # --------------------------
     # 读取环境变量
     # --------------------------
     def _load_feature_params(self):
         """安全读取峰值/谷值检测参数"""
+        def parse_list(val, default):
+            if not val or not val.strip():
+                return default
+            try:
+                cleaned = val.strip().strip("[]")
+                if not cleaned:
+                    return default
+                return [int(x.strip()) for x in cleaned.split(",")]
+            except Exception:
+                print(f"⚠️ SIGMA_LIST 格式错误: {val}，使用默认值 {default}")
+                return default
+
+        def getenv_int(name, default):
+            val = os.getenv(name)
+            if val and val.strip():
+                try: return int(val.strip())
+                except Exception: print(f"⚠️ {name} 格式错误: {val}，使用默认值 {default}")
+            return default
+
+        def getenv_float(name, default):
+            val = os.getenv(name)
+            if val and val.strip():
+                try: return float(val.strip())
+                except Exception: print(f"⚠️ {name} 格式错误: {val}，使用默认值 {default}")
+            return default
+
         sigma_list = parse_list(os.getenv("SIGMA_LIST"), [2, 4, 16])
         tol_pixels = getenv_int("TOL_PIXELS", 3)
         prom_peaks = getenv_float("PROM_THRESHOLD_PEAKS", 0.01)
@@ -157,51 +184,50 @@ class SpectralVisualInterpreter(BaseAgent):
     # --------------------------
     # Step 1.1~1.11: 主流程
     # --------------------------
-    async def run(self, state: SpectroState, plot: bool = True):
+    async def run(self, ctx: SpectroContext, plot: bool = True):
         """执行完整视觉分析流程"""
         try:
             # Step 1.1: 视觉 LLM 提取坐标轴
-            await self.detect_axis_ticks(state)
+            await self.detect_axis_ticks(ctx)
 
             # Step 1.2: OCR 提取刻度
-            state["OCR_detected_ticks"] = _detect_axis_ticks(state['image_path'])
+            ctx.set("OCR_detected_ticks", _detect_axis_ticks(ctx.image_path))
 
             # Step 1.3: 合并
-            await self.combine_axis_mapping(state)
+            await self.combine_axis_mapping(ctx)
 
             # Step 1.4: 修正
-            await self.revise_axis_mapping(state)
+            await self.revise_axis_mapping(ctx)
 
             # Step 1.5: 边框检测与裁剪
-            state["chart_border"] = _detect_chart_border(state['image_path'])
-            _crop_img(state['image_path'], state["chart_border"], state['crop_path'])
+            chart_border = _detect_chart_border(ctx.image_path)
+            ctx.set("chart_border", chart_border)
+            _crop_img(ctx.image_path, chart_border, ctx.crop_path)
 
             # Step 1.6: 重映射像素
-            state["tick_pixel_remap"] = _remap_to_cropped_canvas(state['tick_pixel_raw'], state["chart_border"])
+            ctx.set("tick_pixel_remap", _remap_to_cropped_canvas(ctx.tick_pixel_raw, chart_border))
 
             # Step 1.7: 拟合像素-数值
-            state["pixel_to_value"] = _pixel_tickvalue_fitting(state['tick_pixel_remap'])
+            ctx.set("pixel_to_value", _pixel_tickvalue_fitting(ctx.tick_pixel_remap))
 
             # Step 1.8: 提取曲线 & 灰度化
-            curve_points, curve_gray_values = _process_and_extract_curve_points(state['crop_path'])
-            state["curve_points"] = curve_points
-            state["curve_gray_values"] = curve_gray_values
+            curve_points, curve_gray_values = _process_and_extract_curve_points(ctx.crop_path)
+            ctx.set("curve_points", curve_points)
+            ctx.set("curve_gray_values", curve_gray_values)
 
             # Step 1.9: 光谱还原
-            state["spectrum"] = _convert_to_spectrum(state['curve_points'], state['curve_gray_values'], state['pixel_to_value'])
+            ctx.set("spectrum", _convert_to_spectrum(ctx.curve_points, ctx.curve_gray_values, ctx.pixel_to_value))
 
             # Step 1.10: 检测峰值/谷值
             sigma_list, tol_pixels, prom_peaks, prom_troughs, weight_original, plot_peaks, plot_troughs = self._load_feature_params()
-            state['sigma_list'] = sigma_list
-            state["peaks"] = _find_features_multiscale(state, "peak", sigma_list, prom_peaks, tol_pixels, weight_original)
-            state["troughs"] = _find_features_multiscale(state, "trough", sigma_list, prom_troughs, tol_pixels, weight_original)
+            ctx.set('sigma_list', sigma_list)
+            ctx.set("peaks", _find_features_multiscale(ctx, "peak", sigma_list, prom_peaks, tol_pixels, weight_original))
+            ctx.set("troughs", _find_features_multiscale(ctx, "trough", sigma_list, prom_troughs, tol_pixels, weight_original))
 
             # Step 1.11: 可选绘图
             if plot:
-                state["spectrum_fig"] = _plot_spectrum(state)
-                state["features_fig"] = _plot_features(state, sigma_list, [plot_peaks, plot_troughs])
-
-            return state
+                ctx.set("spectrum_fig", _plot_spectrum(ctx))
+                ctx.set("features_fig", _plot_features(ctx, sigma_list, [plot_peaks, plot_troughs]))
 
         except Exception as e:
             print(f"❌ run pipeline terminated with error: {e}")
@@ -219,8 +245,12 @@ class SpectralRuleAnalyst(BaseAgent):
             agent_name='Spectral Rule Analyst',
             mcp_manager=mcp_manager
         )
+    # def __init__(self, agents):
+    #     self.main_agent = agents['main']
+    #     self.vis_llm = agents['vis']
 
-    async def describe_spectrum_picture(self, state: SpectroState):
+    
+    async def describe_spectrum_picture(self, ctx: SpectroContext):
         prompt = f"""
 你是一位经验丰富的天文学光谱分析助手。
 
@@ -262,17 +292,16 @@ class SpectralRuleAnalyst(BaseAgent):
         
         response = await self.call_llm_with_context(
             prompt,
-            image_path=state['image_path'],
+            image_path=ctx.image_path,
             parse_json=False,
             description="视觉光谱定性描述"
         )
-        state['visual_interpretation'] = response
-        
+        ctx.set('visual_interpretation', response)
     
-    async def preliminary_classification(self, state: SpectroState) -> str:
+    async def preliminary_classification(self, ctx: SpectroContext) -> str:
         """初步分类：根据光谱形态初步判断天体类型"""
 
-        visual_interpretation_json = json.dumps(state['visual_interpretation'], ensure_ascii=False)
+        visual_interpretation_json = json.dumps(ctx.visual_interpretation, ensure_ascii=False)
         prompt = f"""
 你是一位经验丰富的天文学光谱分析助手。
 
@@ -308,17 +337,17 @@ class SpectralRuleAnalyst(BaseAgent):
 """
         response = await self.call_llm_with_context(
             prompt,
-            image_path=state['image_path'],
+            image_path=ctx.image_path,
             parse_json=False,
             description="初步分类"
         )
-        state['preliminary_classification'] = response
+        ctx.set('preliminary_classification', response)
         
-    def _common_prompt_header(self, state, include_rule_analysis=True):
+    def _common_prompt_header(self, ctx, include_rule_analysis=True):
         """构造每个 step 公共的 prompt 前段"""
-        visual_json = json.dumps(state['visual_interpretation'], ensure_ascii=False)
-        peak_json = json.dumps(state['peaks'][:10], ensure_ascii=False)
-        trough_json = json.dumps(state['troughs'], ensure_ascii=False)
+        visual_json = json.dumps(ctx.visual_interpretation, ensure_ascii=False)
+        peak_json = json.dumps(ctx.peaks[:10], ensure_ascii=False)
+        trough_json = json.dumps(ctx.troughs, ensure_ascii=False)
 
         header = f"""
 你是一位天文学光谱分析助手。
@@ -329,12 +358,12 @@ class SpectralRuleAnalyst(BaseAgent):
 {visual_json}
 """
 
-        if include_rule_analysis and state['rule_analysis']:
-            rule_json = json.dumps("\n".join(str(item) for item in state['rule_analysis']), ensure_ascii=False)
+        if include_rule_analysis and ctx.rule_analysis:
+            rule_json = json.dumps("\n".join(str(item) for item in ctx.rule_analysis), ensure_ascii=False)
             header += f"\n之前的助手已经在假设光谱中存在 lyα 谱线的情况下进行了初步分析:\n{rule_json}\n"
 
         header += f"""
-综合原曲线和 sigma={state['sigma_list']} 的高斯平滑曲线，使用 scipy 函数进行了峰/谷识别。
+综合原曲线和 sigma={ctx.sigma_list} 的高斯平滑曲线，使用 scipy 函数进行了峰/谷识别。
 关于峰/谷的讨论以以下数据为准：
 - 代表性的前 10 条发射线：
 {peak_json}
@@ -355,7 +384,7 @@ class SpectralRuleAnalyst(BaseAgent):
 ---
 
 🧭 注意：
-- 计算得来的非原始数据，输出时保留 3 位小数。
+- 计算得来的非原始数据，最终保留3位小数。
 - 不需要进行重复总结。
 - 不需要逐行地重复输入数据；
 - 重点在物理推理与合理解释；
@@ -365,8 +394,8 @@ class SpectralRuleAnalyst(BaseAgent):
             tail = extra_notes + "\n" + tail
         return tail
     
-    async def step_1(self, state):
-        header = self._common_prompt_header(state, include_rule_analysis=False)
+    async def step_1(self, ctx):
+        header = self._common_prompt_header(ctx, include_rule_analysis=False)
         tail = self._common_prompt_tail("Step 1: Lyα 分析")
 
         prompt = header + """
@@ -384,11 +413,11 @@ Step 1: Lyα 谱线检测
    若吸收线相对更密集、较窄且分布在 Lyα 蓝端附近，请指出并给出简短说明。
 """ + tail
         
-        response = await self.call_llm_with_context(prompt, parse_json=False, description="Step 1 Lyα 分析")
-        state['rule_analysis'].append(response)
+        response = await self.call_llm_with_context(prompt, parse_json=False, description="Step 1 Lyα分析")
+        ctx.append('rule_analysis', response)
 
-    async def step_2(self, state):
-        header = self._common_prompt_header(state)
+    async def step_2(self, ctx):
+        header = self._common_prompt_header(ctx)
         tail = self._common_prompt_tail("Step 2: 其他显著发射线分析")
 
         prompt = header + """
@@ -400,10 +429,10 @@ Step 2: 其他显著发射线分析
 """ + tail
 
         response = await self.call_llm_with_context(prompt, parse_json=False, description="Step 2 发射线分析")
-        state['rule_analysis'].append(response)
+        ctx.append('rule_analysis', response)
 
-    async def step_3(self, state):
-        header = self._common_prompt_header(state)
+    async def step_3(self, ctx):
+        header = self._common_prompt_header(ctx)
         tail = self._common_prompt_tail("Step 3: 综合判断")
 
         prompt = header + """
@@ -414,16 +443,16 @@ Step 3: 综合判断
 - 仅在 Lyα 的存在有充分证据（显著峰值 + 红移与其他谱线一致）时，才将 Lyα 纳入综合红移计算。
 - 如果 Step 1 和 Step 2 的红移计算结果一致，请综合 Step 1 到 Step 2 的分析，使用 Step 1 和 Step 2 得到的谱线匹配，给出：
     - 各个谱线的红移
-    - 由各谱线在共有的最小数值的 sigma 平滑下的强度 flux 作为权重，使用工具 weighted_average 进行加权平均，输出得到的加权红移值 z ± Δz
+    - 由各谱线在 sigma=2 平滑下的强度 flux 作为权重，使用工具 weighted_average 进行加权平均，输出得到的加权红移值 z ± Δz
     - 涉及计算红移的流程必须使用工具 calculate_redshift，不允许自行计算。
 - 给出该红移下，你能确定的各个发射线的波长和发射线名。
 """ + tail
 
         response = await self.call_llm_with_context(prompt, parse_json=False, description="Step 3 综合判断")
-        state['rule_analysis'].append(response)
+        ctx.append('rule_analysis', response)
 
-    async def step_4(self, state):
-        header = self._common_prompt_header(state)
+    async def step_4(self, ctx):
+        header = self._common_prompt_header(ctx)
         tail = self._common_prompt_tail("Step 4: 补充步骤（假设 lyα 不存在时的主要谱线推测）")
 
         prompt = header + """
@@ -445,37 +474,25 @@ Step 4: 补充步骤（假设最高发射线不是 lyα 时的主要谱线推测
 """ + tail
 
         response = await self.call_llm_with_context(prompt, parse_json=False, description="Step 4 补充分析")
-        state['rule_analysis'].append(response)
+        ctx.append('rule_analysis', response)
 
-#     # --------------------------
-#     # Run 全流程
-#     # --------------------------
-    async def run(self, state: SpectroState):
+    # --------------------------
+    # Run 全流程
+    # --------------------------
+    async def run(self, ctx: SpectroContext):
         """执行规则分析完整流程"""
-        try:
-            await self.describe_spectrum_picture(state)
-            await self.preliminary_classification(state)
-            await self.step_1(state)
-            await self.step_2(state)
-            await self.step_3(state)
-            await self.step_4(state)
-            return state
-        except Exception as e:
-            import traceback
-            print("❌ An error occurred during spectral analysis:")
-            print(f"Error type: {type(e).__name__}")
-            print(f"Error message: {str(e)}")
-            print("Full traceback:")
-            traceback.print_exc()
-            # 可选：返回当前状态或抛出异常
-            raise  # 如果你希望调用者也能捕获该异常
-        
+        await self.describe_spectrum_picture(ctx)
+        await self.preliminary_classification(ctx)
+        await self.step_1(ctx)
+        await self.step_2(ctx)
+        await self.step_3(ctx)
+        await self.step_4(ctx)
 
 
 
-# # ---------------------------------------------------------
-# # 3. Revision Supervisor — 负责交叉审核与评估
-# # ---------------------------------------------------------
+# ---------------------------------------------------------
+# 3. Revision Supervisor — 负责交叉审核与评估
+# ---------------------------------------------------------
 class SpectralAnalysisAuditor(BaseAgent):
     """结果监督者：审查并校正其他分析 agent 的输出"""
 
@@ -485,15 +502,15 @@ class SpectralAnalysisAuditor(BaseAgent):
             mcp_manager=mcp_manager
         )
 
-    def _common_prompt_header(self, state: SpectroState) -> str:
-        peak_json = json.dumps(state['peaks'][:10], ensure_ascii=False)
-        trough_json = json.dumps(state['troughs'], ensure_ascii=False)
-        rule_analysis = "\n\n".join(str(item) for item in state['rule_analysis'])
+    def _common_prompt_header(self, ctx) -> str:
+        peak_json = json.dumps(ctx.peaks[:10], ensure_ascii=False)
+        trough_json = json.dumps(ctx.troughs, ensure_ascii=False)
+        rule_analysis = "\n\n".join(str(item) for item in ctx.rule_analysis)
         return f"""
-你是一位严谨的【天文学光谱报告审查分析师】。
+你是一位严谨的【天文学光谱报告审查官】。
 
 任务目标：
-- 审核其他分析师的光谱分析报告或想法
+- 审核其他 agent 的光谱分析报告或想法
 - 识别其中的逻辑漏洞、计算漏洞、不一致或错误推断
 - 提出修正意见或补充分析方向
 
@@ -520,21 +537,25 @@ class SpectralAnalysisAuditor(BaseAgent):
 
 {rule_analysis}
 
-该报告在红移计算时保留了 3 位小数。
+该报告在红移计算时保留了 2 位小数。
 """
+    
+    async def auditing(self, ctx: str) -> str:
+        header = self._common_prompt_header(ctx)
 
-    async def auditing(self, state: SpectroState):
-        header = self._common_prompt_header(state)
-
-        if state['count'] == 0:
-            body = f"""
+        body = f"""
 请对这份分析报告进行检查。
 """
-        elif state['count']:     
-            auditing_history_json = state['auditing_history'][-1]
-            response_history_json = state['refine_history'][-1]
+        prompt = header + body
+        response = await self.call_llm_with_context(prompt, parse_json=False, description="报告审查")
+        ctx.append('auditing_history', response)
 
-            body = f"""
+    async def further_auditing(self, ctx: str) -> str:
+        header = self._common_prompt_header(ctx)
+        auditing_history_json = ctx.auditing_history[-1]
+        response_history_json = ctx.refine_history[-1]
+
+        body = f"""
 你对这份分析报告的最新质疑为
 {auditing_history_json}
 
@@ -545,17 +566,13 @@ class SpectralAnalysisAuditor(BaseAgent):
 """
         prompt = header + body
         response = await self.call_llm_with_context(prompt, parse_json=False, description="报告审查")
-        state['auditing_history'].append(response)
-
-    async def run(self, state: SpectroState) -> SpectroState:
-        await self.auditing(state)
-        return state
+        ctx.append('auditing_history', response)
 
 
 
-# # ---------------------------------------------------------
-# # 4. Reflective Analyst — 自由回应审查并改进
-# # ---------------------------------------------------------
+# ---------------------------------------------------------
+# 4. Reflective Analyst — 自由回应审查并改进
+# ---------------------------------------------------------
 class SpectralRefinementAssistant(BaseAgent):
     """改进者：回应审查并改进分析"""
 
@@ -565,12 +582,15 @@ class SpectralRefinementAssistant(BaseAgent):
             mcp_manager=mcp_manager
         )
 
-    def _common_prompt_header(self, state) -> str:
-        peak_json = json.dumps(state['peaks'][:10], ensure_ascii=False)
-        trough_json = json.dumps(state['troughs'], ensure_ascii=False)
-        rule_analysis = "\n\n".join(str(item) for item in state['rule_analysis'])
+    # def __init__(self, agents):
+    #     self.main_agent = agents['main']
+
+    def _common_prompt_header(self, ctx) -> str:
+        peak_json = json.dumps(ctx.peaks[:10], ensure_ascii=False)
+        trough_json = json.dumps(ctx.troughs, ensure_ascii=False)
+        rule_analysis = "\n\n".join(str(item) for item in ctx.rule_analysis)
         return f"""
-你是一位具备反思能力的【天文学光谱分析师】。
+你是一位具备反思能力的【天文学光谱再分析师】。
 
 任务目标：
 - 阅读并理解他人的光谱分析报告
@@ -599,35 +619,22 @@ class SpectralRefinementAssistant(BaseAgent):
 其他分析师给出的光谱分析报告为：
 {rule_analysis}
 
-这份报告在红移计算时保留了 3 位小数。
+这份报告在红移计算时保留了 2 位小数。
 """
 
-    async def refine(self, state: SpectroState):
-        header = self._common_prompt_header(state)
-        auditing = state['auditing_history'][-1]
+    async def refine(self, ctx):
+        header = self._common_prompt_header(ctx)
+        auditing = ctx.auditing_history[-1]
         body = f"""
-负责核验报告的审查分析师给出的最新建议为
+负责核验报告的分析师给出的最新建议为
 {auditing}
 
 请对建议进行回应。
 """
         prompt = header + body
         response = await self.call_llm_with_context(prompt, parse_json=False, description="回应审查")
-        state['refine_history'].append(response)
+        ctx.append('refine_history', response)
 
-    async def run(self, state: SpectroState) -> SpectroState:
-        try:
-            await self.refine(state)
-            return state
-        except Exception as e:
-            import traceback
-            print("❌ An error occurred during spectral analysis:")
-            print(f"Error type: {type(e).__name__}")
-            print(f"Error message: {str(e)}")
-            print("Full traceback:")
-            traceback.print_exc()
-            # 可选：返回当前状态或抛出异常
-            raise  # 如果你希望调用者也能捕获该异常
 
 
 # ---------------------------------------------------------
@@ -660,21 +667,20 @@ class SpectralSynthesisHost(BaseAgent):
 
 输出要求：
 - 输出说明性文字
-- 输出数据保留 3 位小数
+- 输出数据保留2位小数
 - 只需输出分析内容，无需声明各段分析文字的来源
 - 给出最终综合结论及可信度评级（高/中/低）
 - 如果仍存在不确定性，请明确指出
-- 按格式输出。不要输出多余内容
 """
 
 
-    def summary(self, state) -> str:
-        visual_interpretation_json = json.dumps(state['visual_interpretation'], ensure_ascii=False)
-        rule_analysis = "\n\n".join(str(item) for item in state['rule_analysis'])
+    def summary(self, ctx) -> str:
+        visual_interpretation_json = json.dumps(ctx.visual_interpretation, ensure_ascii=False)
+        rule_analysis = "\n\n".join(str(item) for item in ctx.rule_analysis)
         rule_analysis_json = json.dumps(rule_analysis, ensure_ascii=False)
-        auditing = "\n\n".join(str(item) for item in state['auditing_history'])
+        auditing = "\n\n".join(str(item) for item in ctx.auditing_history)
         auditing_json = json.dumps(auditing, ensure_ascii=False)
-        refine = "\n\n".join(str(item) for item in state['refine_history'])
+        refine = "\n\n".join(str(item) for item in ctx.refine_history)
         refine_json = json.dumps(refine, ensure_ascii=False)
 
         header = self.get_system_prompt()
@@ -687,20 +693,16 @@ class SpectralSynthesisHost(BaseAgent):
 规则分析师的观点：
 {rule_analysis_json}
 
-审查分析师的观点：
+审查官的观点：
 {auditing_json}
 
-完善分析师的观点：
+再分析师的观点：
 {refine_json}
 
 输出格式如下：
 
 - 光谱的视觉特点
-- 分析报告（综合规则分析师、审查分析师和完善分析师的所有观点，逐个 Step 进行结构化输出）
-    - Step 1
-    - Step 2
-    - Step 3
-    - Step 4
+- 分析报告（综合规则分析师、审查官和再分析师的所有输出，逐个 Step 进行结构化输出）
 - 结论
     - 该天体的天体类型和红移 z ± Δz
     - 认证出的谱线（输出 谱线名-λ_rest-λ_obs）
@@ -710,8 +712,7 @@ class SpectralSynthesisHost(BaseAgent):
 """
         return header + prompt
 
-    async def run(self, state: SpectroState) -> str:
-        prompt = self.summary(state)
+    async def run(self, ctx: SpectroContext) -> str:
+        prompt = self.summary(ctx)
         response = await self.call_llm_with_context(prompt, parse_json=False, description="总结")
-        state['summary'] = response
-        return state
+        ctx.set('summary', response)
