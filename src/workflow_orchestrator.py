@@ -103,6 +103,7 @@ class WorkflowOrchestrator:
     
     async def _synthesis_host_node(self, state: SpectroState) -> SpectroState:
         self._check_cancel()
+        print('Stage 4: Synthesis Host')
         result = await self.spectro_agents["Spectral_Synthesis_Host"].run(state)
         self._check_cancel()
         return result
@@ -110,15 +111,12 @@ class WorkflowOrchestrator:
     def _should_continue_debate(self, state) -> str:
         """判断是否继续风险辩论"""
         count = state['count'] if isinstance(state, dict) else state.count
-        if count == 0:
-            print('Stage 3: Debate')
         
         # 计算当前轮数：每2次发言为1轮
         current_round = (count + 1) // 2 + ((count + 1) % 2 > 0)
         
-        print(f"🤔 Spectro analyse debate: 开始第 {count+1} 次发言, 当前轮数={current_round}, 最大轮数={self.max_debate_rounds}")
-        
         if current_round <= self.max_debate_rounds:
+            print(f"🤔 Spectro analyse debate: 开始第 {count+1} 次发言, 当前轮数={current_round}, 最大轮数={self.max_debate_rounds}")
             # ✅ 修正：正确的轮换逻辑
             if count % 2 == 1:  # 奇数：刚执行完auditor，下一步是assistant
                 print(f"🖋️ 继续光谱辩论 - 完善分析师 (第{current_round}轮)")
@@ -180,7 +178,7 @@ class WorkflowOrchestrator:
             print(f"❌ 工作流编排器初始化失败: {e}")
             return False
 
-    async def run_analysis(self, cancel_checker=None) -> SpectroState:
+    async def run_analysis_single(self, cancel_checker=None) -> SpectroState:
         """运行完整的交易分析流程"""
         print("🚀 Start MCP LLM Spectro Agent")
         # 存储取消检查器
@@ -242,7 +240,38 @@ class WorkflowOrchestrator:
                 )
             else:
                 final_state = workflow_result
-            
+
+            try:
+                # 安全提取 rule_analysis
+                rule_list = final_state.get('rule_analysis')
+                if not isinstance(rule_list, (list, tuple)):
+                    rule_list = []
+                rule_analysis = "\n\n".join(str(item) for item in rule_list if item is not None)
+
+                # 安全提取 summary
+                summary = final_state.get('summary', '')
+                if summary is None:
+                    summary = ''
+
+                output_dir = final_state['output_dir']
+                image_name = final_state['image_name']
+
+                # ✅ 用 open 写文本
+
+                md_path = os.path.join(output_dir, f'{image_name}_rule_analysis.md')
+                with open(md_path, 'w', encoding='utf-8') as f:
+                    f.write(rule_analysis)
+
+                summary_path = os.path.join(output_dir, f'{image_name}_summary.md')
+                with open(summary_path, 'w', encoding='utf-8') as f:
+                    f.write(summary)
+
+                print("✅ 分析日志和总结已保存")
+                
+            except Exception as e:
+                print(f"⚠️ 保存分析结果时出错: {e}")
+                # 可选：继续抛出或记录
+                
             print("✅ 分析流程完成")
             return final_state
             

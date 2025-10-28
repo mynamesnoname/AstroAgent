@@ -139,6 +139,42 @@ class SpectralVisualInterpreter(BaseAgent):
 
         state["tick_pixel_raw"] = tick_pixel_revised
 
+    # async def features_cleaning_peaks(self, state: SpectroState):
+    #     try:
+    #         peak_json = json.dumps(state['peaks'], ensure_ascii=False)
+    #         wavelength_json = json.dumps(state['spectrum']['new_wavelength'], ensure_ascii=False)
+    #         flux_json = json.dumps(state['spectrum']['weighted_flux'], ensure_ascii=False)
+    #         prompt = f"""
+    # 你是一个天文学光谱阅读助手。
+
+    # 对于一张天文学光谱，在原信号和多个不同sigma的高斯平滑下，找到的峰值如下：
+    # {peak_json}
+
+    # 光谱数据为
+    # 波长
+    # {wavelength_json}
+
+    # 流量
+    # {flux_json}
+
+    # 请根据光谱数据，对找到的峰值进行清洗。
+    # 要求：
+    # - 对于相近的峰值结果，如果二者指向同一峰，合并峰值，保留流量最高者的信息。
+    # - 如果指示的位置没有峰值，则舍弃该信息。
+    # - 以 json 格式输出最后保留的峰值波长 [wavelength, wavelength, ...]
+    # - 不要输出解释或说明
+    # """
+    #         feature_revised = await self.call_llm_with_context(
+    #             prompt,
+    #             parse_json=False,
+    #             description="修正后的峰值"
+    #         )
+    #         print(len(feature_revised))
+
+    #         state["peaks"] = [i for i in state["peaks"] if i in feature_revised]
+    #     except Exception as e:
+    #         print(e)
+
     # --------------------------
     # 读取环境变量
     # --------------------------
@@ -147,7 +183,7 @@ class SpectralVisualInterpreter(BaseAgent):
         sigma_list = parse_list(os.getenv("SIGMA_LIST"), [2, 4, 16])
         tol_pixels = getenv_int("TOL_PIXELS", 3)
         prom_peaks = getenv_float("PROM_THRESHOLD_PEAKS", 0.01)
-        prom_troughs = getenv_float("PROM_THRESHOLD_TROUGHS", 0.01)
+        prom_troughs = getenv_float("PROM_THRESHOLD_TROUGHS", 0.05)
         weight_original = getenv_float("WEIGHT_ORIGINAL", 1.0)
         plot_peaks = getenv_int("PLOT_PEAKS_NUMBER", 10)
         plot_troughs = getenv_int("PLOT_TROUGHS_NUMBER", 15)
@@ -193,13 +229,35 @@ class SpectralVisualInterpreter(BaseAgent):
             # Step 1.10: 检测峰值/谷值
             sigma_list, tol_pixels, prom_peaks, prom_troughs, weight_original, plot_peaks, plot_troughs = self._load_feature_params()
             state['sigma_list'] = sigma_list
-            state["peaks"] = _find_features_multiscale(state, "peak", sigma_list, prom_peaks, tol_pixels, weight_original)
-            state["troughs"] = _find_features_multiscale(state, "trough", sigma_list, prom_troughs, tol_pixels, weight_original)
+            # state["peaks"] = _find_features_multiscale(state, "peak", sigma_list, prom_peaks, tol_pixels, weight_original)
+            # state["troughs"] = _find_features_multiscale(state, "trough", sigma_list, prom_troughs, tol_pixels, weight_original)
+            try:
+                state["peaks"] = _find_features_multiscale(
+                    state, feature="peak", sigma_list=sigma_list,
+                    prom=prom_peaks, tol_pixels=tol_pixels, weight_original=weight_original,
+                    use_continuum_for_trough=True
+                )
+                state["troughs"] = _find_features_multiscale(
+                    state, feature="trough", sigma_list=sigma_list,
+                    prom=prom_troughs, tol_pixels=tol_pixels, weight_original=weight_original,
+                    use_continuum_for_trough=True,
+                    min_depth=0.08
+                )
+            except Exception as e:
+                print(f"❌ find features multiscale terminated with error: {e}")
+                raise
+            print(len(state["troughs"]))
+
+            # await self.features_cleaning_peaks(state)
 
             # Step 1.11: 可选绘图
             if plot:
-                state["spectrum_fig"] = _plot_spectrum(state)
-                state["features_fig"] = _plot_features(state, sigma_list, [plot_peaks, plot_troughs])
+                try:
+                    state["spectrum_fig"] = _plot_spectrum(state)
+                    state["features_fig"] = _plot_features(state, sigma_list, [plot_peaks, plot_troughs])
+                except Exception as e:
+                    print(f"❌ plot spectrum or features terminated with error: {e}")
+                    raise
 
             return state
 
@@ -633,7 +691,6 @@ class SpectralRefinementAssistant(BaseAgent):
 # ---------------------------------------------------------
 # 🧩 5. Host Integrator — 汇总与总结多方观点
 # ---------------------------------------------------------
-from typing import Union
 class SpectralSynthesisHost(BaseAgent):
     """汇总主持人：整合多Agent的分析与结论"""
 
@@ -669,13 +726,19 @@ class SpectralSynthesisHost(BaseAgent):
 
 
     def summary(self, state) -> str:
-        visual_interpretation_json = json.dumps(state['visual_interpretation'], ensure_ascii=False)
-        rule_analysis = "\n\n".join(str(item) for item in state['rule_analysis'])
-        rule_analysis_json = json.dumps(rule_analysis, ensure_ascii=False)
-        auditing = "\n\n".join(str(item) for item in state['auditing_history'])
-        auditing_json = json.dumps(auditing, ensure_ascii=False)
-        refine = "\n\n".join(str(item) for item in state['refine_history'])
-        refine_json = json.dumps(refine, ensure_ascii=False)
+        try:
+            visual_interpretation_json = json.dumps(state['visual_interpretation'], ensure_ascii=False)
+            rule_analysis = "\n\n".join(str(item) for item in state['rule_analysis'])
+            rule_analysis_json = json.dumps(rule_analysis, ensure_ascii=False)
+            auditing = "\n\n".join(str(item) for item in state['auditing_history'])
+            auditing_json = json.dumps(auditing, ensure_ascii=False)
+            refine = "\n\n".join(str(item) for item in state['refine_history'])
+            refine_json = json.dumps(refine, ensure_ascii=False)
+        except Exception as e:
+            print("❌ An error occurred during spectral analysis:")
+            print(f"Error type: {type(e).__name__}")
+            print(f"Error message: {str(e)}")
+            raise
 
         header = self.get_system_prompt()
 
@@ -710,8 +773,17 @@ class SpectralSynthesisHost(BaseAgent):
 """
         return header + prompt
 
-    async def run(self, state: SpectroState) -> str:
-        prompt = self.summary(state)
-        response = await self.call_llm_with_context(prompt, parse_json=False, description="总结")
-        state['summary'] = response
-        return state
+    async def run(self, state: SpectroState) -> SpectroState:
+        try:
+            prompt = self.summary(state)
+            response = await self.call_llm_with_context(prompt, parse_json=False, description="总结")
+            state['summary'] = response
+            return state
+        except Exception as e:
+            import traceback
+            print("❌ An error occurred during spectral analysis:")
+            print(f"Error type: {type(e).__name__}")
+            print(f"Error message: {str(e)}")
+            print("Full traceback:")
+            traceback.print_exc()
+            # 可选：返回当前状态或抛出异常

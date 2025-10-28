@@ -28,5 +28,5 @@
       - t_ = os.getenv('PLOT_TROUGHS_NUMBER')
 
 - 下一步计划：
-  - [ ] 将 debug.ipynb 中目前的运行流程封装到 src.workflow_orchestrator
+  - [x] 将 debug.ipynb 中目前的运行流程封装到 src.workflow_orchestrator
   - [ ] 最终的 main.py 中可能只包括 debug.ipynb 中的初始化阶段 + 对 workflow_orchestrator 函数的调用。

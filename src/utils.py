@@ -1,4 +1,5 @@
 import cv2
+import os
 import pytesseract
 import json
 import base64
@@ -9,11 +10,8 @@ import matplotlib.pyplot as plt
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 from typing import Any, List, Dict, Tuple, Optional, Union
 from scipy.optimize import curve_fit
-from scipy.ndimage import gaussian_filter1d
+from scipy.ndimage import gaussian_filter1d, median_filter
 from scipy.signal import find_peaks, peak_widths
-
-import os
-
 
 
 def image_to_base64(image_path):
@@ -364,8 +362,14 @@ def _convert_to_spectrum(points, gray, axis_fitting_info):
         unresolved_flux = flux[wavelength == w]
         max_unresolved_flux.append(np.max(unresolved_flux))
         min_unresolved_flux.append(np.min(unresolved_flux))
-
-    effective_snr = np.array(weighted_flux.tolist())/(np.array(max_unresolved_flux) - np.array(min_unresolved_flux))
+    
+    denominator = np.array(max_unresolved_flux) - np.array(min_unresolved_flux)
+    effective_snr = np.where(
+        denominator != 0,
+        np.array(weighted_flux) / denominator,
+        np.nan  # 或 np.nan，取决于你希望如何表示“无效 SNR”
+    )
+    # effective_snr = np.array(weighted_flux.tolist())/(np.array(max_unresolved_flux) - np.array(min_unresolved_flux))
 
     # 构造最终结果
     spectrum_dict = {
@@ -380,39 +384,60 @@ def _convert_to_spectrum(points, gray, axis_fitting_info):
 
     return spectrum_dict
 
-
-def _detect_features_on_flux(feature, flux, x_axis_slope, sigma, prominence=None, height=None):
-    """平滑后检测峰，返回峰索引及属性"""
-
+def _detect_features_on_flux(
+    feature, flux, x_axis_slope, sigma, prominence=None, height=None,
+    wavelengths=None, continuum=None
+):
+    """
+    平滑后检测峰/谷，返回平滑光谱和峰信息。
+    支持 trough 检测（通过 flux 取负或 continuum 归一化）。
+    """
+    # === Step 1: 数据准备 ===
     if feature == "trough":
-        flux = -flux
-
-    if sigma > 0:
-        flux_smooth = gaussian_filter1d(flux, sigma=sigma)
+        if continuum is not None:
+            flux_proc = flux / continuum
+            flux_proc = 1.0 - flux_proc  # 变成“吸收强度”，越大越深
+        else:
+            flux_proc = -flux.copy()
     else:
-        flux_smooth = flux.copy()
+        flux_proc = flux.copy()
 
-    peaks, props = find_peaks(flux_smooth, height=height, prominence=prominence, distance=None)
+    # === Step 2: 平滑 ===
+    flux_smooth = gaussian_filter1d(flux_proc, sigma=sigma) if sigma > 0 else flux_proc
+
+    # === Step 3: 峰检测 ===
+    peaks, props = find_peaks(flux_smooth, height=height, prominence=prominence)
     widths_res = peak_widths(flux_smooth, peaks, rel_height=0.5)
 
     peaks_info = []
     for i, p in enumerate(peaks):
+        width_pix = widths_res[0][i]
         info = {
             "index": int(p),
-            "wavelength": float(flux_smooth[p]),
-            "flux": float(flux_smooth[p]),
-            "prominence": float(props["prominences"][i]) if "prominences" in props else None,
-            "width_wavelength": float(x_axis_slope * widths_res[0][i])
+            "wavelength": float(wavelengths[p]) if wavelengths is not None else float(p),
+            "flux": float(flux[p]),  # 原始 flux（未反转）
+            "prominence": float(props.get("prominences", [None])[i]),
+            "width_wavelength": float(x_axis_slope * width_pix),
         }
+
+        # === Step 4: 对 trough 增加 depth / EW 信息 ===
+        if feature == "trough":
+            depth = float(flux_smooth[p])
+            ew_pix = depth * width_pix
+            info.update({
+                "depth": depth,
+                "equivalent_width_pixels": ew_pix
+            })
         peaks_info.append(info)
+
     return flux_smooth, peaks_info
 
 
 def _merge_peaks_across_sigmas(feature, wavelengths, peaks_by_sigma, tol_pixels=5, weight_original=1.0):
     """
-    合并不同scale的峰，原始光谱权重最高。
-    peaks_by_sigma: list of dicts [{"sigma":..., "peaks": [...]}]
-    返回 consensus 列表
+    合并不同 scale 的峰/谷。
+    - 对 peaks：按 prominence 排序；
+    - 对 troughs：按 depth 和 EW 排序。
     """
     merged = []
     for scale_entry in peaks_by_sigma:
@@ -436,32 +461,27 @@ def _merge_peaks_across_sigmas(feature, wavelengths, peaks_by_sigma, tol_pixels=
     for g in merged:
         infos = g["infos"]
 
-        # 计算加权平均 index
-        weighted_sum = 0.0
-        weight_total = 0.0
-        max_sigma = 0.0  # 最大平滑度
-        min_sigma = np.inf  # 最小平滑度
+        # 加权代表索引
+        weighted_sum, weight_total = 0.0, 0.0
+        max_sigma, min_sigma = 0.0, np.inf
         for inf in infos:
             sigma = inf["sigma"]
             idx = inf["index"]
             max_sigma = max(max_sigma, sigma)
             min_sigma = min(min_sigma, sigma)
-            if sigma == 0:  # 原始光谱，权重大
-                w = weight_original
-            else:
-                w = 1.0 / np.sqrt(sigma)
+            w = weight_original if sigma == 0 else 1.0 / np.sqrt(sigma)
             weighted_sum += idx * w
             weight_total += w
         rep_idx = int(np.round(weighted_sum / weight_total))
 
         wlen = float(wavelengths[rep_idx]) if rep_idx < len(wavelengths) else None
         appearances = len(infos)
-        max_prom = max([inf.get("prominence") or 0.0 for inf in infos])
+        widths = [inf.get("width_wavelength", 0.0) for inf in infos]
         mean_flux = float(np.mean([inf["flux"] for inf in infos]))
-        widths = [inf.get("width_wavelength") or 0.0 for inf in infos]
         scales = list({inf["sigma"] for inf in infos})
 
         if feature == "peak":
+            max_prom = max(inf.get("prominence", 0.0) for inf in infos)
             consensus.append({
                 "rep_index": rep_idx,
                 "wavelength": wlen,
@@ -470,68 +490,78 @@ def _merge_peaks_across_sigmas(feature, wavelengths, peaks_by_sigma, tol_pixels=
                 "mean_flux": mean_flux,
                 "width_mean": float(np.mean(widths)),
                 "seen_in_scales_of_sigma": scales,
-                "max_sigma_seen": max_sigma,  # 最大平滑度
-                # "details": infos
+                "max_sigma_seen": max_sigma,
             })
-        else:  # trough
+        else:
+            max_depth = max(inf.get("depth", 0.0) for inf in infos)
+            mean_ew = np.mean([inf.get("equivalent_width_pixels", 0.0) for inf in infos])
             consensus.append({
                 "rep_index": rep_idx,
                 "wavelength": wlen,
                 "appearances": appearances,
-                "max_prominence": float(max_prom),
+                "max_depth": float(max_depth),
+                "mean_equivalent_width_pixels": float(mean_ew),
                 "mean_flux": mean_flux,
                 "width_mean": float(np.mean(widths)),
                 "seen_in_scales_of_sigma": scales,
-                "min_sigma_seen": min_sigma,  # 最大平滑度
-                # "details": infos
+                "min_sigma_seen": min_sigma,
             })
 
-    # 排序：先按 max_sigma（平滑度）降序，再按 appearances 降序，再按 max_prominence 降序
+    # 排序
     if feature == "peak":
-        consensus = sorted(
-            consensus,
+        consensus = sorted(consensus,
             key=lambda x: (x["max_sigma_seen"], x["max_prominence"], x["appearances"]),
-            reverse=True
-        )
-    elif feature == "trough":
-        consensus = sorted(
-            consensus,
-            key=lambda x: (x["min_sigma_seen"], x["max_prominence"], x["appearances"]),
-            reverse=True
-        )
+            reverse=True)
+    else:
+        consensus = sorted(consensus,
+            key=lambda x: (x["max_depth"], x["mean_equivalent_width_pixels"], x["appearances"]),
+            reverse=True)
     return consensus
 
 
 def _find_features_multiscale(
-        state, feature: str = "peak", sigma_list: str = [2,4,16], 
-        prom: float = 0.01, tol_pixels: int = 3, 
-        weight_original = 1.0
-        ) -> str:
+    state, feature="peak", sigma_list=None,
+    prom=0.01, tol_pixels=3, weight_original=1.0,
+    use_continuum_for_trough=True,
+    min_depth=0.1  # ✅ 新增：按 depth 过滤阈值
+):
     """
-    Multiscale peak finder.
-    - sigma_list: JSON list of sigma values (in pixels), e.g. "[2,4,16]"
-    - prom: prominence threshold passed to find_peaks
-    - tol_pixels: tolerance in pixels for merging peaks across scales
-    - distance: minimal distance in points between peaks (optional)
-    - feature: "peak" or "trough"
+    多尺度特征检测器。
+    - 自动支持 peaks / troughs；
+    - trough 可选 continuum 归一化；
+    - prom 同时控制峰和谷的显著性；
+    - min_depth 用于过滤过浅吸收线。
     """
+    if sigma_list is None:
+        sigma_list = [2, 4, 16]
+
     try:
-        x_axis_slope = state['pixel_to_value']['x']['a']
-        spec = state['spectrum']
+        x_axis_slope = state["pixel_to_value"]["x"]["a"]
+        spec = state["spectrum"]
         wavelengths = np.array(spec["new_wavelength"])
         flux = np.array(spec["weighted_flux"])
 
-        if feature == "peak":
-            sigma_list = [0] + sigma_list  # 加入原始光谱
+        # continuum 估计（仅 trough）
+        continuum = None
+        if feature == "trough" and use_continuum_for_trough:
+            cont_window = max(51, int(3 * max(sigma_list)))
+            continuum = median_filter(flux, size=cont_window, mode="reflect")
+            continuum = np.where(continuum == 0, 1.0, continuum)
+
+        sigma_list = [0] + sigma_list  # 原始光谱权重最高
 
         peaks_by_sigma = []
         for s in sigma_list:
-            flux_smooth, peaks_info = _detect_features_on_flux(feature, flux, x_axis_slope, sigma=float(s), prominence=prom, height=None)
+            flux_smooth, peaks_info = _detect_features_on_flux(
+                feature, flux, x_axis_slope, sigma=float(s),
+                prominence=prom, height=None,
+                wavelengths=wavelengths, continuum=continuum
+            )
 
-            if feature == "trough":
+            # ✅ 对 troughs 进行 depth 过滤
+            if feature == "trough" and min_depth > 0:
                 peaks_info = [
-                    t for t in peaks_info
-                    if (t["prominence"] > 0.02 and t["width_wavelength"] < 50)
+                    t for t in peaks_info if t.get("depth", 0) >= min_depth
                 ]
 
             peaks_by_sigma.append({
@@ -539,14 +569,183 @@ def _find_features_multiscale(
                 "flux_smooth": flux_smooth.tolist(),
                 "peaks": peaks_info
             })
-        
 
-        consensus = _merge_peaks_across_sigmas(feature, wavelengths, peaks_by_sigma, tol_pixels=tol_pixels, weight_original=weight_original)
-
-        return consensus
+        return _merge_peaks_across_sigmas(
+            feature, wavelengths, peaks_by_sigma,
+            tol_pixels=tol_pixels, weight_original=weight_original
+        )
 
     except Exception as e:
         return json.dumps({"error": str(e)}, ensure_ascii=False)
+
+
+
+# def _detect_features_on_flux(feature, flux, x_axis_slope, sigma, prominence=None, height=None):
+#     """平滑后检测峰，返回峰索引及属性"""
+
+#     if feature == "trough":
+#         flux = -flux
+
+#     if sigma > 0:
+#         flux_smooth = gaussian_filter1d(flux, sigma=sigma)
+#     else:
+#         flux_smooth = flux.copy()
+
+#     peaks, props = find_peaks(flux_smooth, height=height, prominence=prominence, distance=None)
+#     widths_res = peak_widths(flux_smooth, peaks, rel_height=0.5)
+
+#     peaks_info = []
+#     for i, p in enumerate(peaks):
+#         info = {
+#             "index": int(p),
+#             "wavelength": float(flux_smooth[p]),
+#             "flux": float(flux_smooth[p]),
+#             "prominence": float(props["prominences"][i]) if "prominences" in props else None,
+#             "width_wavelength": float(x_axis_slope * widths_res[0][i])
+#         }
+#         peaks_info.append(info)
+#     return flux_smooth, peaks_info
+
+
+# def _merge_peaks_across_sigmas(feature, wavelengths, peaks_by_sigma, tol_pixels=5, weight_original=1.0):
+#     """
+#     合并不同scale的峰，原始光谱权重最高。
+#     peaks_by_sigma: list of dicts [{"sigma":..., "peaks": [...]}]
+#     返回 consensus 列表
+#     """
+#     merged = []
+#     for scale_entry in peaks_by_sigma:
+#         sigma = scale_entry["sigma"]
+#         for p in scale_entry["peaks"]:
+#             idx = p["index"]
+#             matched = None
+#             for g in merged:
+#                 rep = int(np.round(np.mean(g["indices"])))
+#                 if abs(rep - idx) <= tol_pixels:
+#                     matched = g
+#                     break
+#             if matched is None:
+#                 g = {"indices": [idx], "infos": [dict(p, sigma=sigma)]}
+#                 merged.append(g)
+#             else:
+#                 matched["indices"].append(idx)
+#                 matched["infos"].append(dict(p, sigma=sigma))
+
+#     consensus = []
+#     for g in merged:
+#         infos = g["infos"]
+
+#         # 计算加权平均 index
+#         weighted_sum = 0.0
+#         weight_total = 0.0
+#         max_sigma = 0.0  # 最大平滑度
+#         min_sigma = np.inf  # 最小平滑度
+#         for inf in infos:
+#             sigma = inf["sigma"]
+#             idx = inf["index"]
+#             max_sigma = max(max_sigma, sigma)
+#             min_sigma = min(min_sigma, sigma)
+#             if sigma == 0:  # 原始光谱，权重大
+#                 w = weight_original
+#             else:
+#                 w = 1.0 / np.sqrt(sigma)
+#             weighted_sum += idx * w
+#             weight_total += w
+#         rep_idx = int(np.round(weighted_sum / weight_total))
+
+#         wlen = float(wavelengths[rep_idx]) if rep_idx < len(wavelengths) else None
+#         appearances = len(infos)
+#         max_prom = max([inf.get("prominence") or 0.0 for inf in infos])
+#         mean_flux = float(np.mean([inf["flux"] for inf in infos]))
+#         widths = [inf.get("width_wavelength") or 0.0 for inf in infos]
+#         scales = list({inf["sigma"] for inf in infos})
+
+#         if feature == "peak":
+#             consensus.append({
+#                 "rep_index": rep_idx,
+#                 "wavelength": wlen,
+#                 "appearances": appearances,
+#                 "max_prominence": float(max_prom),
+#                 "mean_flux": mean_flux,
+#                 "width_mean": float(np.mean(widths)),
+#                 "seen_in_scales_of_sigma": scales,
+#                 "max_sigma_seen": max_sigma,  # 最大平滑度
+#                 # "details": infos
+#             })
+#         else:  # trough
+#             consensus.append({
+#                 "rep_index": rep_idx,
+#                 "wavelength": wlen,
+#                 "appearances": appearances,
+#                 "max_prominence": float(max_prom),
+#                 "mean_flux": mean_flux,
+#                 "width_mean": float(np.mean(widths)),
+#                 "seen_in_scales_of_sigma": scales,
+#                 "min_sigma_seen": min_sigma,  # 最大平滑度
+#                 # "details": infos
+#             })
+
+#     # 排序：先按 max_sigma（平滑度）降序，再按 appearances 降序，再按 max_prominence 降序
+#     if feature == "peak":
+#         consensus = sorted(
+#             consensus,
+#             key=lambda x: (x["max_sigma_seen"], x["max_prominence"], x["appearances"]),
+#             reverse=True
+#         )
+#     elif feature == "trough":
+#         consensus = sorted(
+#             consensus,
+#             key=lambda x: (x["min_sigma_seen"], x["max_prominence"], x["appearances"]),
+#             reverse=True
+#         )
+#     return consensus
+
+
+# def _find_features_multiscale(
+#         state, feature: str = "peak", sigma_list: str = [2,4,16], 
+#         prom: float = 0.01, tol_pixels: int = 3, 
+#         weight_original = 1.0
+#         ) -> str:
+#     """
+#     Multiscale peak finder.
+#     - sigma_list: JSON list of sigma values (in pixels), e.g. "[2,4,16]"
+#     - prom: prominence threshold passed to find_peaks
+#     - tol_pixels: tolerance in pixels for merging peaks across scales
+#     - distance: minimal distance in points between peaks (optional)
+#     - feature: "peak" or "trough"
+#     """
+#     try:
+#         x_axis_slope = state['pixel_to_value']['x']['a']
+#         spec = state['spectrum']
+#         wavelengths = np.array(spec["new_wavelength"])
+#         flux = np.array(spec["weighted_flux"])
+
+#         if feature == "peak":
+#             sigma_list = [0] + sigma_list  # 加入原始光谱
+
+#         peaks_by_sigma = []
+#         for s in sigma_list:
+#             flux_smooth, peaks_info = _detect_features_on_flux(feature, flux, x_axis_slope, sigma=float(s), prominence=prom, height=None)
+
+#             if feature == "trough":
+#                 peaks_info = [
+#                     t for t in peaks_info
+#                     if (t["prominence"] > 0.02 and t["width_wavelength"] < 50)
+#                 ]
+
+#             peaks_by_sigma.append({
+#                 "sigma": float(s),
+#                 "flux_smooth": flux_smooth.tolist(),
+#                 "peaks": peaks_info
+#             })
+        
+
+#         consensus = _merge_peaks_across_sigmas(feature, wavelengths, peaks_by_sigma, tol_pixels=tol_pixels, weight_original=weight_original)
+
+#         return consensus
+
+#     except Exception as e:
+#         return json.dumps({"error": str(e)}, ensure_ascii=False)
 
 def savefig_unique(fig, filename, **kwargs):
     """
