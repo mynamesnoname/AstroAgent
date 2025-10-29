@@ -58,7 +58,7 @@ cp .env_example .env
 ```
 
 编辑 `.env` 文件，配置以下关键参数：
-- `DASHSCOPE_API_KEY`：通义千问 DashScope 平台的 API 密钥；
+- `API_KEY`：LLM 的 API key；
 - `INPUT_DIR`, `OUTPUT_DIR`：输入与输出目录路径；
 - `IMAGE_NAME`：光谱图像文件名（不含 `.png` 后缀）；
 - 其他可选参数
@@ -76,6 +76,11 @@ python main.py
 
 ### 2. 使用 Notebook 调试（可选）
 项目包含交互式调试笔记本 `debug2.ipynb`。配置好环境变量后，可逐步运行分析流程，便于开发与排查问题。
+
+---
+
+## 测试集
+文件夹 ./data/test_set 中包含了一些简单的测试光谱
 
 ---
 

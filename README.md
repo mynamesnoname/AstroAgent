@@ -58,7 +58,7 @@ cp .env_example .env
 ```
 
 Edit `.env` to specify:
-- `DASHSCOPE_API_KEY`: Your DashScope API key for Qwen models
+- `API_KEY`: Your API key for LLM models
 - `INPUT_DIR`, `OUTPUT_DIR`: Input and output directories
 - `IMAGE_NAME`: Name of the spectrum image (without `.png` extension)
 - and other parameters
@@ -76,6 +76,11 @@ Results will be saved to the output directory specified in `.env`.
 
 ### 2. Try the Notebook (Optional)
 For interactive exploration and debugging, see `debug2.ipynb`. After setting up your environment variables, you can run this notebook to step through the analysis pipeline.
+
+---
+
+## Test set
+A basic test set is offered in ./data/test_set
 
 ---
 
