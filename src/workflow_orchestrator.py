@@ -26,10 +26,6 @@ from src.astro_agents_EN import (
 
 # damn
 
-class WorkflowOrchestrator:
-    def __init__(self, config_file: str = "mcp_config.json"):
-        load_dotenv()  # 确保每次实例化时都加载最新环境变量
-
 
 class WorkflowOrchestrator:
     """工作流编排器 - 管理整个智能体交互流程"""
