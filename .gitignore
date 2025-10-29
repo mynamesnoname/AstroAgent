@@ -1,6 +1,9 @@
 .vscode/
 
+.env
+
 ./data/QSO/output
+./data/test_set/high_quality_QSO/output
 
 # Python
 **/__pycache__/

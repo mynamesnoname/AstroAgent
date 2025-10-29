@@ -433,7 +433,7 @@ def _detect_features_on_flux(
     return flux_smooth, peaks_info
 
 
-def _merge_peaks_across_sigmas(feature, wavelengths, peaks_by_sigma, tol_pixels=5, weight_original=1.0):
+def _merge_peaks_across_sigmas(feature, wavelengths, peaks_by_sigma, tol_pixels=5, weight_original=2.0):
     """
     合并不同 scale 的峰/谷。
     - 对 peaks：按 prominence 排序；
@@ -521,7 +521,7 @@ def _merge_peaks_across_sigmas(feature, wavelengths, peaks_by_sigma, tol_pixels=
 
 def _find_features_multiscale(
     state, feature="peak", sigma_list=None,
-    prom=0.01, tol_pixels=3, weight_original=1.0,
+    prom=0.01, tol_pixels=10, weight_original=1.0,
     use_continuum_for_trough=True,
     min_depth=0.1  # ✅ 新增：按 depth 过滤阈值
 ):
@@ -607,7 +607,7 @@ def _find_features_multiscale(
 #     return flux_smooth, peaks_info
 
 
-# def _merge_peaks_across_sigmas(feature, wavelengths, peaks_by_sigma, tol_pixels=5, weight_original=1.0):
+# def _merge_peaks_across_sigmas(feature, wavelengths, peaks_by_sigma, tol_pixels=5, weight_original=2.0):
 #     """
 #     合并不同scale的峰，原始光谱权重最高。
 #     peaks_by_sigma: list of dicts [{"sigma":..., "peaks": [...]}]

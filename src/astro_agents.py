@@ -181,7 +181,7 @@ class SpectralVisualInterpreter(BaseAgent):
     def _load_feature_params(self):
         """安全读取峰值/谷值检测参数"""
         sigma_list = parse_list(os.getenv("SIGMA_LIST"), [2, 4, 16])
-        tol_pixels = getenv_int("TOL_PIXELS", 3)
+        tol_pixels = getenv_int("TOL_PIXELS", 10)
         prom_peaks = getenv_float("PROM_THRESHOLD_PEAKS", 0.01)
         prom_troughs = getenv_float("PROM_THRESHOLD_TROUGHS", 0.05)
         weight_original = getenv_float("WEIGHT_ORIGINAL", 1.0)
