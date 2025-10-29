@@ -1,6 +1,6 @@
 中文 README 文件见 [README in Chinese](./README_Chinese.md).
 
-On processing
+ **A related paper is in preparation.** 
 
 # LLM-Spectro-Agent
 
