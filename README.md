@@ -1,4 +1,4 @@
-中文 README 见 [./README_Chinese.md]
+中文 README 文件见 [README in Chinese](./README_Chinese.md).
 
 # LLM-Spectro-Agent
 
