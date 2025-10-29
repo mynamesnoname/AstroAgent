@@ -24,6 +24,8 @@ from src.astro_agents_EN import (
     SpectralSynthesisHost as EN_SpectralSynthesisHost
 )
 
+# damn
+
 class WorkflowOrchestrator:
     def __init__(self, config_file: str = "mcp_config.json"):
         load_dotenv()  # 确保每次实例化时都加载最新环境变量
