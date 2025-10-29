@@ -432,12 +432,16 @@ def _detect_features_on_flux(
 
     return flux_smooth, peaks_info
 
-
-def _merge_peaks_across_sigmas(feature, wavelengths, peaks_by_sigma, tol_pixels=5, weight_original=2.0):
+def _merge_peaks_across_sigmas(
+    feature, wavelengths, peaks_by_sigma,
+    tol_pixels=5, weight_original=2.0
+):
     """
     合并不同 scale 的峰/谷。
-    - 对 peaks：按 prominence 排序；
-    - 对 troughs：按 depth 和 EW 排序。
+    新版逻辑：
+      - 每个 group 代表同一物理特征；
+      - 每个 σ 内挑选出最可信的代表点；
+      - 不同 σ 的代表点再按权重加权平均。
     """
     merged = []
     for scale_entry in peaks_by_sigma:
@@ -461,27 +465,48 @@ def _merge_peaks_across_sigmas(feature, wavelengths, peaks_by_sigma, tol_pixels=
     for g in merged:
         infos = g["infos"]
 
-        # 加权代表索引
+        # === Step 1: 按 σ 分组 ===
+        infos_by_sigma = {}
+        for inf in infos:
+            s = inf["sigma"]
+            infos_by_sigma.setdefault(s, []).append(inf)
+
+        # === Step 2: 每 σ 选出最可信代表 ===
+        sigma_reps = []
+        for s, lst in infos_by_sigma.items():
+            if feature == "peak":
+                # 峰：选 flux 最大 或 prominence 最大
+                best = max(lst, key=lambda x: (x.get("prominence", 0), x.get("flux", 0)))
+            else:
+                # 谷：选 depth 最大（或 flux 最低）
+                best = max(lst, key=lambda x: (
+                    x.get("depth", 0),
+                    -x.get("flux", 0)
+                ))
+            sigma_reps.append(dict(best, sigma=s))
+
+        # === Step 3: 对代表点进行加权平均 ===
         weighted_sum, weight_total = 0.0, 0.0
         max_sigma, min_sigma = 0.0, np.inf
-        for inf in infos:
-            sigma = inf["sigma"]
-            idx = inf["index"]
+        for rep in sigma_reps:
+            sigma = rep["sigma"]
+            idx = rep["index"]
             max_sigma = max(max_sigma, sigma)
             min_sigma = min(min_sigma, sigma)
             w = weight_original if sigma == 0 else 1.0 / np.sqrt(sigma)
             weighted_sum += idx * w
             weight_total += w
         rep_idx = int(np.round(weighted_sum / weight_total))
-
         wlen = float(wavelengths[rep_idx]) if rep_idx < len(wavelengths) else None
-        appearances = len(infos)
-        widths = [inf.get("width_wavelength", 0.0) for inf in infos]
-        mean_flux = float(np.mean([inf["flux"] for inf in infos]))
-        scales = list({inf["sigma"] for inf in infos})
+
+        # === Step 4: 统计特征信息 ===
+        appearances = len(sigma_reps)
+        widths = [r.get("width_wavelength", 0.0) for r in sigma_reps]
+        mean_flux = float(np.mean([r["flux"] for r in sigma_reps]))
+        scales = [r["sigma"] for r in sigma_reps]
 
         if feature == "peak":
-            max_prom = max(inf.get("prominence", 0.0) for inf in infos)
+            max_prom = max(r.get("prominence", 0.0) for r in sigma_reps)
             consensus.append({
                 "rep_index": rep_idx,
                 "wavelength": wlen,
@@ -493,8 +518,8 @@ def _merge_peaks_across_sigmas(feature, wavelengths, peaks_by_sigma, tol_pixels=
                 "max_sigma_seen": max_sigma,
             })
         else:
-            max_depth = max(inf.get("depth", 0.0) for inf in infos)
-            mean_ew = np.mean([inf.get("equivalent_width_pixels", 0.0) for inf in infos])
+            max_depth = max(r.get("depth", 0.0) for r in sigma_reps)
+            mean_ew = np.mean([r.get("equivalent_width_pixels", 0.0) for r in sigma_reps])
             consensus.append({
                 "rep_index": rep_idx,
                 "wavelength": wlen,
@@ -507,16 +532,106 @@ def _merge_peaks_across_sigmas(feature, wavelengths, peaks_by_sigma, tol_pixels=
                 "min_sigma_seen": min_sigma,
             })
 
-    # 排序
+    # === Step 5: 排序逻辑 ===
     if feature == "peak":
-        consensus = sorted(consensus,
+        consensus = sorted(
+            consensus,
             key=lambda x: (x["max_sigma_seen"], x["max_prominence"], x["appearances"]),
-            reverse=True)
+            reverse=True,
+        )
     else:
-        consensus = sorted(consensus,
+        consensus = sorted(
+            consensus,
             key=lambda x: (x["max_depth"], x["mean_equivalent_width_pixels"], x["appearances"]),
-            reverse=True)
+            reverse=True,
+        )
     return consensus
+
+
+# def _merge_peaks_across_sigmas(feature, wavelengths, peaks_by_sigma, tol_pixels=5, weight_original=2.0):
+#     """
+#     合并不同 scale 的峰/谷。
+#     - 对 peaks：按 prominence 排序；
+#     - 对 troughs：按 depth 和 EW 排序。
+#     """
+#     merged = []
+#     for scale_entry in peaks_by_sigma:
+#         sigma = scale_entry["sigma"]
+#         for p in scale_entry["peaks"]:
+#             idx = p["index"]
+#             matched = None
+#             for g in merged:
+#                 rep = int(np.round(np.mean(g["indices"])))
+#                 if abs(rep - idx) <= tol_pixels:
+#                     matched = g
+#                     break
+#             if matched is None:
+#                 g = {"indices": [idx], "infos": [dict(p, sigma=sigma)]}
+#                 merged.append(g)
+#             else:
+#                 matched["indices"].append(idx)
+#                 matched["infos"].append(dict(p, sigma=sigma))
+
+#     consensus = []
+#     for g in merged:
+#         infos = g["infos"]
+
+#         # 加权代表索引
+#         weighted_sum, weight_total = 0.0, 0.0
+#         max_sigma, min_sigma = 0.0, np.inf
+#         for inf in infos:
+#             sigma = inf["sigma"]
+#             idx = inf["index"]
+#             max_sigma = max(max_sigma, sigma)
+#             min_sigma = min(min_sigma, sigma)
+#             w = weight_original if sigma == 0 else 1.0 / np.sqrt(sigma)
+#             weighted_sum += idx * w
+#             weight_total += w
+#         rep_idx = int(np.round(weighted_sum / weight_total))
+
+#         wlen = float(wavelengths[rep_idx]) if rep_idx < len(wavelengths) else None
+#         appearances = len(infos)
+#         widths = [inf.get("width_wavelength", 0.0) for inf in infos]
+#         mean_flux = float(np.mean([inf["flux"] for inf in infos]))
+#         scales = list({inf["sigma"] for inf in infos})
+
+#         if feature == "peak":
+#             max_prom = max(inf.get("prominence", 0.0) for inf in infos)
+#             consensus.append({
+#                 "rep_index": rep_idx,
+#                 "wavelength": wlen,
+#                 "appearances": appearances,
+#                 "max_prominence": float(max_prom),
+#                 "mean_flux": mean_flux,
+#                 "width_mean": float(np.mean(widths)),
+#                 "seen_in_scales_of_sigma": scales,
+#                 "max_sigma_seen": max_sigma,
+#             })
+#         else:
+#             max_depth = max(inf.get("depth", 0.0) for inf in infos)
+#             mean_ew = np.mean([inf.get("equivalent_width_pixels", 0.0) for inf in infos])
+#             consensus.append({
+#                 "rep_index": rep_idx,
+#                 "wavelength": wlen,
+#                 "appearances": appearances,
+#                 "max_depth": float(max_depth),
+#                 "mean_equivalent_width_pixels": float(mean_ew),
+#                 "mean_flux": mean_flux,
+#                 "width_mean": float(np.mean(widths)),
+#                 "seen_in_scales_of_sigma": scales,
+#                 "min_sigma_seen": min_sigma,
+#             })
+
+#     # 排序
+#     if feature == "peak":
+#         consensus = sorted(consensus,
+#             key=lambda x: (x["max_sigma_seen"], x["max_prominence"], x["appearances"]),
+#             reverse=True)
+#     else:
+#         consensus = sorted(consensus,
+#             key=lambda x: (x["max_depth"], x["mean_equivalent_width_pixels"], x["appearances"]),
+#             reverse=True)
+#     return consensus
 
 
 def _find_features_multiscale(
