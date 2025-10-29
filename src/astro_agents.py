@@ -20,7 +20,8 @@ from .utils import (
 class SpectralVisualInterpreter(BaseAgent):
     """
     SpectralVisualInterpreter
-    从科学光谱图中自动提取坐标轴刻度、边框、像素映射等信息
+
+    从科学光谱图中自动提取坐标轴刻度、边框、像素映射、峰/谷等信息
     """
 
     def __init__(self, mcp_manager: MCPManager):
@@ -33,7 +34,9 @@ class SpectralVisualInterpreter(BaseAgent):
     # Step 1.1: 检测坐标轴刻度
     # --------------------------
     async def detect_axis_ticks(self, state: SpectroState):
-        """调用视觉 LLM 检测坐标轴刻度，如果无图像或非光谱图报错"""
+        """
+        调用视觉 LLM 检测坐标轴刻度，如果无图像或非光谱图报错
+        """
         class NoImageError(Exception): pass
         class NotSpectralImageError(Exception): pass
 
@@ -65,7 +68,7 @@ class SpectralVisualInterpreter(BaseAgent):
             description="坐标轴信息"
         )
 
-        if axis_info in ["未输入图像", "非光谱图"]:
+        if axis_info == "非光谱图":
             raise NotSpectralImageError(f"❌ 图像不是光谱图，LLM 输出: {axis_info}")
 
         state["axis_info"] = axis_info
@@ -89,7 +92,7 @@ class SpectralVisualInterpreter(BaseAgent):
 - 合并两组结果，生成最终的刻度值-像素映射
 - x 轴 pixel 单调递增，y 轴 pixel 单调递减
 - 修正 OCR 与单调性冲突的 pixel
-- 缺失刻度用 null，bounding-box-scale_x/y 缺失也为 null
+- 缺失刻度用 null 填充，bounding-box-scale_x/y 缺失用 null 填充
 - sigma_pixel = bounding-box-scale / 2，缺失为 null
 - conf_llm: OCR 高可信度 0.9，插值/修正 0.7，缺失视觉预测 0.5
 
@@ -138,42 +141,6 @@ class SpectralVisualInterpreter(BaseAgent):
         )
 
         state["tick_pixel_raw"] = tick_pixel_revised
-
-    # async def features_cleaning_peaks(self, state: SpectroState):
-    #     try:
-    #         peak_json = json.dumps(state['peaks'], ensure_ascii=False)
-    #         wavelength_json = json.dumps(state['spectrum']['new_wavelength'], ensure_ascii=False)
-    #         flux_json = json.dumps(state['spectrum']['weighted_flux'], ensure_ascii=False)
-    #         prompt = f"""
-    # 你是一个天文学光谱阅读助手。
-
-    # 对于一张天文学光谱，在原信号和多个不同sigma的高斯平滑下，找到的峰值如下：
-    # {peak_json}
-
-    # 光谱数据为
-    # 波长
-    # {wavelength_json}
-
-    # 流量
-    # {flux_json}
-
-    # 请根据光谱数据，对找到的峰值进行清洗。
-    # 要求：
-    # - 对于相近的峰值结果，如果二者指向同一峰，合并峰值，保留流量最高者的信息。
-    # - 如果指示的位置没有峰值，则舍弃该信息。
-    # - 以 json 格式输出最后保留的峰值波长 [wavelength, wavelength, ...]
-    # - 不要输出解释或说明
-    # """
-    #         feature_revised = await self.call_llm_with_context(
-    #             prompt,
-    #             parse_json=False,
-    #             description="修正后的峰值"
-    #         )
-    #         print(len(feature_revised))
-
-    #         state["peaks"] = [i for i in state["peaks"] if i in feature_revised]
-    #     except Exception as e:
-    #         print(e)
 
     # --------------------------
     # 读取环境变量
@@ -372,7 +339,7 @@ class SpectralRuleAnalyst(BaseAgent):
         )
         state['preliminary_classification'] = response
         
-    def _common_prompt_header(self, state, include_rule_analysis=True):
+    def _common_prompt_header_QSO(self, state, include_rule_analysis=True):
         """构造每个 step 公共的 prompt 前段"""
         visual_json = json.dumps(state['visual_interpretation'], ensure_ascii=False)
         peak_json = json.dumps(state['peaks'][:10], ensure_ascii=False)
@@ -424,7 +391,7 @@ class SpectralRuleAnalyst(BaseAgent):
         return tail
     
     async def step_1(self, state):
-        header = self._common_prompt_header(state, include_rule_analysis=False)
+        header = self._common_prompt_header_QSO(state, include_rule_analysis=False)
         tail = self._common_prompt_tail("Step 1: Lyα 分析")
 
         prompt = header + """
@@ -446,7 +413,7 @@ Step 1: Lyα 谱线检测
         state['rule_analysis'].append(response)
 
     async def step_2(self, state):
-        header = self._common_prompt_header(state)
+        header = self._common_prompt_header_QSO(state)
         tail = self._common_prompt_tail("Step 2: 其他显著发射线分析")
 
         prompt = header + """
@@ -461,7 +428,7 @@ Step 2: 其他显著发射线分析
         state['rule_analysis'].append(response)
 
     async def step_3(self, state):
-        header = self._common_prompt_header(state)
+        header = self._common_prompt_header_QSO(state)
         tail = self._common_prompt_tail("Step 3: 综合判断")
 
         prompt = header + """
@@ -481,8 +448,8 @@ Step 3: 综合判断
         state['rule_analysis'].append(response)
 
     async def step_4(self, state):
-        header = self._common_prompt_header(state)
-        tail = self._common_prompt_tail("Step 4: 补充步骤（假设 lyα 不存在时的主要谱线推测）")
+        header = self._common_prompt_header_QSO(state)
+        tail = self._common_prompt_tail("Step 4: 补充步骤（假设最高发射线不是 lyα 时的主要谱线推测）")
 
         prompt = header + """
 请继续分析:
@@ -499,7 +466,7 @@ Step 4: 补充步骤（假设最高发射线不是 lyα 时的主要谱线推测
         - 根据 λ_rest 初步计算红移 z。不允许自行计算。
     - 如果可能，推测其他可见发射线，并计算红移
     - 综合所有谱线，给出最可能的红移和红移范围
-- 以上判断是否支持 lyα 不存在的假设？
+- 以上判断是否支持最高发射线不是 lyα 的假设？
 """ + tail
 
         response = await self.call_llm_with_context(prompt, parse_json=False, description="Step 4 补充分析")
@@ -535,7 +502,7 @@ Step 4: 补充步骤（假设最高发射线不是 lyα 时的主要谱线推测
 # # 3. Revision Supervisor — 负责交叉审核与评估
 # # ---------------------------------------------------------
 class SpectralAnalysisAuditor(BaseAgent):
-    """结果监督者：审查并校正其他分析 agent 的输出"""
+    """审查分析师：审查并校正其他分析 agent 的输出"""
 
     def __init__(self, mcp_manager: MCPManager):
         super().__init__(
@@ -543,7 +510,7 @@ class SpectralAnalysisAuditor(BaseAgent):
             mcp_manager=mcp_manager
         )
 
-    def _common_prompt_header(self, state: SpectroState) -> str:
+    def _common_prompt_header_QSO(self, state: SpectroState) -> str:
         peak_json = json.dumps(state['peaks'][:10], ensure_ascii=False)
         trough_json = json.dumps(state['troughs'], ensure_ascii=False)
         rule_analysis = "\n\n".join(str(item) for item in state['rule_analysis'])
@@ -582,15 +549,17 @@ class SpectralAnalysisAuditor(BaseAgent):
 """
 
     async def auditing(self, state: SpectroState):
-        header = self._common_prompt_header(state)
+        header = self._common_prompt_header_QSO(state)
 
         if state['count'] == 0:
             body = f"""
 请对这份分析报告进行检查。
 """
         elif state['count']:     
-            auditing_history_json = state['auditing_history'][-1]
-            response_history_json = state['refine_history'][-1]
+            auditing_history = state['auditing_history'][-1]
+            auditing_history_json = json.dumps(auditing_history, ensure_ascii=False)
+            response_history = state['refine_history'][-1]
+            response_history_json = json.dumps(response_history, ensure_ascii=False)
 
             body = f"""
 你对这份分析报告的最新质疑为
@@ -623,7 +592,7 @@ class SpectralRefinementAssistant(BaseAgent):
             mcp_manager=mcp_manager
         )
 
-    def _common_prompt_header(self, state) -> str:
+    def _common_prompt_header_QSO(self, state) -> str:
         peak_json = json.dumps(state['peaks'][:10], ensure_ascii=False)
         trough_json = json.dumps(state['troughs'], ensure_ascii=False)
         rule_analysis = "\n\n".join(str(item) for item in state['rule_analysis'])
@@ -661,11 +630,12 @@ class SpectralRefinementAssistant(BaseAgent):
 """
 
     async def refine(self, state: SpectroState):
-        header = self._common_prompt_header(state)
+        header = self._common_prompt_header_QSO(state)
         auditing = state['auditing_history'][-1]
+        auditing_json = json.dumps(auditing, ensure_ascii=False)
         body = f"""
 负责核验报告的审查分析师给出的最新建议为
-{auditing}
+{auditing_json}
 
 请对建议进行回应。
 """
@@ -725,8 +695,9 @@ class SpectralSynthesisHost(BaseAgent):
 """
 
 
-    def summary(self, state) -> str:
+    async def summary(self, state):
         try:
+            preliminary_classification_json = json.dumps(state['preliminary_classification'], ensure_ascii=False)
             visual_interpretation_json = json.dumps(state['visual_interpretation'], ensure_ascii=False)
             rule_analysis = "\n\n".join(str(item) for item in state['rule_analysis'])
             rule_analysis_json = json.dumps(rule_analysis, ensure_ascii=False)
@@ -746,6 +717,9 @@ class SpectralSynthesisHost(BaseAgent):
 
 对光谱的视觉描述
 {visual_interpretation_json}
+
+光谱的初步分类
+{preliminary_classification_json}
 
 规则分析师的观点：
 {rule_analysis_json}
@@ -771,13 +745,58 @@ class SpectralSynthesisHost(BaseAgent):
     - 分析报告的可信度评分（如果能认证出2条以上的谱线，则可信度为“高”；能认证出1条谱线，可信度为“中”；其他情况为“低”）
     - 是否需要人工介入判断
 """
-        return header + prompt
+        prompt = header + prompt
+        response = await self.call_llm_with_context(prompt, parse_json=False, description="总结")
+        state['summary'] = response
 
+    async def in_brief(self, state):
+        summary_json = json.dumps(state['summary'], ensure_ascii=False)
+        prompt_type = f"""
+你是一位负责统筹的【天文学光谱分析主持人】
+
+你已经对一张天文学光谱做了总结
+{summary_json}
+
+- 请输出 **结论** 部分中的 **天体类型**（从这三个词语中选择：star, galaxy, QSO）
+
+- 输出格式为 str
+- 不要输出其他信息
+"""
+        response_type = await self.call_llm_with_context(prompt_type, parse_json=False, description="总结")
+        state['in_brief']['type'] = response_type
+
+        prompt_redshift = f"""
+你是一位负责统筹的【天文学光谱分析主持人】
+
+你已经对一张天文学光谱做了总结
+{summary_json}
+
+请输出 **结论** 部分中的 **红移 z**（不需要输出 ± Δz）
+
+- 输出格式为 float
+- 不要输出其他信息
+"""
+        response_redshift = await self.call_llm_with_context(prompt_redshift, parse_json=False, description="总结")
+        state['in_brief']['redshift'] = response_redshift
+
+        prompt_rms = f"""
+你是一位负责统筹的【天文学光谱分析主持人】
+
+你已经对一张天文学光谱做了总结
+{summary_json}
+
+请输出 **结论** 部分中的 **红移误差 Δz**（不需要输出 z）
+
+- 输出格式为 float
+- 不要输出其他信息
+"""
+        response_rms = await self.call_llm_with_context(prompt_rms, parse_json=False, description="总结")
+        state['in_brief']['rms'] = response_rms
+    
     async def run(self, state: SpectroState) -> SpectroState:
         try:
-            prompt = self.summary(state)
-            response = await self.call_llm_with_context(prompt, parse_json=False, description="总结")
-            state['summary'] = response
+            await self.summary(state)
+            await self.in_brief(state)
             return state
         except Exception as e:
             import traceback

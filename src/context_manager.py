@@ -156,6 +156,7 @@ class SpectroState(MessagesState):
     auditing_history: Optional[List] = field(default_factory=list)
     refine_history: Optional[List] = field(default_factory=list)
     summary: Optional[str] = None
+    in_brief: Optional[Dict[str, float]] = None
 
     # =====================================================
     # 🔧 通用方法
