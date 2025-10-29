@@ -1,3 +1,5 @@
+中文 README 见 [./README_Chinese.md]
+
 # LLM-Spectro-Agent
 
 An LLM-powered agent for human-like analysis of one-dimensional astronomical spectra.
