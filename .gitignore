@@ -5,6 +5,8 @@
 ./data/QSO
 ./data/test_set/high_quality_QSO/output
 
+log/
+
 # Python
 **/__pycache__/
 *.py[cod]
