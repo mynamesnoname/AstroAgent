@@ -6,18 +6,27 @@ from typing import Dict, Any, List, Optional, Set, Union
 
 from langgraph.graph import StateGraph, END, START
 
-
 from src.mcp_manager import MCPManager
 from src.utils import getenv_int
 from src.context_manager import SpectroState
 from src.astro_agents import (
-    SpectralVisualInterpreter,
-    SpectralRuleAnalyst,
-    SpectralAnalysisAuditor, 
-    SpectralRefinementAssistant,
-    SpectralSynthesisHost
-    )
+    SpectralVisualInterpreter as CN_SpectralVisualInterpreter,
+    SpectralRuleAnalyst as CN_SpectralRuleAnalyst,
+    SpectralAnalysisAuditor as CN_SpectralAnalysisAuditor,
+    SpectralRefinementAssistant as CN_SpectralRefinementAssistant,
+    SpectralSynthesisHost as CN_SpectralSynthesisHost
+)
+from src.astro_agents_EN import (
+    SpectralVisualInterpreter as EN_SpectralVisualInterpreter,
+    SpectralRuleAnalyst as EN_SpectralRuleAnalyst,
+    SpectralAnalysisAuditor as EN_SpectralAnalysisAuditor,
+    SpectralRefinementAssistant as EN_SpectralRefinementAssistant,
+    SpectralSynthesisHost as EN_SpectralSynthesisHost
+)
 
+class WorkflowOrchestrator:
+    def __init__(self, config_file: str = "mcp_config.json"):
+        load_dotenv()  # 确保每次实例化时都加载最新环境变量
 
 
 class WorkflowOrchestrator:
@@ -26,6 +35,27 @@ class WorkflowOrchestrator:
     def __init__(self, config_file: str = "mcp_config.json"):
         # 加载环境变量
         load_dotenv()
+        
+        language = os.getenv('LANGUAGE')
+        
+        if language == "CN":
+            self.agent_classes = {
+                'SpectralVisualInterpreter': CN_SpectralVisualInterpreter,
+                'SpectralRuleAnalyst': CN_SpectralRuleAnalyst,
+                'SpectralAnalysisAuditor': CN_SpectralAnalysisAuditor,
+                'SpectralRefinementAssistant': CN_SpectralRefinementAssistant,
+                'SpectralSynthesisHost': CN_SpectralSynthesisHost
+            }
+        elif language == "EN":
+            self.agent_classes = {
+                'SpectralVisualInterpreter': EN_SpectralVisualInterpreter,
+                'SpectralRuleAnalyst': EN_SpectralRuleAnalyst,
+                'SpectralAnalysisAuditor': EN_SpectralAnalysisAuditor,
+                'SpectralRefinementAssistant': EN_SpectralRefinementAssistant,
+                'SpectralSynthesisHost': EN_SpectralSynthesisHost
+            }
+        else:
+            raise ValueError(f"Language {language} is not supported")
         
         # 初始化MCP管理器
         self.mcp_manager = MCPManager(config_file)
@@ -43,11 +73,11 @@ class WorkflowOrchestrator:
     def _initialize_agents(self) -> Dict[str, Any]:
         """初始化所有智能体"""
         spectro_agents = {
-            'Spectral_Visual_Interpreter': SpectralVisualInterpreter(self.mcp_manager),
-            'Spectral_Rule_Analyst': SpectralRuleAnalyst(self.mcp_manager),
-            'Spectral_Analysis_Auditor': SpectralAnalysisAuditor(self.mcp_manager),
-            'Spectral_Refinement_Assistant': SpectralRefinementAssistant(self.mcp_manager),
-            'Spectral_Synthesis_Host': SpectralSynthesisHost(self.mcp_manager)
+            'Spectral_Visual_Interpreter': self.agent_classes['SpectralVisualInterpreter'](self.mcp_manager),
+            'Spectral_Rule_Analyst': self.agent_classes['SpectralRuleAnalyst'](self.mcp_manager),
+            'Spectral_Analysis_Auditor': self.agent_classes['SpectralAnalysisAuditor'](self.mcp_manager),
+            'Spectral_Refinement_Assistant': self.agent_classes['SpectralRefinementAssistant'](self.mcp_manager),
+            'Spectral_Synthesis_Host': self.agent_classes['SpectralSynthesisHost'](self.mcp_manager)
         }
         
         print(f"初始化了 {len(spectro_agents)} 个智能体")
@@ -199,7 +229,8 @@ class WorkflowOrchestrator:
             count=0,
             rule_analysis=[],
             auditing_history=[], 
-            refine_history=[]
+            refine_history=[], 
+            in_brief = {}
         )
         try:
             # 检查取消状态
@@ -236,7 +267,8 @@ class WorkflowOrchestrator:
                     rule_analysis               = workflow_result.get('rule_analysis', None),
                     auditing_history            = workflow_result.get('auditing_history', None),
                     refine_history              = workflow_result.get('refine_history', None),
-                    summary                     = workflow_result.get('summary', None)
+                    summary                     = workflow_result.get('summary', None),
+                    in_brief                    = workflow_result.get('in_brief', None)
                 )
             else:
                 final_state = workflow_result

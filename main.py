@@ -4,6 +4,8 @@
 import asyncio
 import os
 import logging
+import csv
+import numpy as np
 from dotenv import load_dotenv
 from src.workflow_orchestrator import WorkflowOrchestrator
 
@@ -15,7 +17,7 @@ async def main():
 
         mcp_configs = os.getenv('MCP_CONFIG', '/home/wbc/code3/llm-spectro-agent/mcp_config.json')
         input_dir = os.getenv('INPUT_DIR')
-        # output_dir = os.getenv('OUTPUT_DIR', os.path.join(input_dir, "../output"))
+        output_dir = os.getenv('OUTPUT_DIR', os.path.join(input_dir, "../output"))
         single_run = os.getenv('SINGLE_RUN', 'true').lower() == 'true'
 
         image_name = os.getenv('IMAGE_NAME')
@@ -44,6 +46,8 @@ async def main():
             # 批量模式
             logging.info(f"🚀 批量分析模式: {start} → {end}")
 
+            collect = []
+
             for i in range(start, end + 1):
                 img_name = f"{image_header}{i}"
                 os.environ['IMAGE_NAME'] = img_name  # 临时覆盖
@@ -59,8 +63,29 @@ async def main():
                 try:
                     result = await orc.run_analysis_single()
                     logging.info(f"✅ 图像 {img_name}.png 分析完成")
+
+                    in_brief = result.get('in_brief', {})
+                    def safe_str(x):
+                        print('yes')
+                        if x is None or (isinstance(x, float) and (np.isnan(x) or np.isinf(x))):
+                            return 'N/A'
+                        return str(x)
+
+                    detail = [
+                        img_name,
+                        safe_str(in_brief.get('type')),
+                        safe_str(in_brief.get('redshift')),
+                        safe_str(in_brief.get('rms'))
+                    ]
+                    collect.append(detail)
                 except Exception as e:
                     logging.exception(f"❌ 图像 {img_name}.png 分析失败: {e}")
+
+            csv_path = os.path.join(output_dir, 'in_brief.csv')
+            with open(csv_path, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                writer.writerow(['image_name', 'type', 'redshift', 'rms'])
+                writer.writerows(collect)
 
         logging.info("🎉 所有任务已完成")
 
