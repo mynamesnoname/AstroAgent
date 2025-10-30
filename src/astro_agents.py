@@ -44,9 +44,27 @@ class SpectralVisualInterpreter(BaseAgent):
             raise NoImageError("❌ 未输入图像或图像路径不存在")
 
         prompt = """
-你是一个专业视觉分析模型，擅长从科学图表提取坐标轴刻度信息。
-如果输入中不包含光谱图，请输出 “非光谱图”。
-严格按照以下 JSON Schema 输出：
+你是一个专业的天文学光谱图分析助手，专门用于从**一维天文光谱图**中提取坐标轴信息。
+
+请严格按以下规则处理输入图像：
+
+1. **如果图像不是光谱图**（例如：照片、流程图、表格、多条曲线、无坐标轴等），请**仅输出**：
+
+“非光谱图”
+
+2. **如果是光谱图**，请提取 X 轴和 Y 轴的以下信息，并**严格按指定 JSON Schema 输出**，**不要包含任何额外文本、解释或 Markdown**：
+
+- `label_and_Unit`：坐标轴标签及单位（如 "Wavelength (Å)" 或 "Flux (arb. units)"），若无法识别则填空字符串 `""`；
+- `tick_range`：刻度值的最小值和最大值；
+- `ticks`：所有可识别的刻度数值列表（按数值升序排列）。
+
+✅ **输出格式要求**：
+- 必须是合法 JSON；
+- 数值必须为 `float` 类型（如 `1215.67`，不要用字符串 `"1215.67"`）；
+- 列表不得为空（若完全无法识别刻度，可设为 `[0.0]` 并将 `tick_range` 设为 `{"min": 0.0, "max": 0.0}`）；
+- **禁止输出除 JSON 或 “非光谱图” 之外的任何内容**。
+
+📌 **JSON Schema**：
 {
   "x_axis": {
     "label_and_Unit": "str",
@@ -82,27 +100,52 @@ class SpectralVisualInterpreter(BaseAgent):
         axis_info_json = json.dumps(state['axis_info'], ensure_ascii=False)
         ocr_json = json.dumps(state['OCR_detected_ticks'], ensure_ascii=False)
 
-        prompt = f"""
-你是科学图表阅读助手。
-输入两组刻度信息：
-1. 视觉模型：{axis_info_json}
-2. OCR/Opencv：{ocr_json}
+        prompt_1 = f"""
+你是一个科学图表阅读助手。
+
+以下是对同一张光谱图，经由视觉大模型和 OCR 识别得到的两组刻度信息：
+1. 视觉模型：
+{axis_info_json}
+2. OCR/Opencv：
+{ocr_json}
 
 任务：
-- 合并两组结果，生成最终的刻度值-像素映射
-- x 轴 pixel 单调递增，y 轴 pixel 单调递减
-- 修正 OCR 与单调性冲突的 pixel
-- 缺失刻度用 null 填充，bounding-box-scale_x/y 缺失用 null 填充
-- sigma_pixel = bounding-box-scale / 2，缺失为 null
-- conf_llm: OCR 高可信度 0.9，插值/修正 0.7，缺失视觉预测 0.5
+- 综合两组结果，对输入的 OCR 刻度识别结果进行一致性修正与补全
 
+规则：
+1. **冲突修正**
+   * 若 OCR 结果与视觉模型结果存在冲突（例如位置或数值不符），以视觉模型结果为优先，修正 OCR 信息。
+2. **单调性约束**
+   * 对于 **x 轴刻度**：`position_x` 必须随刻度值增大而单调递增。
+   * 对于 **y 轴刻度**：`position_y` 必须随刻度值增大而单调递减。
+3. **缺失补全**
+   * 若存在刻度缺失，优先通过相邻刻度进行线性插值。
+   * 若无法插值（如边界缺失），填充为 `null`。
+   * 若 `bounding-box-scale_x` 或 `bounding-box-scale_y` 缺失，填充为 `null`。
+4. **派生参数计算**
+   * 计算 `sigma_pixel = bounding-box-scale / 2`，若对应 `scale` 缺失则填充为 `null`。
+5. **置信度分配**
+   * `conf_llm` 的取值规则：
+     * OCR 结果高可信度：**0.9**
+     * 插值或修正结果：**0.7**
+     * 缺失但视觉预测结果存在：**0.5**
+"""
+        prompt_2 = """
 输出：
-- 严格 JSON 数组，每个元素包含：
-  "axis" ("x" 或 "y"), "value", "position_x", "position_y",
-  "bounding-box-scale_x", "bounding-box-scale_y",
-  "sigma_pixel", "conf_llm"
+- 严格输出 JSON 数组，每个元素包含：
+{
+  "axis" ("x" or "y"): "str", 
+  "value": float, 
+  "position_x": int, 
+  "position_y": int,
+  "bounding-box-scale_x": int, 
+  "bounding-box-scale_y": int, 
+  "sigma_pixel": float, 
+  "conf_llm": float
+}  
 - 不要输出任何解释或文字
 """
+        prompt = prompt_1 + prompt_2
         tick_pixel_raw = await self.call_llm_with_context(
             prompt,
             image_path=state['image_path'],
@@ -168,15 +211,18 @@ class SpectralVisualInterpreter(BaseAgent):
 
             # Step 1.2: OCR 提取刻度
             state["OCR_detected_ticks"] = _detect_axis_ticks(state['image_path'])
-            print(state["OCR_detected_ticks"])
+            for i in state["OCR_detected_ticks"]:
+                print(i)
 
             # Step 1.3: 合并
             await self.combine_axis_mapping(state)
-            print(state["tick_pixel_raw"])
+            for i in state["tick_pixel_raw"]:
+                print(i)
 
             # Step 1.4: 修正
             await self.revise_axis_mapping(state)
-            print(state["tick_pixel_raw"])
+            for i in state["tick_pixel_raw"]:
+                print(i)
 
             # Step 1.5: 边框检测与裁剪
             state["chart_border"] = _detect_chart_border(state['image_path'])

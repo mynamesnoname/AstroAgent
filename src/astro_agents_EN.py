@@ -2,6 +2,9 @@
 
 import json
 import os
+import logging
+import traceback
+from typing import Any
 
 from .context_manager import SpectroState
 from .base_agent import BaseAgent
@@ -14,6 +17,9 @@ from .utils import (
     _find_features_multiscale, _plot_spectrum, _plot_features,
     parse_list, getenv_float, getenv_int
 )
+
+# 配置 logger
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------
 # 1. Visual Assistant — 负责图像理解与坐标阅读
@@ -40,13 +46,11 @@ class SpectralVisualInterpreter(BaseAgent):
         Call the visual LLM to detect axis tick marks. 
         Raise an error if no image is provided or if the image is not a spectrum plot.
         """
-        class NoImageError(Exception): pass
-        class NotSpectralImageError(Exception): pass
+        try:
+            if not state['image_path'] or not os.path.exists(state['image_path']):
+                raise ValueError("No image input or image path does not exist")
 
-        if not state['image_path'] or not os.path.exists(state['image_path']):
-            raise NoImageError("❌ No image input or image path does not exist")
-
-        prompt = """
+            prompt = """
 You are a professional visual analysis model, specialized in extracting axis tick information from scientific charts.
 If the input does not contain a spectrum plot, output "Not a spectrum plot".
 Strictly output according to the following JSON Schema:
@@ -64,43 +68,70 @@ Strictly output according to the following JSON Schema:
 }
 """
 
-        axis_info = await self.call_llm_with_context(
-            prompt,
-            image_path=state['image_path'],
-            parse_json=True,
-            description="axis info"
-        )
+            axis_info = await self.call_llm_with_context(
+                prompt,
+                image_path=state['image_path'],
+                parse_json=True,
+                description="axis info"
+            )
 
-        if axis_info == "Not a spectrum plot":
-            raise NotSpectralImageError(f"❌ The image is not a spectrum plot. LLM output: {axis_info}")
+            if axis_info == "Not a spectrum plot":
+                raise ValueError("The image is not a spectrum plot")
 
-        state["axis_info"] = axis_info
-        return state
+            state["axis_info"] = axis_info
+        
+        except Exception as e:
+            logger.error("❌ [detect_axis_ticks] Failed to detect axis ticks", exc_info=True)
+            raise RuntimeError(f"Axis tick detection failed: {str(e)}") from e
 
     # --------------------------
     # Step 1.3: Merge the visual LLM and OCR results
     # --------------------------
     async def combine_axis_mapping(self, state: SpectroState):
         """Generate pixel-to-value mapping by combining visual LLM and OCR results"""
-        axis_info_json = json.dumps(state['axis_info'], ensure_ascii=False)
-        ocr_json = json.dumps(state['OCR_detected_ticks'], ensure_ascii=False)
+        try:
+            axis_info_json = json.dumps(state['axis_info'], ensure_ascii=False)
+            ocr_json = json.dumps(state['OCR_detected_ticks'], ensure_ascii=False)
 
-        prompt_1 = f"""
-You are a scientific chart reading assistant.  
-Input two sets of scale information:  
-1. Visual model: {axis_info_json}  
-2. OCR/OpenCV: {ocr_json}  
+            prompt_1 = f"""
+You are a **scientific chart interpretation assistant**.
 
-Task:  
-- Merge the two sets of results to generate the final value-to-pixel mapping.  
-- x-axis pixels must increase monotonically; y-axis pixels must decrease monotonically.  
-- Correct any OCR values that conflict with monotonicity.  
-- Missing tick values should be `null`; missing bounding-box-scale_x/y should also be `null`.  
-- `sigma_pixel` = bounding-box-scale / 2; if missing, set to `null`.  
-- `conf_llm`: OCR high-confidence = 0.9, interpolated/corrected = 0.7, missing visual prediction = 0.5.  
+You will receive two sets of axis tick information:
+
+1. **Visual model output:** 
+{axis_info_json}
+2. **OCR/OpenCV output:** 
+{ocr_json}
+
+---
+
+### **Task:**
+
+- According to those results above, perform **consistency correction and completion** on the OCR tick recognition data.
+
+---
+
+### **Rules:**
+
+1. **Conflict Correction**
+   - If conflicts exist between the OCR and visual model results (e.g., mismatched positions or values), prioritize the visual model results and correct the OCR data accordingly.
+2. **Monotonicity Constraints**
+   - For the **x-axis**, `position_x` must increase monotonically as the tick values increase.
+   - For the **y-axis**, `position_y` must decrease monotonically as the tick values increase.
+3. **Missing Data Completion**
+   - If tick values are missing, first attempt linear interpolation using adjacent ticks.
+   - If interpolation is not possible (e.g., at boundaries), fill the value with `null`.
+   - If `bounding-box-scale_x` or `bounding-box-scale_y` are missing, fill them with `null`.
+4. **Derived Parameter Calculation**
+   - Compute `sigma_pixel = bounding-box-scale / 2`.
+   - If the corresponding scale is missing, set `sigma_pixel` to `null`.
+5. **Confidence Assignment (`conf_llm`)**
+   - High-confidence OCR result → **0.9**
+   - Interpolated or corrected result → **0.7**
+   - Missing value inferred from visual prediction → **0.5** 
 
 """
-        prompt_2 = """
+            prompt_2 = """
 Output:  
 - Strictly output a JSON array, each element containing: 
 {
@@ -115,25 +146,28 @@ Output:
 }  
 - Do not output any explanations or additional text.
 """
-        prompt = prompt_1 + prompt_2
-        tick_pixel_raw = await self.call_llm_with_context(
-            prompt,
-            image_path=state['image_path'],
-            parse_json=True,
-            description="tick-value-to-pixel mapping"
-        )
+            prompt = prompt_1 + prompt_2
+            tick_pixel_raw = await self.call_llm_with_context(
+                prompt,
+                # image_path=state['image_path'],
+                parse_json=True,
+                description="tick-value-to-pixel mapping"
+            )
 
-        state["tick_pixel_raw"] = tick_pixel_raw
-        return state
+            state["tick_pixel_raw"] = tick_pixel_raw
+        except Exception as e:
+            logger.error("❌ [combine_axis_mapping] Failed to combine axis mapping", exc_info=True)
+            raise RuntimeError(f"Axis mapping combination failed: {str(e)}") from e
 
     # --------------------------
     # Step 1.4: Check and correct
     # --------------------------
     async def revise_axis_mapping(self, state: SpectroState):
         """Check and correct the mapping between tick values and pixel positions."""
-        axis_mapping_json = json.dumps(state['tick_pixel_raw'], ensure_ascii=False)
+        try: 
+            axis_mapping_json = json.dumps(state['tick_pixel_raw'], ensure_ascii=False)
 
-        prompt = f"""
+            prompt = f"""
 You are a scientific chart reading assistant.
 Check the following mapping between tick values and pixel positions:
 {axis_mapping_json}
@@ -147,15 +181,17 @@ Rules:
 If there are issues, revise and output the JSON; otherwise, return the original input.
 Do not output any explanations or extra text.
 """
+            tick_pixel_revised = await self.call_llm_with_context(
+                prompt,
+                # image_path=state['image_path'],
+                parse_json=True,
+                description="revised tick-value-to-pixel mapping"
+            )
 
-        tick_pixel_revised = await self.call_llm_with_context(
-            prompt,
-            image_path=state['image_path'],
-            parse_json=True,
-            description="revised tick-value-to-pixel mapping"
-        )
-
-        state["tick_pixel_raw"] = tick_pixel_revised
+            state["tick_pixel_raw"] = tick_pixel_revised
+        except Exception as e:
+            logger.error("❌ [revise_axis_mapping] Failed to revise axis mapping", exc_info=True)
+            raise RuntimeError(f"Axis mapping revision failed: {str(e)}") from e
 
     def _load_feature_params(self):
         """Safely retrieve the parameters for peak and trough detection"""
@@ -173,37 +209,39 @@ Do not output any explanations or extra text.
     # Step 1.1~1.11: main
     # --------------------------
     async def run(self, state: SpectroState, plot: bool = True):
-        """Run the complete visual analysis pipeline"""
+        """Run the complete visual analysis pipeline with per-step error reporting."""
+        step_errors = []
+
         try:
-            # Step 1.1
             await self.detect_axis_ticks(state)
+            logger.info("✅ Step 1.1: Axis ticks detected")
 
-            # Step 1.2
             state["OCR_detected_ticks"] = _detect_axis_ticks(state['image_path'])
+            logger.info("✅ Step 1.2: OCR ticks extracted")
 
-            # Step 1.3
             await self.combine_axis_mapping(state)
+            logger.info("✅ Step 1.3: Axis mapping combined")
 
-            # Step 1.4
             await self.revise_axis_mapping(state)
+            logger.info("✅ Step 1.4: Axis mapping revised")
 
-            # Step 1.5
             state["chart_border"] = _detect_chart_border(state['image_path'])
             _crop_img(state['image_path'], state["chart_border"], state['crop_path'])
+            logger.info("✅ Step 1.5: Image cropped")
 
-            # Step 1.6
             state["tick_pixel_remap"] = _remap_to_cropped_canvas(state['tick_pixel_raw'], state["chart_border"])
+            logger.info("✅ Step 1.6: Pixel remapping completed")
 
-            # Step 1.7
             state["pixel_to_value"] = _pixel_tickvalue_fitting(state['tick_pixel_remap'])
+            logger.info("✅ Step 1.7: Pixel-to-value mapping fitted")
 
-            # Step 1.8
             curve_points, curve_gray_values = _process_and_extract_curve_points(state['crop_path'])
             state["curve_points"] = curve_points
             state["curve_gray_values"] = curve_gray_values
+            logger.info("✅ Step 1.8: Curve points extracted")
 
-            # Step 1.9
             state["spectrum"] = _convert_to_spectrum(state['curve_points'], state['curve_gray_values'], state['pixel_to_value'])
+            logger.info("✅ Step 1.9: Spectrum converted")
 
             # Step 1.10
             sigma_list, tol_pixels, prom_peaks, prom_troughs, weight_original, plot_peaks, plot_troughs = self._load_feature_params()
@@ -220,22 +258,23 @@ Do not output any explanations or extra text.
                     use_continuum_for_trough=True,
                     min_depth=0.08
                 )
+                logger.info(f"✅ Step 1.10: Detected {len(state['peaks'])} peaks and {len(state['troughs'])} troughs")
             except Exception as e:
-                print(f"❌ find features multiscale terminated with error: {e}")
+                logger.exception("❌ Step 1.10: Feature detection failed")
                 raise
-            print(len(state["troughs"]))
 
-            # Step 1.11
+            # Step 1.11: Plotting
             if plot:
                 try:
                     state["spectrum_fig"] = _plot_spectrum(state)
                     state["features_fig"] = _plot_features(state, sigma_list, [plot_peaks, plot_troughs])
+                    logger.info("✅ Step 1.11: Plots generated")
                 except Exception as e:
-                    print(f"❌ plot spectrum or features terminated with error: {e}")
+                    logger.exception("❌ Step 1.11: Plotting failed")
                     raise
 
             return state
-
+        
         except Exception as e:
             print(f"❌ run pipeline terminated with error: {e}")
             raise
