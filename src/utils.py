@@ -18,8 +18,6 @@ def image_to_base64(image_path):
     with open(image_path, "rb") as f:
         return base64.b64encode(f.read()).decode("utf-8")
 
-[{"role": "user", "content": "what's (3 + 5) x 12?"}]
-
 def user_query(prompt, image_path=None):
     if not image_path:
         return [{"role": "user", "content": prompt}]
@@ -28,10 +26,10 @@ def user_query(prompt, image_path=None):
     # 处理单张图片或多张图片的情况
     base64_image = image_to_base64(image_path)
 
-    prompt_ = prompt + f"""
-光谱图为
-{base64_image}
-"""
+#     prompt_ = prompt + f"""
+# 光谱图为
+# {base64_image}
+# """
     # 构建消息内容
     content = [{"type": "text", "text": prompt}]
     content.append({
@@ -71,11 +69,13 @@ def getenv_float(name, default):
 
 def _detect_axis_ticks(image_path, config=None):
     if config is None:
-        config = r'--oem 3 --psm 6 -c tessedit_char_whitelist=0123456789.-eE'
+        # config = r'--oem 3 --psm 6 -c tessedit_char_whitelist=0123456789.-eE'
+        config = r'--oem 3 --psm 11 -c tessedit_char_whitelist=0123456789.-eE+ '  # 注意末尾加空格
 
     img = cv2.imread(image_path)
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    _, thresh = cv2.threshold(gray, 200, 255, cv2.THRESH_BINARY_INV)
+    # _, thresh = cv2.threshold(gray, 200, 255, cv2.THRESH_BINARY_INV)
+    thresh = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 11, 2)
 
     data = pytesseract.image_to_data(
         thresh, config=config, output_type=pytesseract.Output.DICT
