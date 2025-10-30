@@ -168,12 +168,15 @@ class SpectralVisualInterpreter(BaseAgent):
 
             # Step 1.2: OCR 提取刻度
             state["OCR_detected_ticks"] = _detect_axis_ticks(state['image_path'])
+            print(state["OCR_detected_ticks"])
 
             # Step 1.3: 合并
             await self.combine_axis_mapping(state)
+            print(state["tick_pixel_raw"])
 
             # Step 1.4: 修正
             await self.revise_axis_mapping(state)
+            print(state["tick_pixel_raw"])
 
             # Step 1.5: 边框检测与裁剪
             state["chart_border"] = _detect_chart_border(state['image_path'])

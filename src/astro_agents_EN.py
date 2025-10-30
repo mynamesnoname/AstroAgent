@@ -469,7 +469,7 @@ Continue the analysis:
 - If the redshift results from Step 1 and Step 2 are consistent, integrate the analyses from Step 1 and Step 2, using the matched lines to provide:
 
   - Redshift of each line
-  - Weighted average redshift (z \pm \Delta z), using the flux at the smallest shared sigma smoothing as the weight and the tool `weighted_average` (do **not** calculate manually)
+  - Weighted average redshift (z ± Δz), using the flux at the smallest shared sigma smoothing as the weight and the tool `weighted_average` (do **not** calculate manually)
   - The calculation of redshift must use the tool `calculate_redshift`; manual computation is not allowed.
 - Provide the wavelengths and line names of all emission lines confirmed at this redshift.
 """ + tail
@@ -794,7 +794,7 @@ Refining Analyst's perspective:
   - Step 4
 - **Conclusion**
 
-  - Object type and redshift (z \pm \Delta z)
+  - Object type and redshift (z ± Δz)
   - Verified spectral lines (output as Line Name - λ_rest - λ_obs)
   - Signal-to-noise ratio of the spectrum
   - Confidence rating of the analysis report (if ≥2 lines verified: “high”; if 1 line verified: “medium”; otherwise: “low”)
