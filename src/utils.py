@@ -92,7 +92,7 @@ def _detect_axis_ticks(image_path, config=None):
                 cx, cy = x + w//2, y + h//2
                 tick_values.append({
                     "value": value,
-                    "pixel": [cx, cy],
+                    "position": [cx, cy],
                     "bounding-box-scale": [w,h]
                 })
             except ValueError:
