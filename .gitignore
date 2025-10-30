@@ -2,7 +2,7 @@
 
 .env
 
-./data/QSO
+data/QSO/
 ./data/test_set/high_quality_QSO/output
 
 log/
