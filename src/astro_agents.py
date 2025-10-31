@@ -169,11 +169,11 @@ class SpectralVisualInterpreter(BaseAgent):
 {axis_mapping_json}
 
 规则：
-- y 轴: 数值从小到大 pixel 应严格递减
-- x 轴: 数值从小到大 pixel 应严格递增
+- y 轴: 刻度值从小到大时 position_y 应严格递减
+- x 轴: 刻度值从小到大时 position_x 应严格递增
 允许存在 null
-如果有问题，请修订并输出 JSON；否则直接返回原输入
-不要输出任何解释或额外文字
+如果有问题，请修订并按照原格式输出 JSON 数组；否则直接返回原输入。
+不要输出任何解释或额外文字。
 """
 
         tick_pixel_revised = await self.call_llm_with_context(

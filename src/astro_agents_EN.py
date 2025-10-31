@@ -174,11 +174,11 @@ Check the following mapping between tick values and pixel positions:
 
 Rules:
 
-- Y-axis: pixel positions must strictly decrease as values increase
-- X-axis: pixel positions must strictly increase as values increase
+- Y-axis: position_y must strictly decrease as tick values increase
+- X-axis: position_x must strictly increase as tick values increase
 - null values are allowed
 
-If there are issues, revise and output the JSON; otherwise, return the original input.
+If there are issues, revise and output the JSON array in the same format as the input; otherwise, return the original input.
 Do not output any explanations or extra text.
 """
             tick_pixel_revised = await self.call_llm_with_context(
@@ -551,11 +551,14 @@ Continue the analysis:
     async def run(self, state: SpectroState):
         try:
             await self.describe_spectrum_picture(state)
+            logger.info("✅ Described the spectrum picture")
             await self.preliminary_classification(state)
+            logger.info("✅ Preliminary classification")
             await self.step_1(state)
             await self.step_2(state)
             await self.step_3(state)
             await self.step_4(state)
+            logger.info('✅ Done rule-based analysis')
             return state
         except Exception as e:
             import traceback
