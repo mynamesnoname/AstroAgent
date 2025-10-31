@@ -28,6 +28,15 @@ async def main():
         if not input_dir:
             logging.error("❌ INPUT_DIR 未设置")
             return
+        if not output_dir:
+            logging.error("❌ OUTPUT_DIR 未设置")
+            return
+        if not os.path.isdir(input_dir):
+            logging.error(f"❌ 输入目录不存在: {input_dir}")
+            return
+        if not os.path.isdir(output_dir):
+            logging.error(f"输出目录不存在，已自动创建 {output_dir}")
+            os.makedirs(output_dir, exist_ok=True)
 
         logging.info(f"✅ 使用配置文件: {mcp_configs}")
 
