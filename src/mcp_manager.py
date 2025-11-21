@@ -3,7 +3,9 @@ import json
 from typing import Dict, Any, Optional
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_openai import ChatOpenAI
-from langgraph.prebuilt import create_react_agent
+# from langgraph.prebuilt import create_react_agent
+from langchain.agents import create_agent
+from langchain_core.prompts import PromptTemplate
 from dotenv import load_dotenv
 
 
@@ -80,8 +82,8 @@ class MCPManager:
             tools = []
         else:
             tools = await self.client.get_tools()
-        text_agent = create_react_agent(self.llm, tools)
-        vis_agent = create_react_agent(self.vis_llm, tools)
+        text_agent = create_agent(self.llm, tools)
+        vis_agent = create_agent(self.vis_llm, tools)
         agents = {"text": text_agent, "vis": vis_agent}
         return agents
 

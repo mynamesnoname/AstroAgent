@@ -1,6 +1,8 @@
 import asyncio
 import numpy as np
 import os
+import json
+
 from dotenv import load_dotenv
 from typing import Dict, Any, List, Optional, Set, Union
 
@@ -217,6 +219,12 @@ class WorkflowOrchestrator:
         image_name = os.getenv('IMAGE_NAME')
         image_path = os.path.join(input_dir, f'{image_name}.png')
         cropped_path = os.path.join(output_dir, f'{image_name}_cropped.png')
+        spec_extract_path = os.path.join(output_dir, f'{image_name}_spec_extract.png')
+
+        prompts_path = os.getenv('PROMPTS_PATH')
+        with open(prompts_path, 'r', encoding='utf-8') as f:
+            PROMPTS = json.load(f)
+
 
         # 初始化状态
         initial_state = SpectroState(
@@ -224,10 +232,17 @@ class WorkflowOrchestrator:
             image_name=image_name,
             output_dir=output_dir,
             crop_path=cropped_path, 
+            spec_extract_path=spec_extract_path,
+            prompt=PROMPTS,
             count=0,
-            rule_analysis=[],
-            auditing_history=[], 
-            refine_history=[], 
+            visual_interpretation=[],
+            possible_object=[],
+            rule_analysis_QSO=[],
+            rule_analysis_galaxy=[],
+            auditing_history_QSO=[], 
+            refine_history_QSO=[], 
+            auditing_history_galaxy=[], 
+            refine_history_galaxy=[], 
             in_brief = {}
         )
         try:
@@ -245,6 +260,7 @@ class WorkflowOrchestrator:
                     image_path  = workflow_result.get('image_path', None),
                     output_dir  = workflow_result.get('output_dir', None),
                     crop_path   = workflow_result.get('crop_path', None),
+                    spec_extract_path = workflow_result.get('spec_extract_path', None),
                     max_debate_rounds = workflow_result.get('max_debate_rounds', None),
                     sigma_list  = workflow_result.get('sigma_list', None),
                     axis_info   = workflow_result.get('axis_info', None),
@@ -262,9 +278,12 @@ class WorkflowOrchestrator:
                     features_fig     = workflow_result.get('features_fig', None),
                     visual_interpretation       = workflow_result.get('visual_interpretation', None),
                     preliminary_classification  = workflow_result.get('preliminary_classification', None),
-                    rule_analysis               = workflow_result.get('rule_analysis', None),
-                    auditing_history            = workflow_result.get('auditing_history', None),
-                    refine_history              = workflow_result.get('refine_history', None),
+                    rule_analysis_QSO           = workflow_result.get('rule_analysis_QSO', None),
+                    auditing_history_QSO        = workflow_result.get('auditing_history_QSO', None),
+                    refine_history_QSO          = workflow_result.get('refine_history_QSO', None),
+                    rule_analysis_galaxy           = workflow_result.get('rule_analysis_galaxy', None),
+                    auditing_history_galaxy        = workflow_result.get('auditing_history_galaxy', None),
+                    refine_history_galaxy          = workflow_result.get('refine_history_galaxy', None),
                     summary                     = workflow_result.get('summary', None),
                     in_brief                    = workflow_result.get('in_brief', None)
                 )
@@ -273,10 +292,12 @@ class WorkflowOrchestrator:
 
             try:
                 # 安全提取 rule_analysis
-                rule_list = final_state.get('rule_analysis')
+                rule_list = final_state.get('rule_analysis_QSO')
+                rule_list_2 = final_state.get('rule_analysis_galaxy')
                 if not isinstance(rule_list, (list, tuple)):
                     rule_list = []
                 rule_analysis = "\n\n".join(str(item) for item in rule_list if item is not None)
+                rule_analysis_2 = "\n\n".join(str(item) for item in rule_list_2 if item is not None)
 
                 # 安全提取 summary
                 summary = final_state.get('summary', '')
@@ -290,7 +311,7 @@ class WorkflowOrchestrator:
 
                 md_path = os.path.join(output_dir, f'{image_name}_rule_analysis.md')
                 with open(md_path, 'w', encoding='utf-8') as f:
-                    f.write(rule_analysis)
+                    f.write(rule_analysis + rule_analysis_2)
 
                 summary_path = os.path.join(output_dir, f'{image_name}_summary.md')
                 with open(summary_path, 'w', encoding='utf-8') as f:

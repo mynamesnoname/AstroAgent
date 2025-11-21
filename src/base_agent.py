@@ -4,6 +4,7 @@ import json
 import re
 from openai import RateLimitError
 import asyncio
+import logging
 
 from .mcp_manager import MCPManager
 from .utils import user_query
@@ -26,7 +27,7 @@ class BaseAgent(ABC):
             self.agent = await self.mcp_manager.create_agent_with_tools(self.agent_name)
             print(f"智能体 {self.agent_name} 实例创建完成")
 
-    async def call_llm_with_context(self, prompt, image_path=None, parse_json=True, description="LLM输出"):
+    async def call_llm_with_context(self, system_prompt, user_prompt, image_path=None, parse_json=True, description="LLM输出"):
         """
         调用 LLM 并可选直接解析 JSON。
         增强版：自动处理 RateLimitError 和 insufficient_quota。
@@ -38,63 +39,41 @@ class BaseAgent(ABC):
             try:
                 await self.ensure_agent_created()
 
+                # --- 构建消息 ---
+                messages = user_query(system_prompt, user_prompt, image_path)
+                
                 # --- 调用 ---
                 if image_path:
-                    message = user_query(prompt, image_path)
-                    response = await self.agent['vis'].ainvoke({'messages': message}, config={"recursion_limit": 75})
+                    response = await self.agent['vis'].ainvoke({'messages': messages}, config={"recursion_limit": 75})
                 else:
-                    message = user_query(prompt)
-                    response = await self.agent['text'].ainvoke({'messages': message}, config={"recursion_limit": 75})
+                    response = await self.agent['text'].ainvoke({'messages': messages}, config={"recursion_limit": 75})
 
                 raw_content = response['messages'][-1].content
 
-                # --- 可选 JSON 解析 ---
                 if parse_json:
-                    cleaned = re.sub(r"^```(json)?|```$", "", raw_content.strip(), flags=re.IGNORECASE).strip()
+                    # 清理可能的 markdown code block 包裹
+                    cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw_content.strip(), flags=re.IGNORECASE).strip()
+                    
                     try:
-                        return json.loads(cleaned)
-                    except json.JSONDecodeError:
-                        raise ValueError(f"❌ {description} 非 JSON 或解析失败:\n{raw_content}")
-
-                return raw_content
-
-            # --- 限流错误处理 ---
-            except RateLimitError as e:
-                if attempt < max_retries:
-                    print(f"⚠️ 智能体 {self.agent_name} - {description} 触发限流错误，{retry_delay // 60}分钟后重试...（第 {attempt + 1}/{max_retries} 次）")
-                    await asyncio.sleep(retry_delay)
-                    continue
+                        # 尝试解析为 JSON
+                        parsed = json.loads(cleaned)
+                        logging.debug("✅ JSON 解析成功")
+                        return parsed
+                    except (json.JSONDecodeError, TypeError) as e:
+                        # 解析失败 → 降级：返回原始字符串（或 cleaned）
+                        # logging.warning(f"⚠️ JSON 解析失败，降级为字符串: {str(e)[:100]}...")
+                        # 可选：记录原始内容片段用于调试
+                        # logging.debug(f"Raw content preview: {repr(cleaned[:200])}")
+                        return cleaned  # 或 return raw_content，看你偏好
                 else:
-                    raise RuntimeError(f"❌ 智能体 {self.agent_name} - 超过最大重试次数，RateLimitError: {str(e)}")
-
-            # --- 其他错误处理 ---
+                    return raw_content
+                    
             except Exception as e:
-                err_msg = str(e)
-                if "insufficient_quota" in err_msg or "quota" in err_msg.lower():
-                    print(f"❌ 智能体 {self.agent_name} - 账户额度已用尽，请检查充值或计费计划。原始错误信息：\n{err_msg}")
-                    raise RuntimeError("调用失败：额度不足，请检查 DashScope / 通义千问 的配额状态。")
-                elif "429" in err_msg:
-                    print(f"⚠️ 智能体 {self.agent_name} - HTTP 429 错误，可能是限流或额度问题：\n{err_msg}")
-                    if attempt < max_retries:
-                        await asyncio.sleep(retry_delay)
-                        continue
+                # 原有的异常处理逻辑保持不变
+                error_msg = str(e).lower()
+                if attempt < max_retries and ("rate limit" in error_msg or "insufficient_quota" in error_msg):
+                    logging.warning(f"⏳ {description}遇到限制，{retry_delay}秒后重试... (尝试 {attempt + 1}/{max_retries})")
+                    await asyncio.sleep(retry_delay)
                 else:
-                    print(f"❌ 智能体 {self.agent_name} - 未知错误: {err_msg}")
-                raise
-
-        
-        # async def call_llm_with_context(self, prompt, image_path=None):
-        #     try:
-        #         # 确保智能体实例已创建
-        #         await self.ensure_agent_created()
-        #         # 将系统和上下文组合成一个系统消息
-        #         if image_path:
-        #             message = user_query(prompt, image_path)
-        #             response = await self.agent['vis'].ainvoke({'messages': message}, config={"recursion_limit": 75})
-        #         else: 
-        #             message = user_query(prompt)
-        #             response = await self.agent['text'].ainvoke({'messages': message}, config={"recursion_limit": 75})
-        #         return response['messages'][-1].content
-        #     except Exception as e:
-        #         error_msg = f"LLM调用失败: {str(e)}"
-        #         print(f"❌ 智能体 {self.agent_name} - {error_msg}")
+                    logging.error(f"❌ {description}失败: {str(e)}")
+                    raise

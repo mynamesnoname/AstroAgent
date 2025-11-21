@@ -29,6 +29,7 @@ class SpectroContext:
     spectrum: Dict[str, Union[List[float], float]] = field(default=None)
     peaks: List[dict[float]] = field(default=None)
     troughs: List[dict[float]] = field(default=None)
+    continuum: Optional[dict] = field(default=None)
 
     spectrum_fig: Figure = field(default=None)
     features_fig: Figure = field(default=None)
@@ -37,10 +38,14 @@ class SpectroContext:
     # SpectralRuleAnalyst
     visual_interpretation: Optional[str] = field(default=None)
     preliminary_classification: Optional[str] = field(default=None)
-    rule_analysis: Optional[List] = field(default=None)
+    possible_object: Optional[List] = field(default=None)
+    rule_analysis_QSO: Optional[List] = field(default=None)
+    rule_analysis_galaxy: Optional[List] = field(default=None)
     # other Analysts
-    auditing_history: Optional[List] = field(default=None)
-    refine_history: Optional[List] = field(default=None)
+    auditing_history_QSO: Optional[List] = field(default=None)
+    refine_history_QSO: Optional[List] = field(default=None)
+    auditing_history_galaxy: Optional[List] = field(default=None)
+    refine_history_galaxy: Optional[List] = field(default=None)
     # summary
     summary: Optional[str] = field(default=None)
 
@@ -118,7 +123,9 @@ class SpectroState(MessagesState):
     image_name: Optional[str] = None
     output_dir: Optional[str] = None
     crop_path: Optional[str] = None
+    spec_extract_path: Optional[str] = None
     sigma_list: List[Union[int, float]] = field(default_factory=list)
+    prompt: Optional[dict] = None
 
     # ===========================
     # 🔹 图像识别与像素映射信息
@@ -138,6 +145,10 @@ class SpectroState(MessagesState):
     spectrum: Optional[Dict[str, Union[List[float], float]]] = None
     peaks: Optional[List[Dict[str, float]]] = None
     troughs: Optional[List[Dict[str, float]]] = None
+    ROI_peaks: Optional[List[Dict[str, float]]] = None
+    ROI_troughs: Optional[List[Dict[str, float]]] = None
+    merged_peaks: Optional[List[Dict[str, float]]] = None
+    merged_troughs: Optional[List[Dict[str, float]]] = None
 
     # ===========================
     # 🔹 可视化对象
@@ -148,13 +159,21 @@ class SpectroState(MessagesState):
     # ===========================
     # 🔹 LLM 解释与分析历史
     # ===========================
-    visual_interpretation: Optional[str] = None
+    visual_interpretation: Optional[List] = field(default=None)
     preliminary_classification: Optional[str] = None
-    rule_analysis: Optional[List] = field(default_factory=list)
+    possible_object: Optional[List] = field(default=None)
+    rule_analysis_QSO: Optional[List] = field(default_factory=list)
+    rule_analysis_galaxy: Optional[List] = field(default_factory=list)
+    # other Analysts
+    auditing_history_QSO: Optional[List] = field(default_factory=list)
+    refine_history_QSO: Optional[List] = field(default_factory=list)
+    auditing_history_galaxy: Optional[List] = field(default_factory=list)
+    refine_history_galaxy: Optional[List] = field(default_factory=list)
+    # rule_analysis: Optional[List] = field(default_factory=list)
     debate_rounds: Optional[int] = None
     count: Optional[int] = None
-    auditing_history: Optional[List] = field(default_factory=list)
-    refine_history: Optional[List] = field(default_factory=list)
+    # auditing_history: Optional[List] = field(default_factory=list)
+    # refine_history: Optional[List] = field(default_factory=list)
     summary: Optional[str] = None
     in_brief: Optional[Dict[str, float]] = None
 
