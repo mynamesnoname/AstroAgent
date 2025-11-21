@@ -107,6 +107,8 @@ For an input image named `{your_image_name}.png`, the program generates the foll
 - `{your_image_name}_summary.md`  
   Final synthesized report including source type, redshift estimate, and confidence assessment.
 
+- 注：`{your_image_name}_ROI.png` 暂不对外展示。后续会取消该输出。
+
 ---
 
 ## Architecture Highlights
