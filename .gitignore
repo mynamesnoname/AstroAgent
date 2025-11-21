@@ -2,9 +2,9 @@
 
 .env
 
-./data/QSO/
-
-log/
+./data/LRG/*
+./data/QSO/*
+./data/ELG
 
 # Python
 **/__pycache__/

@@ -421,6 +421,7 @@ A previous assistant has already provided a preliminary description of this spec
             rule_json = json.dumps("\n".join(str(item) for item in state['rule_analysis']), ensure_ascii=False)
             header += f"\nThe previous assistant also performed an initial analysis under the assumption that Lyα lines are present:\n{rule_json}\n"
 
+        
         header += f"""
 Using the original spectrum and Gaussian-smoothed curves with sigma={state['sigma_list']}, peaks and troughs were identified with scipy functions.
 The discussion of peaks/troughs is based on the following data:
@@ -463,9 +464,8 @@ Analyze according to the following steps:
 **Step 1: Lyα Line Detection**
 Assuming the spectrum contains a Lyα emission line (λ_rest = 1216 Å):
 
-1. Identify the most probable observed emission line corresponding to Lyα (select from the provided peak list).
+1. Assuming the observed emission line with the highest flux as Lyα (select from the provided peak list).
 2. Output:
-
    - **λ_obs** (observed wavelength)
    - **Intensity** (relative strength or qualitative description)
    - **Line width** (FWHM or approximate pixel width)

@@ -84,7 +84,8 @@ async def main():
                         img_name,
                         safe_str(in_brief.get('type')),
                         safe_str(in_brief.get('redshift')),
-                        safe_str(in_brief.get('rms'))
+                        safe_str(in_brief.get('rms')),
+                        safe_str(in_brief.get('human'))
                     ]
                     collect.append(detail)
                 except Exception as e:

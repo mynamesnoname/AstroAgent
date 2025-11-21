@@ -1,5 +1,9 @@
 import json
 import os
+import numpy as np
+import matplotlib.pyplot as plt
+
+from scipy.ndimage import gaussian_filter1d
 
 from .context_manager import SpectroState
 from .base_agent import BaseAgent
@@ -10,7 +14,8 @@ from .utils import (
     _remap_to_cropped_canvas, _pixel_tickvalue_fitting,
     _process_and_extract_curve_points, _convert_to_spectrum,
     _find_features_multiscale, _plot_spectrum, _plot_features,
-    parse_list, getenv_float, getenv_int
+    parse_list, getenv_float, getenv_int, _load_feature_params, 
+    _ROI_features_finding, merge_features, plot_merged_features, safe_to_bool
 )
 
 # ---------------------------------------------------------
@@ -41,56 +46,23 @@ class SpectralVisualInterpreter(BaseAgent):
         class NotSpectralImageError(Exception): pass
 
         if not state['image_path'] or not os.path.exists(state['image_path']):
+            print(state['image_path'])
             raise NoImageError("❌ 未输入图像或图像路径不存在")
 
-        prompt = """
-你是一个专业的天文学光谱图分析助手，专门用于从**一维天文光谱图**中提取坐标轴信息。
-
-请严格按以下规则处理输入图像：
-
-1. **如果图像不是光谱图**（例如：照片、流程图、表格、多条曲线、无坐标轴等），请**仅输出**：
-
-“非光谱图”
-
-2. **如果是光谱图**，请提取 X 轴和 Y 轴的以下信息，并**严格按指定 JSON Schema 输出**，**不要包含任何额外文本、解释或 Markdown**：
-
-- `label_and_Unit`：坐标轴标签及单位（如 "Wavelength (Å)" 或 "Flux (arb. units)"），若无法识别则填空字符串 `""`；
-- `tick_range`：刻度值的最小值和最大值；
-- `ticks`：所有可识别的刻度数值列表（按数值升序排列）。
-
-✅ **输出格式要求**：
-- 必须是合法 JSON；
-- 数值必须为 `float` 类型（如 `1215.67`，不要用字符串 `"1215.67"`）；
-- 列表不得为空（若完全无法识别刻度，可设为 `[0.0]` 并将 `tick_range` 设为 `{"min": 0.0, "max": 0.0}`）；
-- **禁止输出除 JSON 或 “非光谱图” 之外的任何内容**。
-
-📌 **JSON Schema**：
-{
-  "x_axis": {
-    "label_and_Unit": "str",
-    "tick_range": {"min": float, "max": float},
-    "ticks": [float]
-  },
-  "y_axis": {
-    "label_and_Unit": "str",
-    "tick_range": {"min": float, "max": float},
-    "ticks": [float]
-  }
-}
-"""
+        system_prompt = state['prompt'][f'{self.agent_name}']['detect_axis_ticks']['system_prompt']
+        user_prompt = state['prompt'][f'{self.agent_name}']['detect_axis_ticks']['user_prompt']
 
         axis_info = await self.call_llm_with_context(
-            prompt,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
             image_path=state['image_path'],
             parse_json=True,
             description="坐标轴信息"
         )
-
         if axis_info == "非光谱图":
             raise NotSpectralImageError(f"❌ 图像不是光谱图，LLM 输出: {axis_info}")
-
+        # print(axis_info)
         state["axis_info"] = axis_info
-        return state
 
     # --------------------------
     # Step 1.2~1.3: 合并视觉+OCR刻度
@@ -100,61 +72,19 @@ class SpectralVisualInterpreter(BaseAgent):
         axis_info_json = json.dumps(state['axis_info'], ensure_ascii=False)
         ocr_json = json.dumps(state['OCR_detected_ticks'], ensure_ascii=False)
 
-        prompt_1 = f"""
-你是一个科学图表阅读助手。
-
-以下是对同一张光谱图，经由视觉大模型和 OCR 识别得到的两组刻度信息：
-1. 视觉模型：
-{axis_info_json}
-2. OCR/Opencv：
-{ocr_json}
-
-任务：
-- 综合两组结果，对输入的 OCR 刻度识别结果进行一致性修正与补全
-
-规则：
-1. **冲突修正**
-   * 若 OCR 结果与视觉模型结果存在冲突（例如位置或数值不符），以视觉模型结果为优先，修正 OCR 信息。
-2. **单调性约束**
-   * 对于 **x 轴刻度**：`position_x` 必须随刻度值增大而单调递增。
-   * 对于 **y 轴刻度**：`position_y` 必须随刻度值增大而单调递减。
-3. **缺失补全**
-   * 若存在刻度缺失，优先通过相邻刻度进行线性插值。
-   * 若无法插值（如边界缺失），填充为 `null`。
-   * 若 `bounding-box-scale_x` 或 `bounding-box-scale_y` 缺失，填充为 `null`。
-4. **派生参数计算**
-   * 计算 `sigma_pixel = bounding-box-scale / 2`，若对应 `scale` 缺失则填充为 `null`。
-5. **置信度分配**
-   * `conf_llm` 的取值规则：
-     * OCR 结果高可信度：**0.9**
-     * 插值或修正结果：**0.7**
-     * 缺失但视觉预测结果存在：**0.5**
-"""
-        prompt_2 = """
-输出：
-- 严格输出 JSON 数组，每个元素包含：
-{
-  "axis" ("x" or "y"): "str", 
-  "value": float, 
-  "position_x": int, 
-  "position_y": int,
-  "bounding-box-scale_x": int, 
-  "bounding-box-scale_y": int, 
-  "sigma_pixel": float, 
-  "conf_llm": float
-}  
-- 不要输出任何解释或文字
-"""
-        prompt = prompt_1 + prompt_2
+        system_prompt = state['prompt'][f'{self.agent_name}']['combine_axis_mapping']['system_prompt']
+        user_prompt = state['prompt'][f'{self.agent_name}']['combine_axis_mapping']['user_prompt'].format(
+            axis_info_json=axis_info_json,
+            ocr_json=ocr_json
+        )
         tick_pixel_raw = await self.call_llm_with_context(
-            prompt,
-            image_path=state['image_path'],
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            image_path=None,
             parse_json=True,
             description="刻度-像素映射"
         )
-
         state["tick_pixel_raw"] = tick_pixel_raw
-        return state
 
     # --------------------------
     # Step 1.4: 校验与修正
@@ -163,42 +93,20 @@ class SpectralVisualInterpreter(BaseAgent):
         """检查并修正刻度值与像素位置匹配关系"""
         axis_mapping_json = json.dumps(state['tick_pixel_raw'], ensure_ascii=False)
 
-        prompt = f"""
-你是科学图表阅读助手。
-检查以下刻度值与像素映射：
-{axis_mapping_json}
-
-规则：
-- y 轴: 刻度值从小到大时 position_y 应严格递减
-- x 轴: 刻度值从小到大时 position_x 应严格递增
-允许存在 null
-如果有问题，请修订并按照原格式输出 JSON 数组；否则直接返回原输入。
-不要输出任何解释或额外文字。
-"""
+        system_prompt = state['prompt'][f'{self.agent_name}']['revise_axis_mapping']['system_prompt']
+        user_prompt = state['prompt'][f'{self.agent_name}']['revise_axis_mapping']['user_prompt'].format(
+            axis_mapping_json=axis_mapping_json
+        )
 
         tick_pixel_revised = await self.call_llm_with_context(
-            prompt,
-            image_path=state['image_path'],
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            image_path=None,
             parse_json=True,
             description="修正后的刻度映射"
         )
-
         state["tick_pixel_raw"] = tick_pixel_revised
-
-    # --------------------------
-    # 读取环境变量
-    # --------------------------
-    def _load_feature_params(self):
-        """安全读取峰值/谷值检测参数"""
-        sigma_list = parse_list(os.getenv("SIGMA_LIST"), [2, 4, 16])
-        tol_pixels = getenv_int("TOL_PIXELS", 10)
-        prom_peaks = getenv_float("PROM_THRESHOLD_PEAKS", 0.01)
-        prom_troughs = getenv_float("PROM_THRESHOLD_TROUGHS", 0.05)
-        weight_original = getenv_float("WEIGHT_ORIGINAL", 1.0)
-        plot_peaks = getenv_int("PLOT_PEAKS_NUMBER", 10)
-        plot_troughs = getenv_int("PLOT_TROUGHS_NUMBER", 15)
-
-        return sigma_list, tol_pixels, prom_peaks, prom_troughs, weight_original, plot_peaks, plot_troughs
+        # print(tick_pixel_revised)
 
     # --------------------------
     # Step 1.1~1.11: 主流程
@@ -211,18 +119,18 @@ class SpectralVisualInterpreter(BaseAgent):
 
             # Step 1.2: OCR 提取刻度
             state["OCR_detected_ticks"] = _detect_axis_ticks(state['image_path'])
-            for i in state["OCR_detected_ticks"]:
-                print(i)
+            # for i in state["OCR_detected_ticks"]:
+            #     print(i)
 
             # Step 1.3: 合并
             await self.combine_axis_mapping(state)
-            for i in state["tick_pixel_raw"]:
-                print(i)
+            # for i in state["tick_pixel_raw"]:
+            #     print(i)
 
             # Step 1.4: 修正
             await self.revise_axis_mapping(state)
-            for i in state["tick_pixel_raw"]:
-                print(i)
+            # for i in state["tick_pixel_raw"]:
+            #     print(i)
 
             # Step 1.5: 边框检测与裁剪
             state["chart_border"] = _detect_chart_border(state['image_path'])
@@ -241,36 +149,40 @@ class SpectralVisualInterpreter(BaseAgent):
 
             # Step 1.9: 光谱还原
             state["spectrum"] = _convert_to_spectrum(state['curve_points'], state['curve_gray_values'], state['pixel_to_value'])
-
+            # print(state["spectrum"]['new_wavelength'])
+            # print(state["spectrum"]['weighted_flux'])
             # Step 1.10: 检测峰值/谷值
-            sigma_list, tol_pixels, prom_peaks, prom_troughs, weight_original, plot_peaks, plot_troughs = self._load_feature_params()
+            sigma_list, tol_pixels, prom_peaks, prom_troughs, weight_original, plot_peaks, plot_troughs = _load_feature_params()
             state['sigma_list'] = sigma_list
-            # state["peaks"] = _find_features_multiscale(state, "peak", sigma_list, prom_peaks, tol_pixels, weight_original)
-            # state["troughs"] = _find_features_multiscale(state, "trough", sigma_list, prom_troughs, tol_pixels, weight_original)
             try:
+                spec = state["spectrum"]
+                wavelengths = np.array(spec["new_wavelength"])
+                flux = np.array(spec["weighted_flux"])
                 state["peaks"] = _find_features_multiscale(
+                    wavelengths, flux,
                     state, feature="peak", sigma_list=sigma_list,
                     prom=prom_peaks, tol_pixels=tol_pixels, weight_original=weight_original,
                     use_continuum_for_trough=True
                 )
+                # print(f"peaks: \n {state['peaks']}")
+                # print(state["peaks"])
                 state["troughs"] = _find_features_multiscale(
+                    wavelengths, flux,
                     state, feature="trough", sigma_list=sigma_list,
                     prom=prom_troughs, tol_pixels=tol_pixels, weight_original=weight_original,
                     use_continuum_for_trough=True,
                     min_depth=0.08
                 )
+                # print(f"troughs: \n {state['troughs']}")
             except Exception as e:
                 print(f"❌ find features multiscale terminated with error: {e}")
                 raise
-            print(len(state["troughs"]))
-
-            # await self.features_cleaning_peaks(state)
 
             # Step 1.11: 可选绘图
             if plot:
                 try:
                     state["spectrum_fig"] = _plot_spectrum(state)
-                    state["features_fig"] = _plot_features(state, sigma_list, [plot_peaks, plot_troughs])
+                    # state["features_fig"] = _plot_features(state, sigma_list, [plot_peaks, plot_troughs])
                 except Exception as e:
                     print(f"❌ plot spectrum or features terminated with error: {e}")
                     raise
@@ -281,12 +193,14 @@ class SpectralVisualInterpreter(BaseAgent):
             print(f"❌ run pipeline terminated with error: {e}")
             raise
 
+
 # ---------------------------------------------------------
 # 2. Rule-based Analyst — 负责基于规则的物理分析
 # ---------------------------------------------------------
 class SpectralRuleAnalyst(BaseAgent):
-    
-    """规则驱动型分析师：基于给定的物理与谱线知识进行定性分析"""
+    """
+    规则驱动型分析师：基于给定的物理与谱线知识进行定性分析
+    """
 
     def __init__(self, mcp_manager: MCPManager):
         super().__init__(
@@ -295,232 +209,691 @@ class SpectralRuleAnalyst(BaseAgent):
         )
 
     async def describe_spectrum_picture(self, state: SpectroState):
-        prompt = f"""
-你是一位经验丰富的天文学光谱分析助手。
+        function_prompt = state['prompt'][f'{self.agent_name}']['describe_spectrum_picture']
+        async def _filter_noise(state):
+            BR = [5650, 5850]
+            RZ = [7500, 7700]
+            spec = state['spectrum']
+            wv = np.array(spec['new_wavelength'])
+            ceiling = np.array(spec['max_unresolved_flux'])
+            floor = np.array(spec['min_unresolved_flux'])
+            delta = ceiling - floor
+            mask_BR = (wv >= BR[0]) & (wv <= BR[1])
+            mask_RZ = (wv >= RZ[0]) & (wv <= RZ[1])
+            wv_BR, delta_BR = wv[mask_BR], delta[mask_BR]
+            wv_RZ, delta_RZ = wv[mask_RZ], delta[mask_RZ]
+            def truncate(arr, N=150):
+                return arr[:N] if len(arr) > N else arr
+            wv_BR_t = truncate(wv_BR)
+            wv_BR_t = wv_BR_t.tolist()
+            delta_BR_t = truncate(delta_BR)
+            delta_BR_t = delta_BR_t.tolist()
+            wv_RZ_t = truncate(wv_RZ)
+            wv_RZ_t = wv_RZ_t.tolist()
+            delta_RZ_t = truncate(delta_RZ)
+            delta_RZ_t = delta_RZ_t.tolist()
 
-你将看到一条天文光谱曲线（来自未知红移的天体）。
+            system_prompt = function_prompt['_filter_noise']['system_prompt']
+            user_prompt = function_prompt['_filter_noise']['user_prompt'].format(
+                BR_L=BR[0],
+                BR_R=BR[1],
+                RZ_L=RZ[0],
+                RZ_R=RZ[1],
+                wv_BR_t=wv_BR_t,
+                delta_BR_t=delta_BR_t,
+                wv_RZ_t=wv_RZ_t,
+                delta_RZ_t=delta_RZ_t
+            )
 
-请结合图像，**定性地描述光谱的整体形态**，包括但不限于以下几个方面：
+            response = await self.call_llm_with_context(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                image_path=None,
+                parse_json=True,
+                description="Filter噪声判断"
+            )
+            return(response)
 
----
+        async def _visual(state):
+            system_prompt = function_prompt['_visual']['system_prompt']
+            user_prompt_1 = function_prompt['_visual']['user_prompt_continuum']
+            response_1 = await self.call_llm_with_context(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt_1,
+                image_path=state['spec_extract_path'],
+                parse_json=True,
+                description="视觉光谱定性描述"
+            )
 
-### Step 1: 连续谱形态
-- 整体的通量分布趋势（例如蓝端增强 / 红端增强 / 大致平坦 / 呈拱形等）。
-- 是否可以看出幂律型连续谱、黑体型谱或平坦谱的特征。
-- 连续谱中是否存在明显的断裂或折点（例如巴尔末断裂、Lyα forest 区域等）。
+            user_prompt_2 = function_prompt['_visual']['user_prompt_lines']
+            response_2 = await self.call_llm_with_context(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt_2,
+                image_path=state['spec_extract_path'],
+                parse_json=True,
+                description="视觉光谱定性描述"
+            )
 
-### Step 2: 主要发射与吸收特征
-- 是否存在突出的发射峰或吸收谷。
-- 发射线（或吸收线）的大致数量与相对强弱。
-- 这些线是宽的还是窄的、对称的还是不对称的。
-- 请避免给出具体数值（如精确波长或通量），只需说明它们相对的位置与特征。
+            user_prompt_3 = function_prompt['_visual']['user_prompt_quality']
+            response_3 = await self.call_llm_with_context(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt_3,
+                image_path=state['spec_extract_path'],
+                parse_json=True,
+                description="视觉光谱定性描述"
+            )
+            return '\n'.join([response_1, response_2, response_3])
 
-### Step 3: 整体结构与噪声特征
-- 光谱信噪比的总体印象（高 / 中 / 低）。
-- 是否存在噪声波动、异常尖峰或数据缺口。
-- 光谱在长波端或短波端的质量变化情况。
+        async def _get_ROI(state):
+            _visual_json = json.dumps(state['visual_interpretation'][1], ensure_ascii=False)
+            system_prompt = function_prompt['_get_ROI']['system_prompt']
+            user_prompt = function_prompt['_get_ROI']['user_prompt'].format(_visual_json=_visual_json)
 
----
+            response_2 = await self.call_llm_with_context(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                parse_json=True,
+                description="视觉光谱定性描述"
+            )
+            return response_2
 
-⚠️ **注意：**
-- 不输出精确数值或表格
-- 不尝试计算红移
-- 重点在视觉与形态描述，像人类天文学家一样进行定性判断
-- 不要调用工具；
+        async def _integrate(state):
+            filter_noise_json = json.dumps(state['visual_interpretation'][0], ensure_ascii=False)
+            visual_json       = json.dumps(state['visual_interpretation'][1], ensure_ascii=False)
+            roi_json          = json.dumps(state['visual_interpretation'][2], ensure_ascii=False)
 
-最后，请以结构化的方式输出你的观察结果，例如使用分节标题：
--（连续谱）
--（发射与吸收）
--（噪声与数据质量）
-"""
-        
-        response = await self.call_llm_with_context(
-            prompt,
-            image_path=state['image_path'],
-            parse_json=False,
-            description="视觉光谱定性描述"
-        )
-        state['visual_interpretation'] = response
-        
+            system_prompt = function_prompt['_integrate']['system_prompt']
+            user_prompt_integrate = function_prompt['_integrate']['user_prompt'].format(
+                filter_noise_json=filter_noise_json,
+                visual_json=visual_json,
+                roi_json=roi_json
+            )
+            response = await self.call_llm_with_context(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt_integrate,
+                parse_json=True,
+                description="视觉光谱定性描述"
+            )
+            return response
+
+        result_filter_noise = await _filter_noise(state)
+        state['visual_interpretation'] = [result_filter_noise]
+        result_visual = await _visual(state)
+        state['visual_interpretation'].append(result_visual)
+        result_ROI = await _get_ROI(state)
+        state['visual_interpretation'].append(result_ROI)
+        result_integrate = await _integrate(state)
+        state['visual_interpretation'] = result_integrate
+
+        visual_interpretation_path = os.path.join(state['output_dir'], f'{state['image_name']}_visual_interpretation.txt')
+        with open(visual_interpretation_path, 'w', encoding='utf-8') as f:
+            json_str = json.dumps(state['visual_interpretation'], indent=2, ensure_ascii=False)
+            f.write(json_str)
     
     async def preliminary_classification(self, state: SpectroState) -> str:
         """初步分类：根据光谱形态初步判断天体类型"""
 
         visual_interpretation_json = json.dumps(state['visual_interpretation'], ensure_ascii=False)
-        prompt = f"""
+        sigma_list_json = json.dumps(state['sigma_list'], ensure_ascii=False)
+        peaks_info = [
+            {
+                "wavelength": pe.get('wavelength'),
+                "flux": pe.get('mean_flux'),
+                "width": pe.get('width_mean'),
+                "prominance": pe.get('max_prominence'),
+                # "seen_in_scales_of_sigma": pe.get('seen_in_scales_of_sigma'),
+            }
+            for pe in state.get('merged_peaks', [])[:10]
+        ]
+        peak_json = json.dumps(peaks_info, ensure_ascii=False)
+        trough_info = [
+            {
+                "wavelength": tr.get('wavelength'),
+                "flux": tr.get('mean_flux'),
+                "width": tr.get('width_mean'),
+                # "seen_in_scales_of_sigma": tr.get('seen_in_scales_of_sigma')
+            }
+            for tr in state.get('merged_troughs', [])[:15]
+        ]
+        trough_json = json.dumps(trough_info, ensure_ascii=False)
+#         prompt = f"""
+# 你是一位经验丰富的天文学光谱分析助手。
+
+# 你将看到一条天文光谱曲线（来自未知红移的天体），它可能属于以下三类之一：
+# 1. **Star**：
+#     - 连续谱较强，谱线通常是吸收线（如 Balmer 系列、金属线等），几乎没有明显红移。
+# 2. **Galaxy**：
+#     - 有一定红移，常有发射线或吸收线，谱线较窄。
+#     - 连续谱（与发射线及噪声相比）强度较弱。
+#     - 部分星系的连续谱呈现蓝端较低而红端显著升高的趋势。
+# 3. **QSO**：
+#     - 具有**强发射线**。谱线宽度明显。
+#     - 连续谱覆盖可见/紫外波段。
+#     - 通常有明显红移。
+
+# 前一位天文学助手已经定性地描述了光谱的整体形态：
+
+# {visual_interpretation_json}
+
+# 综合原曲线和 sigma={state['sigma_list']} 的高斯平滑曲线，使用 scipy 函数进行了峰/谷识别。
+# 关于峰/谷的讨论以以下数据为准：
+# - 代表性的前 10 条发射线：
+# {peak_json}
+# - 可能的吸收线：
+# {trough_json}
+
+# 请根据他的描述进行判断，猜测该光谱可能属于哪一类或几类，给出置信度。
+
+# 你的回答格式请严格遵循：
+
+# 猜测 1：
+# - **类别**: Star / Galaxy / QSO （三选一）
+# - **理由**: 用简洁的语言解释分类原因（如谱线宽度、红移特征、连续谱形态）
+# - **置信度**: 高 / 中 / 低
+# 猜测 2：
+# - **类别**: Star / Galaxy / QSO （三选一）
+# - **理由**: 用简洁的语言解释分类原因（如谱线宽度、红移特征、连续谱形态）
+# - **置信度**: 高 / 中 / 低
+# 等等。
+
+# ⚠️ **注意**：
+# - 只输出**中等置信度**以上的回答
+# - 不输出精确数值或表格
+# - 不尝试计算红移
+# - 重点在视觉与形态描述，像人类天文学家一样进行定性判断
+# - 不要调用工具；
+# """
+        system_prompt = """
 你是一位经验丰富的天文学光谱分析助手。
 
-你将看到一条天文光谱曲线（来自未知红移的天体），它可能属于以下三类之一：
-- **Star（恒星）**：连续谱较强，谱线通常是吸收线（如 Balmer 系列、金属线等），几乎没有明显红移。
-- **Galaxy（星系）**：有一定红移，常见发射线或吸收线（如 [O II], Hβ, [O III], Hα），谱线较窄，连续谱相对较弱。
-- **QSO（类星体/类星体候选）**：强烈的宽发射线覆盖可见/紫外波段，谱线宽度显著大于普通星系，通常有明显红移。
+你的任务是根据光谱的定性描述和特征数据，猜测天体可能属于的类别。
 
-前一位天文学助手已经定性地描述了光谱的整体形态：
+可选的类别：
+1. **Star**：
+    - 连续谱较强，谱线通常是吸收线（如 Balmer 系列、金属线等），几乎没有明显红移。
+2. **Galaxy**：
+    - 有一定红移，常有发射线或吸收线。
+    - 谱线通常较窄。
+    - 连续谱较不明显。
+    - 部分星系的连续谱呈现蓝端较低而红端显著升高的趋势。
+3. **QSO**：
+    - 具有**强发射线**。谱线宽度明显。
+    - 连续谱覆盖可见/紫外波段。
+    - 通常有明显红移。
 
-{visual_interpretation_json}
+输出要求：
+- 每个猜测包含：类别、理由、置信度
+- 不输出精确数值或表格
+- 不尝试计算红移
+- 重点在视觉与形态描述，像人类天文学家一样进行定性判断
+- 不要调用工具
 
-请根据他的描述进行判断，猜测该光谱可能属于哪一类或几类，给出置信度。
-
-你的回答格式请严格遵循：
-
+输出格式：
 猜测 1：
 - **类别**: Star / Galaxy / QSO （三选一）
 - **理由**: 用简洁的语言解释分类原因（如谱线宽度、红移特征、连续谱形态）
 - **置信度**: 高 / 中 / 低
 猜测 2：
-- **类别**: Star / Galaxy / QSO （三选一）
-- **理由**: 用简洁的语言解释分类原因（如谱线宽度、红移特征、连续谱形态）
-- **置信度**: 高 / 中 / 低
-等等。
-
-⚠️ **注意：**
-- 只输出中等置信度以上的回答
-- 不输出精确数值或表格
-- 不尝试计算红移
-- 重点在视觉与形态描述，像人类天文学家一样进行定性判断
-- 不要调用工具；
+...
 """
-        response = await self.call_llm_with_context(
-            prompt,
-            image_path=state['image_path'],
-            parse_json=False,
-            description="初步分类"
-        )
-        state['preliminary_classification'] = response
-        
-    def _common_prompt_header_QSO(self, state, include_rule_analysis=True):
-        """构造每个 step 公共的 prompt 前段"""
-        visual_json = json.dumps(state['visual_interpretation'], ensure_ascii=False)
-        peak_json = json.dumps(state['peaks'][:10], ensure_ascii=False)
-        trough_json = json.dumps(state['troughs'], ensure_ascii=False)
+        user_prompt = f"""
+请根据以下光谱数据进行分析：
 
-        header = f"""
-你是一位天文学光谱分析助手。
+前一位天文学助手已经定性地描述了光谱的整体形态：
+{visual_interpretation_json}
+其中 filter noise 是因为在不同 filter（如 B,R,Z）重叠处出现的非物理的噪声。
 
-以下信息可能来自于一个未知红移的 QSO 光谱。
+在全局上，综合原曲线和 sigma={sigma_list_json} 的高斯平滑曲线，使用 scipy 函数进行了峰/谷识别。
+在 ROI (region of interest) 上，综合局部的原曲线和 sigma={sigma_list_json} 的高斯平滑曲线，使用 scipy 函数进行了峰/谷识别。
 
-之前的助手已经对这个光谱进行了初步描述：
-{visual_json}
-"""
-
-        if include_rule_analysis and state['rule_analysis']:
-            rule_json = json.dumps("\n".join(str(item) for item in state['rule_analysis']), ensure_ascii=False)
-            header += f"\n之前的助手已经在假设光谱中存在 lyα 谱线的情况下进行了初步分析:\n{rule_json}\n"
-
-        header += f"""
-综合原曲线和 sigma={state['sigma_list']} 的高斯平滑曲线，使用 scipy 函数进行了峰/谷识别。
 关于峰/谷的讨论以以下数据为准：
 - 代表性的前 10 条发射线：
 {peak_json}
 - 可能的吸收线：
 {trough_json}
+
+请根据这些描述和数据，猜测该光谱可能属于哪一类或几类天体。
 """
-        return header
+        response = await self.call_llm_with_context(
+            system_prompt = system_prompt,
+            user_prompt = user_prompt,
+            image_path=state['image_path'],
+            parse_json=True,
+            description="初步分类"
+        )
+        state['preliminary_classification'] = response
 
-    def _common_prompt_tail(self, step_title, extra_notes=""):
-        """构造每个 step 公共尾部，保留 step 特有输出/分析指示"""
-        tail = f"""
----
+    async def preliminary_classification_monkey(self, state):
+        """ My dear monkey friend and its typewriter """
+        preliminary_classification_json = json.dumps(state['preliminary_classification'], ensure_ascii=False)
+        prompt = f"""
+你是一个天文学光谱分析助手。
+你接收到的是其他助手对一张光谱的光源类别的初步猜测：
+{preliminary_classification_json}
 
-输出格式为：
-{step_title}
-...
+请输出这份猜测里给出的光源类别。
 
----
+输出格式为数组 List[str]，数组的元素必须在 "Star", "Galaxy" 和 "QSO" 中选择。
 
-🧭 注意：
-- 计算得来的非原始数据，输出时保留 3 位小数。
-- 不需要进行重复总结。
-- 不需要逐行地重复输入数据；
-- 重点在物理推理与合理解释；
-- 请保证最终输出完整，不要中途截断。
+- 注意：即使只有一个满足条件的光源类别，也要以 List[str] 的格式输出。
 """
-        if extra_notes:
-            tail = extra_notes + "\n" + tail
-        return tail
+        response = await self.call_llm_with_context(
+            system_prompt = '',
+            user_prompt = prompt,
+            parse_json=True,
+            description="初步分类猴子"
+        )
+        return response
+    ###################################
+    # QSO part
+    ###################################
+    async def _QSO(self, state):
+        """QSO"""
+        def _common_prompt_header_QSO(state, include_rule_analysis=True, include_step_1_only=False):
+            """构造每个 step 公共的 prompt 前段"""
+            visual_json = json.dumps(state['visual_interpretation'], ensure_ascii=False)
+            # peak_json = json.dumps(state['peaks'][:10], ensure_ascii=False)
+            # trough_json = json.dumps(state['troughs'], ensure_ascii=False)
+            peaks_info = [
+                {
+                    "wavelength": pe.get('wavelength'),
+                    "flux": pe.get('mean_flux'),
+                    "width": pe.get('width_mean'),
+                    "prominance": pe.get('max_prominence'),
+                    "seen_in_scales_of_sigma": pe.get('seen_in_scales_of_sigma'),
+                }
+                for pe in state.get('merged_peaks', [])[:10]
+            ]
+            peak_json = json.dumps(peaks_info, ensure_ascii=False)
+            trough_info = [
+                {
+                    "wavelength": tr.get('wavelength'),
+                    "flux": tr.get('mean_flux'),
+                    "width": tr.get('width_mean'),
+                    "seen_in_scales_of_sigma": tr.get('seen_in_scales_of_sigma')
+                }
+                for tr in state.get('merged_troughs', [])[:15]
+            ]
+            trough_json = json.dumps(trough_info, ensure_ascii=False)
+
+            header = f"""
+    你是一位天文学光谱分析助手。
+
+    以下信息可能来自于一个未知红移的 QSO 光谱。
+
+    之前的助手已经对这个光谱进行了初步描述：
+    {visual_json}
+
+    该光谱的波长范围是{state['spectrum']['new_wavelength'][0]} Å 到 {state['spectrum']['new_wavelength'][-1]} Å。
+    """
+
+            if include_rule_analysis and state['rule_analysis_QSO']:
+                if include_step_1_only==True:
+                    rule_json = json.dumps(state['rule_analysis_QSO'][0], ensure_ascii=False)
+                else:
+                    rule_json = json.dumps("\n".join(str(item) for item in state['rule_analysis_QSO']), ensure_ascii=False)
+                header += f"\n之前的助手已经进行了一些分析:\n{rule_json}\n"
+
+            tol_pixels = getenv_int("TOL_PIXELS", 10)
+            a_x = state['pixel_to_value']['x']['a']
+            tol_wavelength = a_x * tol_pixels
+            header += f"""
+    综合原曲线和 sigma={state['sigma_list']} 的高斯平滑曲线，使用 scipy 函数进行了峰/谷识别。
+    关于峰/谷的讨论以以下数据为准：
+    - 代表性的前 10 条发射线：
+    {peak_json}
+    - 可能的吸收线：
+    {trough_json}
+    - 波长误差在 ~ ±{tol_wavelength/2} Å 的量级或更大
+    """
+            return header
+
+        def _common_prompt_tail(step_title, extra_notes=""):
+            """构造每个 step 公共尾部，保留 step 特有输出/分析指示"""
+            tail = f"""
+    ---
+
+    输出格式为：
+    {step_title}
+    ...
+
+    ---
+
+    🧭 注意：
+    - 计算得来的非原始数据，输出时保留 3 位小数。
+    - 不需要进行重复总结。
+    - 不需要逐行地重复输入数据；
+    - 重点在物理推理与合理解释；
+    - 请保证最终输出完整，不要中途截断。
+    """
+            if extra_notes:
+                tail = extra_notes + "\n" + tail
+            return tail
     
-    async def step_1(self, state):
-        header = self._common_prompt_header_QSO(state, include_rule_analysis=False)
-        tail = self._common_prompt_tail("Step 1: Lyα 分析")
+        async def step_1_QSO(state):
+            header = _common_prompt_header_QSO(state, include_rule_analysis=False)
+            tail = _common_prompt_tail("Step 1: Lyα 谱线检测")
 
-        prompt = header + """
+            prompt = header + """
 请按以下步骤分析:
 
 Step 1: Lyα 谱线检测
 假设该光谱中存在 Lyα 发射线（λ_rest = 1216 Å）：
-1. 找出最可能对应 Lyα 的观测发射线（从提供的峰列表中选择）。
+1. 在光谱蓝端，流量较大，且有一定宽度的峰中，推测哪条最可能为 Lyα 线（从提供的峰列表中选择）。
 2. 输出：
-   - λ_obs (观测波长)
-   - 光强（可取相对强度或定性描述）
-   - 线宽（FWHM 或像素宽度近似）
-3. 使用工具 calculate_redshift 计算基于该发射线的红移 z。
-4. 检查蓝端（短波长方向）是否存在 Lyα forest 特征：  
-   若吸收线相对更密集、较窄且分布在 Lyα 蓝端附近，请指出并给出简短说明。
+- 观测波长 λ_obs
+- 流量 Flux
+- 谱线宽度
+3. 使用工具 calculate_redshift 计算该峰为 Lyα 发射线时的红移 z。
+4. 检查蓝端（短波长方向）是否存在 Lyα forest 特征：吸收线相对更密集、较窄且分布在 Lyα 蓝端附近。请指出并进行简短说明。
 """ + tail
-        
-        response = await self.call_llm_with_context(prompt, parse_json=False, description="Step 1 Lyα 分析")
-        state['rule_analysis'].append(response)
+            
+            response = await self.call_llm_with_context(
+                system_prompt='', 
+                user_prompt=prompt, 
+                parse_json=True, 
+                description="Step 1 Lyα 分析"
+            )
+            state['rule_analysis_QSO'].append(response)
 
-    async def step_2(self, state):
-        header = self._common_prompt_header_QSO(state)
-        tail = self._common_prompt_tail("Step 2: 其他显著发射线分析")
+        async def step_2_QSO(state):
+            header = _common_prompt_header_QSO(state)
+            tail = _common_prompt_tail("Step 2: 其他显著发射线分析")
 
-        prompt = header + """
+            prompt = header + """
 请继续分析:
 
 Step 2: 其他显著发射线分析
-1. 以 Step 1 得到的红移为标准，使用工具 predict_obs_wavelength 检查光谱中是否可能存在其他显著发射线（如 C IV 1549, C III] 1909, Mg II 2799, Hβ, Hα 等）。不要自行计算。
-2. 还有什么需要注意的发射线？
+1. 在 Step 1 得到的红移下，使用工具 predict_obs_wavelength 计算以下三条主要发射线：C IV 1549, C III] 1909, Mg II 2799 在光谱中的理论位置。
+2. 光谱中是否有与三者相匹配的峰？
+3. 如果存在发射线与观测峰值的匹配，根据匹配结果，分别使用工具 calculate_redshift 计算红移。按“发射线名--静止系波长--观测波长--红移”的格式输出。
 """ + tail
 
-        response = await self.call_llm_with_context(prompt, parse_json=False, description="Step 2 发射线分析")
-        state['rule_analysis'].append(response)
+            response = await self.call_llm_with_context('', prompt, parse_json=False, description="Step 2 发射线分析")
+            state['rule_analysis_QSO'].append(response)
 
-    async def step_3(self, state):
-        header = self._common_prompt_header_QSO(state)
-        tail = self._common_prompt_tail("Step 3: 综合判断")
+        async def step_3_QSO(state):
+            header = _common_prompt_header_QSO(state)
+            tail = _common_prompt_tail("Step 3: 综合判断")
 
-        prompt = header + """
+            prompt = header + """
 请继续分析:
 
 Step 3: 综合判断
-- 在 Step 1 到 Step 2 中，如果 Lyα 的存在证据不足（例如对应波长没有明显峰值或红移与其他谱线不一致），请**优先假设 Lyα 不存在**，并结束分析。  
-- 仅在 Lyα 的存在有充分证据（显著峰值 + 红移与其他谱线一致）时，才将 Lyα 纳入综合红移计算。
-- 如果 Step 1 和 Step 2 的红移计算结果一致，请综合 Step 1 到 Step 2 的分析，使用 Step 1 和 Step 2 得到的谱线匹配，给出：
-    - 各个谱线的红移
-    - 由各谱线在共有的最小数值的 sigma 平滑下的强度 flux 作为权重，使用工具 weighted_average 进行加权平均，输出得到的加权红移值 z ± Δz
-    - 涉及计算红移的流程必须使用工具 calculate_redshift，不允许自行计算。
-- 给出该红移下，你能确定的各个发射线的波长和发射线名。
+1. 在 Step 1 到 Step 2 中，如果：
+    - C IV 和 C III] 两条主要谱线存在缺失或大幅偏移
+    - 使用 lyα 谱线计算的红移与其他谱线的计算结果不一致，
+此时请输出“应优先假设 Lyα 谱线未被找峰程序捕获”，并结束 Step 3 的分析。不要输出其他信息。
+2.仅在有显著的 Lyα 峰值，且红移计算结果与其他谱线基本一致时，进行以下操作：
+    - 因为天文学中存在外流等现象，请将当前所有匹配中**最低电离态谱线的红移**作为光谱的红移。输出红移结果。（因为存在不对称和展宽，Lyα的置信度是较低的）
 """ + tail
 
-        response = await self.call_llm_with_context(prompt, parse_json=False, description="Step 3 综合判断")
-        state['rule_analysis'].append(response)
+            response = await self.call_llm_with_context('', prompt, parse_json=False, description="Step 3 综合判断")
+            state['rule_analysis_QSO'].append(response)
+            
+        async def step_4_QSO(state):
+            header = _common_prompt_header_QSO(state, include_step_1_only=True)
+            tail = _common_prompt_tail("Step 4: 补充步骤（假设 Step 1 所选择的谱线并非 Lyα）")
 
-    async def step_4(self, state):
-        header = self._common_prompt_header_QSO(state)
-        tail = self._common_prompt_tail("Step 4: 补充步骤（假设最高发射线不是 lyα 时的主要谱线推测）")
-
-        prompt = header + """
+            prompt = header + """
 请继续分析:
 
-Step 4: 补充步骤（假设最高发射线不是 lyα 时的主要谱线推测）
-- 根据 QSO 的典型谱线特征，找出光谱中**强度最高的峰值**。
-- 猜测该峰值可能对应的谱线（例如 C IV, C III], Mg II, Hβ, Hα 等）。
-- 仿照 Step1-3 的逻辑进行判断。涉及红移计算的请使用工具 calculate_redshift；涉及观测线波长计算的请使用工具 predict_obs_wavelength。不允许自行计算。
-    - 输出该峰对应谱线的信息：
-        - 谱线名
-        - λ_obs
-        - 光强
-        - 谱线宽度
-        - 根据 λ_rest 初步计算红移 z。不允许自行计算。
-    - 如果可能，推测其他可见发射线，并计算红移
-    - 综合所有谱线，给出最可能的红移和红移范围
-- 以上判断是否支持最高发射线不是 lyα 的假设？
+Step 4: 补充步骤（假设 Step 1 所选择的谱线并非 Lyα）
+- 请抛开前述步骤的分析内容。考虑 Step 1 所选择的谱线实际上是除 Lyα 外的其他主要发射线。
+    - 假设该峰值可能对应的谱线为 C IV：
+        - 输出该峰对应谱线的信息：
+            - 观测波长 λ_obs
+            - 流量 Flux
+            - 谱线宽度
+            - 根据 λ_rest，使用工具 calculate_redshift 初步计算红移 z
+        - 使用工具 predict_obs_wavelength 计算在此红移下的其他主要发射线（如 C III] 和 Mg II）的理论位置。光谱中是否有与它们匹配的发射线？
+        - 如果存在可能的发射线-观测波长匹配结果，使用工具 calculate_redshift 计算它们的红移。按照“发射线名--静止系波长--观测波长--红移”的格式进行输出
+    
+    - 若以上假设不合理，则假设该峰值可能对应 C III] 等其他主要谱线，重复推断。
+
+    - 综合 Step 4 的所有分析，给出：
+        - **最低电离态谱线的红移** 作为光谱红移
+        - 输出 “发射线名--静止系波长--观测波长--红移” 匹配
+
+- 注意：允许在由于光谱边缘的信号残缺或信噪比不佳导致部分发射线不可见。   
+- 抛开其他步骤的分析内容，本节的判断是否支持 Lyα 谱线未被找峰程序捕获的假设？
 """ + tail
 
-        response = await self.call_llm_with_context(prompt, parse_json=False, description="Step 4 补充分析")
-        state['rule_analysis'].append(response)
+            response = await self.call_llm_with_context('', prompt, parse_json=False, description="Step 4 补充分析")
+            state['rule_analysis_QSO'].append(response)
+        
+        await step_1_QSO(state)
+        await step_2_QSO(state)
+        await step_3_QSO(state)
+        await step_4_QSO(state)
 
+#     ###################################
+#     # Galaxy part
+#     ###################################
+#     # async def further_discription_galaxy(self, state):
+
+#     def _common_prompt_header_galaxy(self, state, include_rule_analysis=True, include_step_1_only=False):
+#         """构造每个 step 公共的 prompt 前段"""
+#         visual_json = json.dumps(state['visual_interpretation'], ensure_ascii=False)
+#         peaks_info = [
+#             {
+#                 "wavelength": pe.get('wavelength'),
+#                 "flux": pe.get('mean_flux'),
+#                 "width": pe.get('width_mean'),
+#                 "prominance": pe.get('max_prominence'),
+#                 "seen_in_scales_of_sigma": pe.get('seen_in_scales_of_sigma'),
+#             }
+#             for pe in state.get('peaks', [])[:10]
+#         ]
+#         peak_json = json.dumps(peaks_info, ensure_ascii=False)
+#         trough_info = [
+#             {
+#                 "wavelength": tr.get('wavelength'),
+#                 "flux": tr.get('mean_flux'),
+#                 "width": tr.get('width_mean'),
+#                 "seen_in_scales_of_sigma": tr.get('seen_in_scales_of_sigma'),
+#                 "prominance": tr.get('max_prominence'),
+#             }
+#             for tr in state.get('troughs', [])[:15]
+#         ]
+#         trough_json = json.dumps(trough_info, ensure_ascii=False)
+
+#         header = f"""
+# 你是一位天文学光谱分析助手。
+
+# 以下信息可能来自于一个未知红移的 Galaxy 光谱。
+
+# 之前的助手已经对这个光谱进行了初步描述：
+# {visual_json}
+
+# 该光谱的波长范围是{state['spectrum']['new_wavelength'][0]} Å 到 {state['spectrum']['new_wavelength'][-1]} Å。
+# """
+
+#         if include_rule_analysis and state['rule_analysis_galaxy']:
+#             if include_step_1_only==True:
+#                 rule_json = json.dumps(state['rule_analysis_galaxy'][0], ensure_ascii=False)
+#             else:
+#                 rule_json = json.dumps("\n".join(str(item) for item in state['rule_analysis_galaxy']), ensure_ascii=False)
+#             header += f"\n之前的助手已经进行了一些分析:\n{rule_json}\n"
+
+#         tol_pixels = getenv_int("TOL_PIXELS", 10)
+#         a_x = state['pixel_to_value']['x']['a']
+#         tol_wavelength = a_x * tol_pixels
+#         header += f"""
+# 综合原曲线和 sigma={state['sigma_list']} 的高斯平滑曲线，使用 scipy 函数进行了峰/谷识别。
+# 关于峰/谷的讨论以以下数据为准：
+# - 代表性的前 10 条发射线：
+# {peak_json}
+# - 可能的吸收线：
+# {trough_json}
+# - 波长误差在 ~ ±{tol_wavelength/2} Å 的量级或更大
+# """
+#         return header
+    
+#     async def step_1_galaxy(self, state):
+#         try:
+#             # 确保 state['rule_analysis_galaxy'] 已初始化为列表
+#             if 'rule_analysis_galaxy' not in state:
+#                 state['rule_analysis_galaxy'] = []
+
+#             header = self._common_prompt_header_galaxy(state, include_rule_analysis=False)
+#             tail = self._common_prompt_tail("Step 1: O [III] 谱线检测")
+
+#             prompt = header + """
+# 请按以下步骤分析:
+
+# Step 1: O [III] 谱线检测
+# 假设该光谱中存在 O [III] 发射线（因峰值识别的分辨率有限，只考虑双线中最强的 λ_rest = 5008.2 Å 这一条）：
+# 1. 在光谱中流量较大的窄峰中，推测哪条最可能为 O [III] 线（从提供的峰列表中选择）。
+# 2. 输出：
+# - 观测波长 λ_obs
+# - 流量 Flux
+# - 谱线宽度
+# 3. 使用工具 calculate_redshift 计算该峰为 O [III] 发射线时的红移 z。
+# """ + tail
+
+#             response = await self.call_llm_with_context(
+#                 prompt,
+#                 parse_json=False,
+#                 description="Step 1 O [III] 谱线检测"
+#             )
+
+#             # 添加到 rule_analysis_galaxy
+#             state['rule_analysis_galaxy'].append(response)
+
+#         except Exception as e:
+#             print("❌ Step 1 Galaxy 分析出错：", e)
+#             # 可以选择继续抛出异常或者记录错误
+#             raise
+
+#     async def step_2_galaxy(self, state):
+#         header = self._common_prompt_header_galaxy(state)
+#         tail = self._common_prompt_tail("Step 2: 其他主要发射线分析")
+
+#         prompt = header + """
+# 请继续分析:
+
+# Step 2: 其他主要发射线分析
+# 1. 在 Step 1 得到的红移下，使用工具 predict_obs_wavelength 计算以下主要谱线在观测光谱上的理论位置：
+#     - 发射线
+#         - O [II] = 3727.1 Å / 3729.9 Å 双线
+#         - N [II] = 6549.8 Å / 6585.3 Å 双线
+#         - S [II] = 6718.3 Å / 6732.7 Å 双线
+#     - 吸收线
+#         - Ca (K) = 3934.8 Å
+#         - Ca (H) = 3969.6 Å
+#         - G-band = 4305.6 Å
+#         - Mg = 5176.7 Å
+#         - Na = 5895.6 Å
+#         - CaT = 8498, 8542, 8662 Å 三线
+#     - 发射线或吸收线：Balmer 线系
+#         - Hδ = 4102.9 A
+#         - Hγ = 4341.7 A
+#         - Hβ = 4862.7 A
+#         - Hα = 6564.6 A
+# 2. 光谱中是否有与这些谱线相匹配的峰或谷？
+# 3. 如果存在发射线与观测峰/谷的匹配，根据匹配结果，分别使用工具 calculate_redshift 计算红移。按“谱线性质（发射线/吸收线）--谱线名--静止系波长--观测波长--红移”的格式输出。
+
+# """ + tail
+
+#         response = await self.call_llm_with_context(prompt, parse_json=False, description="Step 2 其他主要发射线分析")
+#         state['rule_analysis_galaxy'].append(response)
+
+#     async def step_3_galaxy(self, state):
+#         header = self._common_prompt_header_galaxy(state)
+#         tail = self._common_prompt_tail("Step 3: 综合判断")
+#         a = state["pixel_to_value"]["x"]["a"]
+#         rms = state["pixel_to_value"]["x"]["rms"]
+#         tolerence = getenv_int("TOL_PIXELS", 10)
+
+#         prompt = header + f"""
+# 请继续分析:
+
+# Step 3: 综合判断
+# 1. 在 Step 1 到 Step 2 中，如果：
+#     - 缺失 O [II] 的可能匹配
+#     - 使用 O [III] 谱线计算的红移与其他谱线的计算结果不一致，
+# 此时请输出“应优先假设 O [III] 谱线未被找峰程序捕获”，并结束 Step 3 的分析。不要输出其他信息。
+# 2.仅在有显著的 O [III] 峰值，且红移计算结果与其他谱线基本一致时，进行以下操作：
+#     - 使用工具 galaxy_weighted_average，以 flux 为权重计算光谱的红移。
+#         - 工具输入为
+#             wavelength_obs: List[float],
+#             wavelength_rest: List[float],
+#             flux: List[float],
+#             a: float = {a}, 
+#             tolerance: int = {tolerence}, 
+#             rms_lambda: float = {rms} 
+#     输出红移结果和误差 z ± Δz。
+# """ + tail
+
+#         response = await self.call_llm_with_context(prompt, parse_json=False, description="Step 3 综合判断")
+#         state['rule_analysis_galaxy'].append(response)
+        
+#     async def step_4_galaxy(self, state):
+#         header = self._common_prompt_header_galaxy(state, include_step_1_only=True)
+#         tail = self._common_prompt_tail("Step 4: 补充步骤（假设 Lyα 谱线未被找峰过程捕获）")
+        
+#         prompt = header + f"""
+# 请继续分析:
+
+# Step 4: 补充步骤（假设 O [III] 谱线未被找峰程序捕获）
+# - 请抛开前述步骤的分析内容。考虑 Step 1 所选择的峰值谱线实际上可能是 Balmer 线系的 Hα 谱线。
+#         - 输出该峰对应谱线的信息：
+#             - 观测波长 λ_obs
+#             - 流量 Flux
+#             - 谱线宽度
+#             - 根据 λ_rest，使用工具 calculate_redshift 初步计算红移 z
+#         - 使用工具 predict_obs_wavelength 计算在此红移下的其他 Balmer 线
+#             - Hδ = 4102.9 A
+#             - Hγ = 4341.7 A
+#             - Hβ = 4862.7 A
+#             - Hα = 6564.6 A
+#         的理论位置。光谱中是否有与它们匹配的发射线？其他发射线如
+#             - 发射线
+#                 - O [II] = 3727.1 Å / 3729.9 Å 双线
+#                 - N [II] = 6549.8 Å / 6585.3 Å 双线
+#                 - S [II] = 6718.3 Å / 6732.7 Å 双线
+#         是否存在？
+#         - 如果存在可能的发射线-观测波长匹配结果:
+#             - 使用工具 calculate_redshift 分别计算它们的红移。按照“发射线名--静止系波长--观测波长--红移”的格式进行输出。
+    
+#     - 若以上假设不合理，则假设最强的谷值可能对应 Hα 谱线，重复推断。
+
+# - 抛开其他步骤的分析内容，本节的判断是否支持 O [III] 谱线未被找峰程序捕获的假设？
+# """ + tail
+
+#         response = await self.call_llm_with_context(prompt, parse_json=False, description="Step 4 补充步骤")
+#         state['rule_analysis_galaxy'].append(response)
+
+#     async def step_5_galaxy(self, state):
+#         header = self._common_prompt_header_galaxy(state, include_step_1_only=True)
+#         tail = self._common_prompt_tail("Step 5: 补充步骤（Ca 的 K&H 吸收线检测）")
+
+#         prompt = header + """
+# 请继续分析:
+
+# Step 5: 补充步骤（Ca 的 K&H 吸收线检测）
+# - 请抛开前述步骤的分析内容。假设光谱中prominance的谷值为 Ca 的 K 吸收线。
+#         - 输出该峰对应谱线的信息：
+#             - 观测波长 λ_obs
+#             - 流量 Flux
+#             - 谱线宽度
+#             - 根据 λ_rest，使用工具 calculate_redshift 初步计算红移 z
+#         - 使用工具 predict_obs_wavelength 计算在此红移下的其他主要吸收线
+#             - Ca (H) = 3969.6 Å
+#             - G-band = 4305.6 Å
+#             - Mg = 5176.7 Å
+#             - Na = 5895.6 Å
+#             - CaT = 8498, 8542, 8662 Å 三线
+#         的理论位置。光谱中是否有与它们匹配的谷值？特别注意 Ca 的 H 吸收线。如果该线丢失，则节本判断的可信度低。
+#         - 如果存在可能的吸收线线-观测波长匹配结果：
+#             - 使用工具 calculate_redshift 分别计算它们的红移。按照“吸收线名--静止系波长--观测波长--红移”的格式进行输出。
+
+# - 抛开其他步骤的分析内容，本节的判断是否支持最明显的谷值为 Ca 的 K 吸收线的假设？
+# """ + tail
+
+#         response = await self.call_llm_with_context(prompt, parse_json=False, description="Step 5 补充步骤")
+#         state['rule_analysis_galaxy'].append(response)
 #     # --------------------------
 #     # Run 全流程
 #     # --------------------------
@@ -528,11 +901,38 @@ Step 4: 补充步骤（假设最高发射线不是 lyα 时的主要谱线推测
         """执行规则分析完整流程"""
         try:
             await self.describe_spectrum_picture(state)
+            ROI_peaks, ROI_troughs = _ROI_features_finding(state)
+            # print(f"ROI_peaks:\n{ROI_peaks}")
+            # print(f"ROI_troughs:\n{ROI_troughs}")
+            state['merged_peaks'], state['merged_troughs'] = merge_features(
+                global_peaks=state['peaks'],
+                global_troughs=state['troughs'],
+                ROI_peaks=ROI_peaks,
+                ROI_troughs=ROI_troughs, 
+                tol_pixels=10,
+            )
+            
+            plot_merged_features(state)
+            
             await self.preliminary_classification(state)
-            await self.step_1(state)
-            await self.step_2(state)
-            await self.step_3(state)
-            await self.step_4(state)
+            # print(state['preliminary_classification'])
+
+            _shakespear = await self.preliminary_classification_monkey(state)
+            state['possible_object'] = _shakespear
+            # print(f"Monkeys types: {_shakespear}")
+
+            if "QSO" in _shakespear:
+                await self._QSO(state)
+                # await self.step_1_QSO(state)
+                # await self.step_2_QSO(state)
+                # await self.step_3_QSO(state)
+                # await self.step_4_QSO(state)
+            # if "Galaxy" in _shakespear:
+            #     await self.step_1_galaxy(state)
+            #     await self.step_2_galaxy(state)
+            #     await self.step_3_galaxy(state)
+            #     await self.step_4_galaxy(state)
+            #     await self.step_5_galaxy(state)
             return state
         except Exception as e:
             import traceback
@@ -544,7 +944,6 @@ Step 4: 补充步骤（假设最高发射线不是 lyα 时的主要谱线推测
             # 可选：返回当前状态或抛出异常
             raise  # 如果你希望调用者也能捕获该异常
         
-
 
 
 # # ---------------------------------------------------------
@@ -559,11 +958,14 @@ class SpectralAnalysisAuditor(BaseAgent):
             mcp_manager=mcp_manager
         )
 
-    def _common_prompt_header_QSO(self, state: SpectroState) -> str:
+    def _common_prompt_header(self, state: SpectroState, obj) -> str:
         peak_json = json.dumps(state['peaks'][:10], ensure_ascii=False)
         trough_json = json.dumps(state['troughs'], ensure_ascii=False)
-        rule_analysis = "\n\n".join(str(item) for item in state['rule_analysis'])
-        return f"""
+        a = state["pixel_to_value"]["x"]["a"]
+        rms = state["pixel_to_value"]["x"]["rms"]
+        tolerence = getenv_int("TOL_PIXELS", 10)
+        rule_analysis = "\n\n".join(str(item) for item in state['rule_analysis_QSO'])
+        prompt_1 = f"""
 你是一位严谨的【天文学光谱报告审查分析师】。
 
 任务目标：
@@ -595,19 +997,40 @@ class SpectralAnalysisAuditor(BaseAgent):
 {rule_analysis}
 
 该报告在红移计算时保留了 3 位小数。
-"""
 
-    async def auditing(self, state: SpectroState):
-        header = self._common_prompt_header_QSO(state)
+该光谱的波长范围是{state['spectrum']['new_wavelength'][0]} Å 到 {state['spectrum']['new_wavelength'][-1]} Å。
+"""
+        prompt_2 = f"""
+
+我希望光谱分析报告能够尽可能好地匹配 Lyα、C IV、C III]、Mg II 等典型发射线，但也允许在由于光谱边缘的信号残缺或信噪比不佳导致部分发射线不可见。
+
+同时，在信噪比不佳时，寻找谱线的算法也会受到影响，因此也允许线宽与期望存在一定的的差异。
+
+由于天文学上外流效应的影响，应使用最低电离态的发射线的红移作为光谱红移的最佳结果。
+
+使用工具 QSO_rms 计算红移误差 ± Δz
+    - 工具的输入为
+        wavelength_rest: List[float], #最低电离态的发射线的静止系波长
+        a: float = {a},           
+        tolerance: int = {tolerence},     
+        rms_lambda = {rms}: float    
+
+如果分析中不支持2条及以上主要谱线（指 Lyα, C IV, C III, Mg II）出现的证据，则首先转向考虑是Galaxy的可能性。
+对 Galaxy 的认证无需考虑谱线和红移，仅需从形态上进行分析
+"""
+        return prompt_1 + prompt_2
+
+    async def auditing(self, state: SpectroState, obj):
+        header = self._common_prompt_header(state, obj)
 
         if state['count'] == 0:
             body = f"""
 请对这份分析报告进行检查。
 """
-        elif state['count']:     
-            auditing_history = state['auditing_history'][-1]
+        elif state['count']: 
+            auditing_history = state['auditing_history_QSO'][-1] if obj == 'QSO' else state['auditing_history_galaxy'][-1] 
             auditing_history_json = json.dumps(auditing_history, ensure_ascii=False)
-            response_history = state['refine_history'][-1]
+            response_history = state['refine_history_QSO'][-1] if obj == 'QSO' else state['refine_history_galaxy'][-1] 
             response_history_json = json.dumps(response_history, ensure_ascii=False)
 
             body = f"""
@@ -620,11 +1043,14 @@ class SpectralAnalysisAuditor(BaseAgent):
 请回应其他分析师的回答，并继续进行审查。
 """
         prompt = header + body
-        response = await self.call_llm_with_context(prompt, parse_json=False, description="报告审查")
-        state['auditing_history'].append(response)
+        response = await self.call_llm_with_context('', prompt, parse_json=False, description="报告审查")
+        state['auditing_history_QSO'].append(response) if obj == 'QSO' else state['auditing_history_galaxy'].append(response)
 
     async def run(self, state: SpectroState) -> SpectroState:
-        await self.auditing(state)
+        if 'QSO' in state['possible_object']:
+            await self.auditing(state, obj='QSO')
+        # if 'Galaxy' in state['possible_object']:
+        #     await self.auditing(state, obj='Galaxy')
         return state
 
 
@@ -641,11 +1067,14 @@ class SpectralRefinementAssistant(BaseAgent):
             mcp_manager=mcp_manager
         )
 
-    def _common_prompt_header_QSO(self, state) -> str:
+    def _common_prompt_header(self, state, obj) -> str:
         peak_json = json.dumps(state['peaks'][:10], ensure_ascii=False)
         trough_json = json.dumps(state['troughs'], ensure_ascii=False)
-        rule_analysis = "\n\n".join(str(item) for item in state['rule_analysis'])
-        return f"""
+        rule_analysis = "\n\n".join(str(item) for item in state['rule_analysis_QSO'])
+        a = state["pixel_to_value"]["x"]["a"]
+        rms = state["pixel_to_value"]["x"]["rms"]
+        tolerence = getenv_int("TOL_PIXELS", 10)
+        prompt_1 = f"""
 你是一位具备反思能力的【天文学光谱分析师】。
 
 任务目标：
@@ -672,29 +1101,56 @@ class SpectralRefinementAssistant(BaseAgent):
 {peak_json}
 - 可能的吸收线：
 {trough_json}
+
 其他分析师给出的光谱分析报告为：
+
 {rule_analysis}
 
-这份报告在红移计算时保留了 3 位小数。
+该报告在红移计算时保留了 3 位小数。
+
+该光谱的波长范围是{state['spectrum']['new_wavelength'][0]} Å 到 {state['spectrum']['new_wavelength'][-1]} Å。
 """
 
-    async def refine(self, state: SpectroState):
-        header = self._common_prompt_header_QSO(state)
-        auditing = state['auditing_history'][-1]
-        auditing_json = json.dumps(auditing, ensure_ascii=False)
+        prompt_2 = f"""
+
+我希望光谱分析报告能够尽可能好地匹配 Lyα、C IV、C III]、Mg II 等典型发射线，但也允许在由于光谱边缘的信号残缺或信噪比不佳导致部分发射线不可见。
+
+同时，在信噪比不佳时，寻找谱线的算法也会受到影响，因此也允许线宽与期望存在一定的的差异。
+
+由于天文学上外流效应的影响，应使用最低电离态的发射线的红移作为光谱红移的最佳结果。
+
+使用工具 QSO_rms 计算红移误差 ± Δz
+    - 工具的输入为
+        wavelength_rest: List[float], # 最低电离态的发射线的静止系波长
+        a: float = {a},           
+        tolerance: int = {tolerence},     
+        rms_lambda = {rms}: float 
+
+如果分析中不支持2条及以上主要谱线（指 Lyα, C IV, C III, Mg II）出现的证据，则首先转向考虑是Galaxy的可能性。
+对 Galaxy 的认证无需考虑谱线和红移，仅需从形态上进行分析
+"""
+        return prompt_1 + prompt_2
+
+    async def refine(self, state: SpectroState, obj):
+        header = self._common_prompt_header(state, obj)
+        auditing_history = state['auditing_history_QSO'][-1] if obj == 'QSO' else state['auditing_history_galaxy'][-1]
+        auditing_history_json = json.dumps(auditing_history, ensure_ascii=False)
         body = f"""
 负责核验报告的审查分析师给出的最新建议为
-{auditing_json}
+{auditing_history_json}
 
 请对建议进行回应。
 """
         prompt = header + body
-        response = await self.call_llm_with_context(prompt, parse_json=False, description="回应审查")
-        state['refine_history'].append(response)
+        response = await self.call_llm_with_context('', prompt, parse_json=False, description="回应审查")
+        state['refine_history_QSO'].append(response) if obj == 'QSO' else state['refine_history_galaxy'].append(response)
 
     async def run(self, state: SpectroState) -> SpectroState:
         try:
-            await self.refine(state)
+            if 'QSO' in state['possible_object']:
+                await self.refine(state, obj='QSO')
+            # if 'Galaxy' in state['possible_object']:
+            #     await self.refine(state, obj='Galaxy')
             return state
         except Exception as e:
             import traceback
@@ -748,12 +1204,6 @@ class SpectralSynthesisHost(BaseAgent):
         try:
             preliminary_classification_json = json.dumps(state['preliminary_classification'], ensure_ascii=False)
             visual_interpretation_json = json.dumps(state['visual_interpretation'], ensure_ascii=False)
-            rule_analysis = "\n\n".join(str(item) for item in state['rule_analysis'])
-            rule_analysis_json = json.dumps(rule_analysis, ensure_ascii=False)
-            auditing = "\n\n".join(str(item) for item in state['auditing_history'])
-            auditing_json = json.dumps(auditing, ensure_ascii=False)
-            refine = "\n\n".join(str(item) for item in state['refine_history'])
-            refine_json = json.dumps(refine, ensure_ascii=False)
         except Exception as e:
             print("❌ An error occurred during spectral analysis:")
             print(f"Error type: {type(e).__name__}")
@@ -762,22 +1212,33 @@ class SpectralSynthesisHost(BaseAgent):
 
         header = self.get_system_prompt()
 
-        prompt = f"""
+        prompt_1 = f"""
 
 对光谱的视觉描述
 {visual_interpretation_json}
 
 光谱的初步分类
 {preliminary_classification_json}
+"""
+        if "QSO" in state['preliminary_classification']:
+            rule_analysis_QSO = "\n\n".join(str(item) for item in state['rule_analysis_QSO'])
+            rule_analysis_QSO_json = json.dumps(rule_analysis_QSO, ensure_ascii=False)
+            auditing_QSO = "\n\n".join(str(item) for item in state['auditing_history_QSO'])
+            auditing_QSO_json = json.dumps(auditing_QSO, ensure_ascii=False)
+            refine_QSO = "\n\n".join(str(item) for item in state['refine_history_QSO'])
+            refine_QSO_json = json.dumps(refine_QSO, ensure_ascii=False)
+            prompt_2 = f"""
 
 规则分析师的观点：
-{rule_analysis_json}
+{rule_analysis_QSO_json}
 
 审查分析师的观点：
-{auditing_json}
+{auditing_QSO_json}
 
 完善分析师的观点：
-{refine_json}
+{refine_QSO_json}
+"""
+        prompt_3 = f"""
 
 输出格式如下：
 
@@ -788,16 +1249,23 @@ class SpectralSynthesisHost(BaseAgent):
     - Step 3
     - Step 4
 - 结论
-    - 该天体的天体类型和红移 z ± Δz
-    - 认证出的谱线（输出 谱线名-λ_rest-λ_obs）
+    - 该天体最有可能的的天体类型（Star，Galaxy 还是 QSO），如果分析中不支持2条及以上主要谱线（指 Lyα, C IV, C III, Mg II）出现的证据，则转向考虑是Galaxy的可能性
+    - 如果天体是QSO，输出红移 z ± Δz
+    - 认证出的谱线（输出 谱线名 - λ_rest - λ_obs - 红移）
     - 光谱的信噪比如何
-    - 分析报告的可信度评分（如果能认证出2条以上的谱线，则可信度为“高”；能认证出1条谱线，可信度为“中”；其他情况为“低”）
-    - 是否需要人工介入判断
+    - 分析报告的可信度评分（0-4）
+        - 对于QSO：
+            如果能认证出 2 条以上的主要谱线（指 Lyα, C IV, C III, Mg II），则可信度为 3；
+            能认证出 1 条主要谱线，且有其他较弱的特征，则可信度为 2；
+            能认证出 1 条主要谱线，但没有其他特征辅助判断，则可信度为 1；
+            光谱信噪比极低，含义进行推断，则可信度为 0.
+        - 对于 Galaxy
+            如果基本满足
+    - 是否需要人工介入判断（可信度为 0-2 时必须引入人工判断。其余情况自行决策。）
 """
-        prompt = header + prompt
-        response = await self.call_llm_with_context(prompt, parse_json=False, description="总结")
+        prompt = header + prompt_1 + prompt_2 + prompt_3
+        response = await self.call_llm_with_context('', prompt, parse_json=False, description="总结")
         state['summary'] = response
-
     async def in_brief(self, state):
         summary_json = json.dumps(state['summary'], ensure_ascii=False)
         prompt_type = f"""
@@ -806,12 +1274,12 @@ class SpectralSynthesisHost(BaseAgent):
 你已经对一张天文学光谱做了总结
 {summary_json}
 
-- 请输出 **结论** 部分中的 **天体类型**（从这三个词语中选择：star, galaxy, QSO）
+- 请输出 **结论** 部分中的 **天体类型**（从这三个词语中选择：Star, Galaxy, QSO）
 
 - 输出格式为 str
 - 不要输出其他信息
 """
-        response_type = await self.call_llm_with_context(prompt_type, parse_json=False, description="总结")
+        response_type = await self.call_llm_with_context('', prompt_type, parse_json=False, description="总结")
         state['in_brief']['type'] = response_type
 
         prompt_redshift = f"""
@@ -825,7 +1293,7 @@ class SpectralSynthesisHost(BaseAgent):
 - 输出格式为 float
 - 不要输出其他信息
 """
-        response_redshift = await self.call_llm_with_context(prompt_redshift, parse_json=False, description="总结")
+        response_redshift = await self.call_llm_with_context('', prompt_redshift, parse_json=False, description="总结")
         state['in_brief']['redshift'] = response_redshift
 
         prompt_rms = f"""
@@ -839,8 +1307,23 @@ class SpectralSynthesisHost(BaseAgent):
 - 输出格式为 float
 - 不要输出其他信息
 """
-        response_rms = await self.call_llm_with_context(prompt_rms, parse_json=False, description="总结")
+        response_rms = await self.call_llm_with_context('', prompt_rms, parse_json=False, description="总结")
         state['in_brief']['rms'] = response_rms
+
+        prompt_human = f"""
+你是一位负责统筹的【天文学光谱分析主持人】
+
+你已经对一张天文学光谱做了总结
+{summary_json}
+
+请输出 **结论** 部分中的 **是否需要人工介入判断**
+
+- 仅输出“是”或“否”
+- 输出格式为 str
+- 不要输出其他信息
+"""
+        response_human = await self.call_llm_with_context('', prompt_human, parse_json=False, description="总结")
+        state['in_brief']['human'] = response_human
     
     async def run(self, state: SpectroState) -> SpectroState:
         try:
