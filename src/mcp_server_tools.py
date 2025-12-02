@@ -17,31 +17,31 @@ def predict_obs_wavelength(redshift: Union[float, List[float]], rest_wavelength:
 # def weighted_average(redshift: List[float], flux: List[float]) -> float:
 #     return _weighted_average(redshift, flux)
 
-@server.tool()
-def galaxy_weighted_average(
-    wavelength_obs: List[float],
-    wavelength_rest: List[float],
-    flux: List[float],
-    a: float,            # wavelength per pixel (Å/pix)
-    tolerance: int,      # 像素容差 t
-    rms_lambda: float    # 拟合波长 rms
-) -> Dict:
-    """
-    MCP Tool: 计算 flux 加权平均红移及综合误差
-    """
-    try:
-        result = _galaxy_weighted_average_with_error(
-            wavelength_obs, 
-            wavelength_rest, 
-            flux, 
-            a, 
-            tolerance, 
-            rms_lambda
-        )
-        return result
-    except Exception as e:
-        print(f"error: {str(e)}")
-        return {"error": str(e)}
+# @server.tool()
+# def galaxy_weighted_average(
+#     wavelength_obs: List[float],
+#     wavelength_rest: List[float],
+#     flux: List[float],
+#     a: float,            # wavelength per pixel (Å/pix)
+#     tolerance: int,      # 像素容差 t
+#     rms_lambda: float    # 拟合波长 rms
+# ) -> Dict:
+#     """
+#     MCP Tool: 计算 flux 加权平均红移及综合误差
+#     """
+#     try:
+#         result = _galaxy_weighted_average_with_error(
+#             wavelength_obs, 
+#             wavelength_rest, 
+#             flux, 
+#             a, 
+#             tolerance, 
+#             rms_lambda
+#         )
+#         return result
+#     except Exception as e:
+#         print(f"error: {str(e)}")
+#         return {"error": str(e)}
     
 @server.tool()
 def QSO_rms(wavelength_rest: float, 

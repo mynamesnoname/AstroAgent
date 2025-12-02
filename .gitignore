@@ -5,6 +5,7 @@
 ./data/LRG/*
 ./data/QSO/*
 ./data/ELG
+./data/test_set_2/A/output/*
 
 # Python
 **/__pycache__/

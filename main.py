@@ -22,8 +22,8 @@ async def main():
 
         image_name = os.getenv('IMAGE_NAME')
         image_header = os.getenv('IMAGE_NAME_HEADER', '')
-        start = int(os.getenv('START', 0))
-        end = int(os.getenv('END', 0))
+        # start = int(os.getenv('START', 0))
+        # end = int(os.getenv('END', 0))
 
         if not input_dir:
             logging.error("❌ INPUT_DIR 未设置")
@@ -53,15 +53,40 @@ async def main():
             logging.info("✅ 单图分析完成")
         else:
             # 批量模式
-            logging.info(f"🚀 批量分析模式: {start} → {end}")
+            def parse_image_range(start_str, end_str):
+                """解析起始和结束值，智能处理前导零"""
+                start_num = int(start_str)
+                end_num = int(end_str)
+                
+                # 如果原始字符串有前导零，保留格式
+                if start_str.startswith('0') or end_str.startswith('0'):
+                    width = max(len(start_str), len(end_str))
+                    return start_num, end_num, width
+                else:
+                    return start_num, end_num, None
+
+            start_str = os.getenv('START', '0')
+            end_str = os.getenv('END', '0')
+
+            start, end, width = parse_image_range(start_str, end_str)
 
             collect = []
-
             for i in range(start, end + 1):
-                img_name = f"{image_header}{i}"
-                os.environ['IMAGE_NAME'] = img_name  # 临时覆盖
-
+                if width:
+                    img_name = f"{image_header}{i:0{width}d}"
+                else:
+                    img_name = f"{image_header}{i}"
+                
+                os.environ['IMAGE_NAME'] = img_name
                 image_path = os.path.join(input_dir, f"{img_name}.png")
+                logging.info(f"🚀 批量分析模式: {start} → {end}")
+
+            # for i in range(start, end + 1):
+            #     img_name = f"{image_header}{i}"
+            #     os.environ['IMAGE_NAME'] = img_name  # 临时覆盖
+
+                # image_path = os.path.join(input_dir, f"{img_name}.png")
+                
                 # 检查文件是否存在
                 if not os.path.isfile(image_path):
                     logging.warning(f"⚠️ 跳过：文件不存在 - {image_path}")
