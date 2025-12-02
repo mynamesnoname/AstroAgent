@@ -4,8 +4,12 @@
 
 ./data/LRG/*
 ./data/QSO/*
+<<<<<<< HEAD
 ./data/ELG
 ./data/test_set_2/A/output/*
+=======
+./data/ELG/*
+>>>>>>> 7cb1c20142e7f5f5360c3ab5d87c1ba4b6caf694
 
 # Python
 **/__pycache__/
