@@ -105,6 +105,7 @@ python main.py
 - `{your_image_name}_summary.md`  
   最终综合报告，包含天体类型、红移估计值及置信度评估。
 
+- 注：`{your_image_name}_ROI.png`暂不对外展示
 ---
 
 ## 架构亮点
@@ -119,31 +120,23 @@ python main.py
 ## 依赖清单（requirements.txt）
 
 ```txt
-# 核心科学计算
-numpy>=1.21.0
-scipy>=1.7.0
-pandas>=1.3.0
-
-# 计算机视觉与 OCR
-opencv-python>=4.5.0
-pytesseract>=0.3.8
-
-# 绘图
-matplotlib>=3.4.0
-
-# 大模型与智能体框架
-langchain-openai>=0.1.0
-langgraph>=0.1.0
-langchain-core>=0.1.0
-
-# MCP（Model Context Protocol）集成
-langchain-mcp-adapters>=0.1.0
-mcp>=1.19.0
-
-# 工具库
-python-dotenv>=0.19.0
-openai>=1.0.0
-pydantic>=2.0.0
+astropy==7.1.1
+langchain==1.0.5
+langchain-community==0.3.29
+langchain-core==1.0.4
+langchain-mcp-adapters==0.1.11
+langchain-openai==1.0.2
+langgraph==1.0.3
+matplotlib==3.10.6
+mcp==1.19.0
+numpy==2.3.4
+openai==2.8.0
+opencv-python==4.12.0.88
+pandas==2.3.2
+pydantic==2.11.7
+pytesseract==0.3.13
+python-dotenv==1.1.1
+scipy==1.16.3
 ```
 
 ---
