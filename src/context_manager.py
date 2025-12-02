@@ -124,7 +124,10 @@ class SpectroState(MessagesState):
     output_dir: Optional[str] = None
     crop_path: Optional[str] = None
     spec_extract_path: Optional[str] = None
+    continuum_path: Optional[str] = None
     sigma_list: List[Union[int, float]] = field(default_factory=list)
+    band_name: Optional[List[str]] = None
+    band_wavelength: Optional[List[List[float]]] = None
     prompt: Optional[dict] = None
 
     # ===========================
@@ -149,7 +152,9 @@ class SpectroState(MessagesState):
     ROI_troughs: Optional[List[Dict[str, float]]] = None
     merged_peaks: Optional[List[Dict[str, float]]] = None
     merged_troughs: Optional[List[Dict[str, float]]] = None
-
+    continuum: Optional[Dict[str, Any]] = None
+    cleaned_peaks: Optional[List[Dict[str, float]]] = None
+    cleaned_troughs: Optional[List[Dict[str, float]]] = None
     # ===========================
     # 🔹 可视化对象
     # ===========================
