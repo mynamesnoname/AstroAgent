@@ -1315,7 +1315,8 @@ Flux 误差：{delta_t_json}
         async def _cleaning(state):
             filter_nosie = state['visual_interpretation'][0]
             if not safe_to_bool(filter_nosie.get('filter_noise', False)):
-                pass
+                state['cleaned_peaks'] = state['merged_peaks']
+                state['cleaned_troughs'] = state['merged_troughs']
             else:
                 filter_noise_wl = filter_nosie.get('filter_noise_wavelength', [])
                 filter_noise_wl = np.array(filter_noise_wl)
