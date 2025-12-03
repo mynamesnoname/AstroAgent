@@ -1255,15 +1255,19 @@ def plot_cleaned_features(state):
 
     peaks_to_plot = min(plot_peaks, len(state['cleaned_peaks']))
     troughs_to_plot = min(plot_troughs, len(state['cleaned_troughs']))
+    label = os.getenv('LABEL', False)
+    label = safe_to_bool(label)
     for peak_ in state['cleaned_peaks'][:peaks_to_plot]:
         plt.axvline(peak_['wavelength'], linestyle='-', c='red', alpha=0.5)
         # 添加text：peak_['wavelength']
-        plt.text(peak_['wavelength'], 1.1, f'{peak_["wavelength"]:.2f}', rotation=90, verticalalignment='bottom', horizontalalignment='center')
+        if label:
+            plt.text(peak_['wavelength'], 1.1, f'{peak_["wavelength"]:.2f}', rotation=90, verticalalignment='bottom', horizontalalignment='center')
     for trough_ in state['cleaned_troughs'][:troughs_to_plot]:
         if trough_['wavelength'] > 0:
             plt.axvline(trough_['wavelength'], linestyle=':', c='blue', alpha=0.5)
             # 添加text：trough_['wavelength']
-            plt.text(trough_['wavelength'], 1.1, f'{trough_["wavelength"]:.2f}', rotation=90, verticalalignment='bottom', horizontalalignment='center')
+            if label:
+                plt.text(trough_['wavelength'], 1.1, f'{trough_["wavelength"]:.2f}', rotation=90, verticalalignment='bottom', horizontalalignment='center')
 
     plt.plot([], [], linestyle='-', c='red', alpha=0.5, label='peaks')
     plt.plot([], [], linestyle=':', c='blue', alpha=0.5, label='troughs')  # 注意：图例颜色与实际线条颜色的一致性
