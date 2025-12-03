@@ -1,308 +1,55 @@
-2025-12-03 19:58:13,404 [INFO] ✅ 使用配置文件: /home/wbc/code3/llm-spectro-agent/mcp_config.json
-2025-12-03 19:58:13,551 [INFO] 🚀 开始单图分析: 002.png
-2025-12-03 19:58:20,735 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
-2025-12-03 19:58:42,788 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
-2025-12-03 19:59:06,570 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
-[12/03/25 19:59:08] INFO     Processing request of type            server.py:674
+2025-12-03 23:08:23,692 [INFO] ✅ 使用配置文件: /home/wbc/code3/llm-spectro-agent/mcp_config.json
+2025-12-03 23:08:23,816 [INFO] 🚀 开始单图分析: 002.png
+2025-12-03 23:08:29,752 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2025-12-03 23:08:51,335 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2025-12-03 23:09:14,988 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+[12/03/25 23:09:16] INFO     Processing request of type            server.py:674
                              ListToolsRequest                                   
-2025-12-03 19:59:11,788 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
-2025-12-03 19:59:13,442 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
-2025-12-03 19:59:15,871 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
-2025-12-03 19:59:19,213 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
-2025-12-03 19:59:25,093 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
-2025-12-03 19:59:26,869 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
-2025-12-03 19:59:29,901 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
-[12/03/25 19:59:31] INFO     Processing request of type            server.py:674
+2025-12-03 23:09:21,625 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2025-12-03 23:09:22,824 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2025-12-03 23:09:24,204 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2025-12-03 23:09:26,769 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2025-12-03 23:09:33,011 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2025-12-03 23:09:34,239 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2025-12-03 23:09:37,826 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+[12/03/25 23:09:38] INFO     Processing request of type            server.py:674
                              CallToolRequest                                    
                     INFO     Processing request of type            server.py:674
                              ListToolsRequest                                   
-2025-12-03 19:59:54,934 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
-2025-12-03 19:59:57,818 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
-[12/03/25 19:59:58] INFO     Processing request of type            server.py:674
+[12/03/25 23:09:38] INFO     Processing request of type            server.py:674
                              CallToolRequest                                    
                     INFO     Processing request of type            server.py:674
                              ListToolsRequest                                   
-2025-12-03 20:00:04,485 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
-[12/03/25 20:00:05] INFO     Processing request of type            server.py:674
+2025-12-03 23:09:51,344 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2025-12-03 23:09:54,515 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+[12/03/25 23:09:55] INFO     Processing request of type            server.py:674
                              CallToolRequest                                    
                     INFO     Processing request of type            server.py:674
                              ListToolsRequest                                   
-[12/03/25 20:00:05] INFO     Processing request of type            server.py:674
+2025-12-03 23:10:00,352 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+[12/03/25 23:10:01] INFO     Processing request of type            server.py:674
                              CallToolRequest                                    
                     INFO     Processing request of type            server.py:674
                              ListToolsRequest                                   
-[12/03/25 20:00:05] INFO     Processing request of type            server.py:674
+[12/03/25 23:10:01] INFO     Processing request of type            server.py:674
                              CallToolRequest                                    
                     INFO     Processing request of type            server.py:674
                              ListToolsRequest                                   
-2025-12-03 20:00:11,686 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
-[12/03/25 20:00:12] INFO     Processing request of type            server.py:674
+[12/03/25 23:10:01] INFO     Processing request of type            server.py:674
                              CallToolRequest                                    
                     INFO     Processing request of type            server.py:674
                              ListToolsRequest                                   
-[12/03/25 20:00:12] INFO     Processing request of type            server.py:674
+2025-12-03 23:10:05,881 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+[12/03/25 23:10:06] INFO     Processing request of type            server.py:674
                              CallToolRequest                                    
                     INFO     Processing request of type            server.py:674
                              ListToolsRequest                                   
-[12/03/25 20:00:12] INFO     Processing request of type            server.py:674
+[12/03/25 23:10:06] INFO     Processing request of type            server.py:674
                              CallToolRequest                                    
                     INFO     Processing request of type            server.py:674
                              ListToolsRequest                                   
-2025-12-03 20:00:44,341 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
-2025-12-03 20:00:47,114 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
-[12/03/25 20:00:48] INFO     Processing request of type            server.py:674
-                             CallToolRequest                                    
-                    INFO     Processing request of type            server.py:674
-                             ListToolsRequest                                   
-2025-12-03 20:01:05,439 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
-2025-12-03 20:01:10,918 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
-[12/03/25 20:01:12] INFO     Processing request of type            server.py:674
-                             CallToolRequest                                    
-                    INFO     Processing request of type            server.py:674
-                             ListToolsRequest                                   
-[12/03/25 20:01:12] INFO     Processing request of type            server.py:674
-                             CallToolRequest                                    
-                    INFO     Processing request of type            server.py:674
-                             ListToolsRequest                                   
-2025-12-03 20:01:14,787 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
-[12/03/25 20:01:15] INFO     Processing request of type            server.py:674
-                             CallToolRequest                                    
-                    INFO     Processing request of type            server.py:674
-                             ListToolsRequest                                   
-[12/03/25 20:01:15] INFO     Processing request of type            server.py:674
-                             CallToolRequest                                    
-                    INFO     Processing request of type            server.py:674
-                             ListToolsRequest                                   
-[12/03/25 20:01:16] INFO     Processing request of type            server.py:674
-                             CallToolRequest                                    
-                    INFO     Processing request of type            server.py:674
-                             ListToolsRequest                                   
-2025-12-03 20:01:18,763 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
-[12/03/25 20:01:19] INFO     Processing request of type            server.py:674
-                             CallToolRequest                                    
-                    INFO     Processing request of type            server.py:674
-                             ListToolsRequest                                   
-2025-12-03 20:01:24,519 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
-[12/03/25 20:01:25] INFO     Processing request of type            server.py:674
-                             CallToolRequest                                    
-                    INFO     Processing request of type            server.py:674
-                             ListToolsRequest                                   
-[12/03/25 20:01:25] INFO     Processing request of type            server.py:674
-                             CallToolRequest                                    
-[12/03/25 20:01:25] INFO     Processing request of type            server.py:674
-                             CallToolRequest                                    
-                    INFO     Processing request of type            server.py:674
-                             ListToolsRequest                                   
-                    INFO     Processing request of type            server.py:674
-                             ListToolsRequest                                   
-2025-12-03 20:01:29,536 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
-[12/03/25 20:01:30] INFO     Processing request of type            server.py:674
-                             CallToolRequest                                    
-                    INFO     Processing request of type            server.py:674
-                             ListToolsRequest                                   
-2025-12-03 20:01:38,080 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
-[12/03/25 20:01:39] INFO     Processing request of type            server.py:674
-                             CallToolRequest                                    
-[12/03/25 20:01:39] INFO     Processing request of type            server.py:674
-                             CallToolRequest                                    
-                    INFO     Processing request of type            server.py:674
-                             ListToolsRequest                                   
-                    INFO     Processing request of type            server.py:674
-                             ListToolsRequest                                   
-[12/03/25 20:01:39] INFO     Processing request of type            server.py:674
-                             CallToolRequest                                    
-                    INFO     Processing request of type            server.py:674
-                             ListToolsRequest                                   
-2025-12-03 20:02:18,079 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
-[12/03/25 20:02:19] INFO     Processing request of type            server.py:674
-                             ListToolsRequest                                   
-2025-12-03 20:02:27,593 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
-[12/03/25 20:02:28] INFO     Processing request of type            server.py:674
-                             CallToolRequest                                    
-                    INFO     Processing request of type            server.py:674
-                             ListToolsRequest                                   
-[12/03/25 20:02:28] INFO     Processing request of type            server.py:674
-                             CallToolRequest                                    
-                    INFO     Processing request of type            server.py:674
-                             ListToolsRequest                                   
-[12/03/25 20:02:28] INFO     Processing request of type            server.py:674
-                             CallToolRequest                                    
-                    INFO     Processing request of type            server.py:674
-                             ListToolsRequest                                   
-[12/03/25 20:02:28] INFO     Processing request of type            server.py:674
-                             CallToolRequest                                    
-                    INFO     Processing request of type            server.py:674
-                             ListToolsRequest                                   
-[12/03/25 20:02:29] INFO     Processing request of type            server.py:674
-                             CallToolRequest                                    
-                    INFO     Processing request of type            server.py:674
-                             ListToolsRequest                                   
-2025-12-03 20:02:34,609 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
-[12/03/25 20:02:35] INFO     Processing request of type            server.py:674
-                             CallToolRequest                                    
-                    INFO     Processing request of type            server.py:674
-                             ListToolsRequest                                   
-2025-12-03 20:02:39,834 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
-[12/03/25 20:02:41] INFO     Processing request of type            server.py:674
-                             CallToolRequest                                    
-                    INFO     Processing request of type            server.py:674
-                             ListToolsRequest                                   
-[12/03/25 20:02:41] INFO     Processing request of type            server.py:674
-                             CallToolRequest                                    
-                    INFO     Processing request of type            server.py:674
-                             ListToolsRequest                                   
-[12/03/25 20:02:41] INFO     Processing request of type            server.py:674
-                             CallToolRequest                                    
-                    INFO     Processing request of type            server.py:674
-                             ListToolsRequest                                   
-2025-12-03 20:02:47,432 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
-[12/03/25 20:02:48] INFO     Processing request of type            server.py:674
-                             CallToolRequest                                    
-                    INFO     Processing request of type            server.py:674
-                             ListToolsRequest                                   
-[12/03/25 20:02:48] INFO     Processing request of type            server.py:674
-                             CallToolRequest                                    
-                    INFO     Processing request of type            server.py:674
-                             ListToolsRequest                                   
-2025-12-03 20:02:52,981 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
-[12/03/25 20:02:54] INFO     Processing request of type            server.py:674
-                             CallToolRequest                                    
-                    INFO     Processing request of type            server.py:674
-                             ListToolsRequest                                   
-2025-12-03 20:03:28,966 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
-[12/03/25 20:03:27] INFO     Processing request of type            server.py:674
-                             ListToolsRequest                                   
-2025-12-03 20:03:38,099 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
-[12/03/25 20:03:39] INFO     Processing request of type            server.py:674
-                             CallToolRequest                                    
-                    INFO     Processing request of type            server.py:674
-                             ListToolsRequest                                   
-[12/03/25 20:03:39] INFO     Processing request of type            server.py:674
-                             CallToolRequest                                    
-                    INFO     Processing request of type            server.py:674
-                             ListToolsRequest                                   
-[12/03/25 20:03:39] INFO     Processing request of type            server.py:674
-                             CallToolRequest                                    
-                    INFO     Processing request of type            server.py:674
-                             ListToolsRequest                                   
-[12/03/25 20:03:39] INFO     Processing request of type            server.py:674
-                             CallToolRequest                                    
-                    INFO     Processing request of type            server.py:674
-                             ListToolsRequest                                   
-2025-12-03 20:04:18,130 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
-2025-12-03 20:04:26,346 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
-[12/03/25 20:04:27] INFO     Processing request of type            server.py:674
-                             CallToolRequest                                    
-                    INFO     Processing request of type            server.py:674
-                             ListToolsRequest                                   
-[12/03/25 20:04:27] INFO     Processing request of type            server.py:674
-                             CallToolRequest                                    
-                    INFO     Processing request of type            server.py:674
-                             ListToolsRequest                                   
-[12/03/25 20:04:27] INFO     Processing request of type            server.py:674
-                             CallToolRequest                                    
-                    INFO     Processing request of type            server.py:674
-                             ListToolsRequest                                   
-[12/03/25 20:04:27] INFO     Processing request of type            server.py:674
-                             CallToolRequest                                    
-                    INFO     Processing request of type            server.py:674
-                             ListToolsRequest                                   
-2025-12-03 20:04:30,018 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
-[12/03/25 20:04:31] INFO     Processing request of type            server.py:674
-                             CallToolRequest                                    
-                    INFO     Processing request of type            server.py:674
-                             ListToolsRequest                                   
-2025-12-03 20:04:59,046 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
-2025-12-03 20:05:05,344 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
-[12/03/25 20:05:06] INFO     Processing request of type            server.py:674
-                             CallToolRequest                                    
-                    INFO     Processing request of type            server.py:674
-                             ListToolsRequest                                   
-[12/03/25 20:05:06] INFO     Processing request of type            server.py:674
-                             CallToolRequest                                    
-                    INFO     Processing request of type            server.py:674
-                             ListToolsRequest                                   
-2025-12-03 20:05:11,147 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
-[12/03/25 20:05:12] INFO     Processing request of type            server.py:674
-                             CallToolRequest                                    
-                    INFO     Processing request of type            server.py:674
-                             ListToolsRequest                                   
-2025-12-03 20:05:17,065 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
-[12/03/25 20:05:18] INFO     Processing request of type            server.py:674
-                             CallToolRequest                                    
-                    INFO     Processing request of type            server.py:674
-                             ListToolsRequest                                   
-2025-12-03 20:05:22,283 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
-[12/03/25 20:05:23] INFO     Processing request of type            server.py:674
-                             CallToolRequest                                    
-                    INFO     Processing request of type            server.py:674
-                             ListToolsRequest                                   
-2025-12-03 20:05:43,505 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
-2025-12-03 20:05:55,239 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
-[12/03/25 20:05:56] INFO     Processing request of type            server.py:674
-                             CallToolRequest                                    
-                    INFO     Processing request of type            server.py:674
-                             ListToolsRequest                                   
-[12/03/25 20:05:56] INFO     Processing request of type            server.py:674
-                             CallToolRequest                                    
-                    INFO     Processing request of type            server.py:674
-                             ListToolsRequest                                   
-[12/03/25 20:05:56] INFO     Processing request of type            server.py:674
-                             CallToolRequest                                    
-                    INFO     Processing request of type            server.py:674
-                             ListToolsRequest                                   
-2025-12-03 20:06:00,598 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
-[12/03/25 20:05:59] INFO     Processing request of type            server.py:674
-                             CallToolRequest                                    
-                    INFO     Processing request of type            server.py:674
-                             ListToolsRequest                                   
-2025-12-03 20:06:08,208 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
-[12/03/25 20:06:09] INFO     Processing request of type            server.py:674
-                             CallToolRequest                                    
-[12/03/25 20:06:09] INFO     Processing request of type            server.py:674
-                             CallToolRequest                                    
-                    INFO     Processing request of type            server.py:674
-                             ListToolsRequest                                   
-                    INFO     Processing request of type            server.py:674
-                             ListToolsRequest                                   
-[12/03/25 20:06:09] INFO     Processing request of type            server.py:674
-                             CallToolRequest                                    
-[12/03/25 20:06:09] INFO     Processing request of type            server.py:674
-                             CallToolRequest                                    
-                    INFO     Processing request of type            server.py:674
-                             ListToolsRequest                                   
-                    INFO     Processing request of type            server.py:674
-                             ListToolsRequest                                   
-2025-12-03 20:06:24,842 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
-2025-12-03 20:06:30,943 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
-[12/03/25 20:06:29] INFO     Processing request of type            server.py:674
-                             CallToolRequest                                    
-                    INFO     Processing request of type            server.py:674
-                             ListToolsRequest                                   
-[12/03/25 20:06:29] INFO     Processing request of type            server.py:674
-                             CallToolRequest                                    
-                    INFO     Processing request of type            server.py:674
-                             ListToolsRequest                                   
-2025-12-03 20:06:32,015 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
-[12/03/25 20:06:33] INFO     Processing request of type            server.py:674
-                             CallToolRequest                                    
-                    INFO     Processing request of type            server.py:674
-                             ListToolsRequest                                   
-2025-12-03 20:06:59,697 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
-[12/03/25 20:07:00] INFO     Processing request of type            server.py:674
-                             ListToolsRequest                                   
-2025-12-03 20:07:34,921 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
-2025-12-03 20:07:35,920 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
-2025-12-03 20:07:37,142 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
-2025-12-03 20:07:40,128 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
-[12/03/25 20:07:41] INFO     Processing request of type            server.py:674
-                             CallToolRequest                                    
-                    INFO     Processing request of type            server.py:674
-                             ListToolsRequest                                   
-2025-12-03 20:07:46,564 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
-2025-12-03 20:07:48,001 [INFO] HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
-2025-12-03 20:07:48,004 [INFO] ✅ 单图分析完成
-2025-12-03 20:07:48,004 [INFO] 🎉 所有任务已完成
+2025-12-03 23:10:10,906 [INFO] ✅ 单图分析完成
+2025-12-03 23:10:10,907 [INFO] 🎉 所有任务已完成
 ✅ 配置文件加载成功: /home/wbc/code3/llm-spectro-agent/mcp_config.json
 [LLM INIT] LLM -> model=qwen3-max-2025-09-23, temp=0.1, max_tokens=None, base_url=https://dashscope.aliyuncs.com/compatible-mode/v1
 [LLM INIT] VIS_LLM -> model=qwen-vl-max-2025-08-13, temp=0.1, max_tokens=None, base_url=https://dashscope.aliyuncs.com/compatible-mode/v1
@@ -321,30 +68,11 @@
 Stage 1: Visual Interpreter
 智能体 Spectral Visual Interpreter 实例创建完成
 cropped image is saved to /home/wbc/code3/llm-spectro-agent/data/test_set_2/A/output2/002_cropped.png
-Detected 25 peaks and 27 troughs.
+Detected 36 peaks and 33 troughs.
 Stage 2: Rule Analyst
 智能体 Spectral Rule Analyst 实例创建完成
 finished describe_spectrum_picture
-Plot 15 peaks and 15 troughs.
+Plot 10 peaks and 15 troughs.
 {'type': 'QSO'}
-Lyalpha_candidate: [4390.76062101638, 4523.113343138734, 3949.5848806085355, 6530.46296199443, 4986.347870566971]
-Stage 3: Debate
-🤔 Spectro analyse debate: 开始第 1 次发言, 当前轮数=1, 最大轮数=3
-⚖️ 开始光谱辩论 - 审查分析师 (第1轮)
-智能体 Spectral Analysis Auditor 实例创建完成
-🤔 Spectro analyse debate: 开始第 2 次发言, 当前轮数=1, 最大轮数=3
-🖋️ 继续光谱辩论 - 完善分析师 (第1轮)
-智能体 Spectral Refinement Assistant 实例创建完成
-🤔 Spectro analyse debate: 开始第 3 次发言, 当前轮数=2, 最大轮数=3
-⚖️ 继续光谱辩论 - 审查分析师 (第2轮)
-🤔 Spectro analyse debate: 开始第 4 次发言, 当前轮数=2, 最大轮数=3
-🖋️ 继续光谱辩论 - 完善分析师 (第2轮)
-🤔 Spectro analyse debate: 开始第 5 次发言, 当前轮数=3, 最大轮数=3
-⚖️ 继续光谱辩论 - 审查分析师 (第3轮)
-🤔 Spectro analyse debate: 开始第 6 次发言, 当前轮数=3, 最大轮数=3
-🖋️ 继续光谱辩论 - 完善分析师 (第3轮)
-🏁 光谱辩论结束(3轮完成)，进入总结
-Stage 4: Synthesis Host
-智能体 Spectral Synthesis Host 实例创建完成
-✅ 分析日志和总结已保存
-✅ 分析流程完成
+Lyalpha_candidate: [4390.76062101638, 3949.5848806085355]
+⚠️ 分析流程已取消: 
