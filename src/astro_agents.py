@@ -15,7 +15,7 @@ from .utils import (
     _process_and_extract_curve_points, _convert_to_spectrum,
     _find_features_multiscale, _plot_spectrum, _plot_features,
     parse_list, getenv_float, getenv_int, _load_feature_params, 
-    _ROI_features_finding, merge_features, plot_merged_features, 
+    _ROI_features_finding, merge_features, plot_cleaned_features, 
     safe_to_bool, find_overlap_regions
 )
 
@@ -190,10 +190,6 @@ from .utils import (
 #         except Exception as e:
 #             print(f"❌ run pipeline terminated with error: {e}")
 #             raise
-
-# ---------------------------------------------------------
-# 1. Visual Assistant — 负责图像理解与坐标阅读
-# ---------------------------------------------------------
 
 class SpectralVisualInterpreter(BaseAgent):
     """
@@ -482,7 +478,7 @@ class SpectralVisualInterpreter(BaseAgent):
                     # plt.plot(state['continuum']['wavelength'], state['continuum']['flux'], color='orange', label='Continuum')
                     # plt.savefig(os.path.join(state['output_dir'], f'{state["image_name"]}_continuum.png'))
                     # state["features_fig"] = _plot_features(state, sigma_list, [plot_peaks, plot_troughs])
-                    # plot_merged_features(state)
+                    # plot_cleaned_features(state)
                 except Exception as e:
                     print(f"❌ plot spectrum or features terminated with error: {e}")
                     raise
@@ -1210,7 +1206,7 @@ class SpectralVisualInterpreter(BaseAgent):
 #                 tol_pixels=10,
 #             )
             
-#             plot_merged_features(state)
+#             plot_cleaned_features(state)
             
 #             await self.preliminary_classification(state)
 #             # print(state['preliminary_classification'])
@@ -1269,9 +1265,7 @@ class SpectralRuleAnalyst(BaseAgent):
                 overlap_regions = find_overlap_regions(band_name, band_wavelength)
                 spec = state['spectrum']
                 wl = np.array(spec['new_wavelength'])
-                ceiling = np.array(spec['max_unresolved_flux'])
-                floor = np.array(spec['min_unresolved_flux'])
-                delta = ceiling - floor
+                d_f = np.array(spec['delta_flux'])
 
                 system_prompt = function_prompt['_filter_noise']['system_prompt']
                 band_name_json = json.dumps(band_name, ensure_ascii=False)
@@ -1291,7 +1285,7 @@ class SpectralRuleAnalyst(BaseAgent):
                     wl_t = wl[mask]
                     wl_t = wl_t.tolist()
                     wl_t_json = json.dumps(wl_t, ensure_ascii=False)
-                    delta_t = delta[mask]
+                    delta_t = d_f[mask]
                     delta_t = delta_t.tolist()
                     delta_t_json = json.dumps(delta_t, ensure_ascii=False)
 
@@ -1323,16 +1317,21 @@ Flux 误差：{delta_t_json}
                 # filter_noise_wl_json = json.dumps(filter_noise_wl, ensure_ascii=False)
                 wavelength = np.array(state['spectrum']['new_wavelength'])
                 # flux = np.array(state['spectrum']['weighted_flux'])
+                # delta_f = np.array(state['spectrum']['delta_flux'])
                 peaks = state['merged_peaks']
                 # continuum = np.array(state['continuum']['flux'])
                 cleaned_peaks = []
+                wiped_peaks = []
                 for p in peaks:
                     wl = p['wavelength']
                     width = p['width_mean']
+                    # index = p['rep_index']
+                    # width_in_km_s = p['width_in_km_s']
 
                     distance = abs(wl - filter_noise_wl)
                     # 如果在distance中至少有一个值小于 width，则认为该峰在噪声区域内
                     if np.any(distance <= width):
+                    # if np.any(distance <= width/4):
                         is_artifact = True
                     else:
                         is_artifact = False
@@ -1345,7 +1344,10 @@ Flux 误差：{delta_t_json}
                             else:
                                 p['describe'] = '中等宽度'
                             cleaned_peaks.append(p)
+                    else:
+                        wiped_peaks.append(p)
                 state['cleaned_peaks'] = cleaned_peaks
+                state['wiped_peaks'] = wiped_peaks
 
                 cleaned_troughs = []
                 for t in state['merged_troughs']:
@@ -1530,33 +1532,70 @@ Flux 误差：{delta_t_json}
     ###################################
     async def _QSO(self, state):
         """QSO"""
+        peaks_info = [
+            {
+                "wavelength": pe.get('wavelength'),
+                "flux": pe.get('mean_flux'),
+                "width": pe.get('width_mean'),
+                "width_in_km_s": pe.get('width_in_km_s'),
+                "prominance": pe.get('max_prominence'),
+                "seen_in_max_global_smoothing_scale_sigma": pe.get('max_global_sigma_seen', None),
+                "seen_in_max_local_smoothing_scale_sigma": pe.get('max_roi_sigma_seen', None),
+                "describe": pe.get('describe')
+            }
+            for pe in state.get('cleaned_peaks', [])[:15]
+        ]
+        peak_json = json.dumps(peaks_info, ensure_ascii=False)
+
+        # 初始化Lyα候选线列表
+        Lyalpha_candidate = []
+
+        # 获取光谱波长范围
+        wl_left = state['spectrum']['new_wavelength'][0]
+        wl_right = state['spectrum']['new_wavelength'][-1]
+        mid_wavelength = (wl_left + wl_right) / 2
+
+        # 筛选条件1：优先使用全局平滑尺度的信噪比
+        for peak in peaks_info:
+            # 检查是否在光谱蓝端（波长小于中间值）
+            if peak['wavelength'] < mid_wavelength:
+                # 检查谱线宽度是否足够（>=2000 km/s）
+                if peak['width_in_km_s'] >= 2000:
+                    # 检查全局平滑尺度的信噪比条件
+                    if (peak['seen_in_max_global_smoothing_scale_sigma'] is not None and 
+                        peak['seen_in_max_global_smoothing_scale_sigma'] > 2):
+                        Lyalpha_candidate.append(peak['wavelength'])
+
+        # 筛选条件2：如果条件1没有找到候选，使用局部平滑尺度的信噪比
+        if len(Lyalpha_candidate) == 0:
+            for peak in peaks_info:
+                if peak['wavelength'] < mid_wavelength:
+                    if peak['width_in_km_s'] >= 2000:
+                        # 检查局部平滑尺度的信噪比条件
+                        if (peak['seen_in_max_local_smoothing_scale_sigma'] is not None and 
+                            peak['seen_in_max_local_smoothing_scale_sigma'] > 2):
+                            Lyalpha_candidate.append(peak['wavelength'])
+
+        # 将候选线转换为JSON格式并打印
+        Lyalpha_candidate_json = json.dumps(Lyalpha_candidate, ensure_ascii=False)
+        print(f"Lyalpha_candidate: {Lyalpha_candidate}")
+
+        trough_info = [
+            {
+                "wavelength": tr.get('wavelength'),
+                "flux": tr.get('mean_flux'),
+                "width": tr.get('width_mean'),
+                "seen_in_scales_of_sigma": tr.get('seen_in_scales_of_sigma')
+            }
+            for tr in state.get('cleaned_troughs', [])[:15]
+        ]
+        trough_json = json.dumps(trough_info, ensure_ascii=False)
+
         def _common_prompt_header_QSO(state, include_rule_analysis=True, include_step_1_only=False):
             """构造每个 step 公共的 prompt 前段"""
             visual_json = json.dumps(state['visual_interpretation'], ensure_ascii=False)
             # peak_json = json.dumps(state['peaks'][:10], ensure_ascii=False)
             # trough_json = json.dumps(state['troughs'], ensure_ascii=False)
-            peaks_info = [
-                {
-                    "wavelength": pe.get('wavelength'),
-                    "flux": pe.get('mean_flux'),
-                    "width": pe.get('width_mean'),
-                    "prominance": pe.get('max_prominence'),
-                    "seen_in_scales_of_sigma": pe.get('seen_in_scales_of_sigma'),
-                }
-                for pe in state.get('merged_peaks', [])[:10]
-            ]
-            peak_json = json.dumps(peaks_info, ensure_ascii=False)
-            trough_info = [
-                {
-                    "wavelength": tr.get('wavelength'),
-                    "flux": tr.get('mean_flux'),
-                    "width": tr.get('width_mean'),
-                    "seen_in_scales_of_sigma": tr.get('seen_in_scales_of_sigma')
-                }
-                for tr in state.get('merged_troughs', [])[:15]
-            ]
-            trough_json = json.dumps(trough_info, ensure_ascii=False)
-
             header = f"""
     你是一位天文学光谱分析助手。
 
@@ -1579,7 +1618,7 @@ Flux 误差：{delta_t_json}
             a_x = state['pixel_to_value']['x']['a']
             tol_wavelength = a_x * tol_pixels
             header += f"""
-    综合原曲线和 sigma={state['sigma_list']} 的高斯平滑曲线，使用 scipy 函数进行了峰/谷识别。
+    综合原曲线和 smoothing 尺度为 sigma={state['sigma_list']} 的高斯平滑曲线，使用 scipy 函数进行了峰/谷识别。
     关于峰/谷的讨论以以下数据为准：
     - 代表性的前 10 条发射线：
     {peak_json}
@@ -1614,24 +1653,31 @@ Flux 误差：{delta_t_json}
         async def step_1_QSO(state):
             header = _common_prompt_header_QSO(state, include_rule_analysis=False)
             tail = _common_prompt_tail("Step 1: Lyα 谱线检测")
+            if len(Lyalpha_candidate) > 0:
+                candidate_str = f"\n算法筛选的 Lyα 候选线包括：\n{Lyalpha_candidate_json}\n你也可以自己推测其他选项。\n"
+            else:
+                candidate_str = ""
 
-            prompt = header + """
+            system_prompt = header + tail
+
+            user_prompt = f"""
 请按以下步骤分析:
 
 Step 1: Lyα 谱线检测
 假设该光谱中存在 Lyα 发射线（λ_rest = 1216 Å）：
-1. 在光谱蓝端，流量较大，且有一定宽度的峰中，推测哪条最可能为 Lyα 线（从提供的峰列表中选择）。
+{candidate_str}
+1. 在光谱蓝端，流量较大，大 smoothing 尺度可见且有一定宽度的峰中，推测哪条最可能为 Lyα 线（从提供的峰列表中选择）。
 2. 输出：
 - 观测波长 λ_obs
 - 流量 Flux
 - 谱线宽度
 3. 使用工具 calculate_redshift 计算该峰为 Lyα 发射线时的红移 z。
 4. 检查蓝端（短波长方向）是否存在 Lyα forest 特征：吸收线相对更密集、较窄且分布在 Lyα 蓝端附近。请指出并进行简短说明。
-""" + tail
+""" 
             
             response = await self.call_llm_with_context(
-                system_prompt='', 
-                user_prompt=prompt, 
+                system_prompt=system_prompt, 
+                user_prompt=user_prompt, 
                 parse_json=True, 
                 description="Step 1 Lyα 分析"
             )
@@ -1640,24 +1686,49 @@ Step 1: Lyα 谱线检测
         async def step_2_QSO(state):
             header = _common_prompt_header_QSO(state)
             tail = _common_prompt_tail("Step 2: 其他显著发射线分析")
+            system_prompt = header + tail
 
-            prompt = header + """
+            band_name = state['band_name']
+            band_wavelength = state['band_wavelength']
+            if band_name: 
+                overlap_regions = find_overlap_regions(band_name, band_wavelength)
+                wws = np.max([wp.get('width_mean') for wp in state.get('wiped_peaks', [])[:5]])
+                for key in overlap_regions:
+                    range = overlap_regions[key]
+                    overlap_regions[key] = [range[0]-wws, range[1]+wws] # Broaden the overlap regions to make sure LLM won't miss them
+                overlap_regions_json = json.dumps(overlap_regions, ensure_ascii=False)
+                wiped = [
+                    {
+                        "wavelength": wp.get('wavelength'),
+                        "flux": wp.get('mean_flux'),
+                        "width": wp.get('width_mean'),
+                        # "seen_in_scales_of_sigma": wp.get('seen_in_scales_of_sigma')
+                    }
+                    for wp in state.get('wiped_peaks', [])[:5]
+                ]
+                wiped_json = json.dumps(wiped, ensure_ascii=False)
+                advanced = f"""\n    - 注意：如果某些理论峰值落在以下区间附近：\n        {overlap_regions_json}\n    则峰值可能被当作噪声信号清除。这些峰值是：\n        {wiped_json}\n    请优先考虑这些因素，再次分析"""
+            else:
+                advanced = ""
+
+            user_prompt = f"""
 请继续分析:
 
 Step 2: 其他显著发射线分析
 1. 在 Step 1 得到的红移下，使用工具 predict_obs_wavelength 计算以下三条主要发射线：C IV 1549, C III] 1909, Mg II 2799 在光谱中的理论位置。
-2. 光谱中是否有与三者相匹配的峰？
+2. 提示词提供的光谱中是否有与三者相匹配的峰？{advanced}
 3. 如果存在发射线与观测峰值的匹配，根据匹配结果，分别使用工具 calculate_redshift 计算红移。按“发射线名--静止系波长--观测波长--红移”的格式输出。
-""" + tail
+"""
 
-            response = await self.call_llm_with_context('', prompt, parse_json=False, description="Step 2 发射线分析")
+            response = await self.call_llm_with_context(system_prompt, user_prompt, parse_json=False, description="Step 2 发射线分析")
             state['rule_analysis_QSO'].append(response)
 
         async def step_3_QSO(state):
             header = _common_prompt_header_QSO(state)
             tail = _common_prompt_tail("Step 3: 综合判断")
+            system_prompt = header + tail
 
-            prompt = header + """
+            user_prompt = """
 请继续分析:
 
 Step 3: 综合判断
@@ -1667,16 +1738,16 @@ Step 3: 综合判断
 此时请输出“应优先假设 Lyα 谱线未被找峰程序捕获”，并结束 Step 3 的分析。不要输出其他信息。
 2.仅在有显著的 Lyα 峰值，且红移计算结果与其他谱线基本一致时，进行以下操作：
     - 因为天文学中存在外流等现象，请将当前所有匹配中**最低电离态谱线的红移**作为光谱的红移。输出红移结果。（因为存在不对称和展宽，Lyα的置信度是较低的）
-""" + tail
-
-            response = await self.call_llm_with_context('', prompt, parse_json=False, description="Step 3 综合判断")
+"""
+            response = await self.call_llm_with_context(system_prompt, user_prompt, parse_json=False, description="Step 3 综合判断")
             state['rule_analysis_QSO'].append(response)
             
         async def step_4_QSO(state):
             header = _common_prompt_header_QSO(state, include_step_1_only=True)
             tail = _common_prompt_tail("Step 4: 补充步骤（假设 Step 1 所选择的谱线并非 Lyα）")
+            system_prompt = header + tail
 
-            prompt = header + """
+            user_prompt = """
 请继续分析:
 
 Step 4: 补充步骤（假设 Step 1 所选择的谱线并非 Lyα）
@@ -1687,21 +1758,16 @@ Step 4: 补充步骤（假设 Step 1 所选择的谱线并非 Lyα）
             - 流量 Flux
             - 谱线宽度
             - 根据 λ_rest，使用工具 calculate_redshift 初步计算红移 z
-        - 使用工具 predict_obs_wavelength 计算在此红移下的其他主要发射线（如 C III] 和 Mg II）的理论位置。光谱中是否有与它们匹配的发射线？
+        - 使用工具 predict_obs_wavelength 计算在此红移下的其他主要发射线（如 Lyα C III] 和 Mg II）的理论位置。光谱中是否有与它们匹配的发射线？
         - 如果 Lyα 谱线在光谱范围内，检查其是否存在？
         - 如果存在可能的发射线-观测波长匹配结果，使用工具 calculate_redshift 计算它们的红移。按照“发射线名--静止系波长--观测波长--红移”的格式进行输出
     
-    - 若以上假设不合理，则假设该峰值可能对应 C III] 等其他主要谱线，重复推断。
+    - 若以上假设不合理，则假设该峰值可能对应 C III] 等其他主要谱线，重复推断。如果其他谱线（如 Lyα C III] 和 Mg II）在光谱范围内，检查其是否存在？
 
-    - 综合 Step 4 的所有分析，给出：
-        - **最低电离态谱线的红移** 作为光谱红移
-        - 输出 “发射线名--静止系波长--观测波长--红移” 匹配
-
-- 注意：允许在由于光谱边缘的信号残缺或信噪比不佳导致部分发射线不可见。   
-- 抛开其他步骤的分析内容，本节的判断是否支持 Lyα 谱线未被找峰程序捕获的假设？
+- 注意：允许在由于光谱边缘的信号残缺或信噪比不佳导致部分发射线不可见。
 """ + tail
 
-            response = await self.call_llm_with_context('', prompt, parse_json=False, description="Step 4 补充分析")
+            response = await self.call_llm_with_context(system_prompt, user_prompt, parse_json=False, description="Step 4 补充分析")
             state['rule_analysis_QSO'].append(response)
         
         await step_1_QSO(state)
@@ -1716,18 +1782,8 @@ Step 4: 补充步骤（假设 Step 1 所选择的谱线并非 Lyα）
         """执行规则分析完整流程"""
         try:
             await self.describe_spectrum_picture(state)
-            # ROI_peaks, ROI_troughs = _ROI_features_finding(state)
-            # # print(f"ROI_peaks:\n{ROI_peaks}")
-            # # print(f"ROI_troughs:\n{ROI_troughs}")
-            # state['merged_peaks'], state['merged_troughs'] = merge_features(
-            #     global_peaks=state['peaks'],
-            #     global_troughs=state['troughs'],
-            #     ROI_peaks=ROI_peaks,
-            #     ROI_troughs=ROI_troughs, 
-            #     tol_pixels=10,
-            # )
             
-            plot_merged_features(state)
+            plot_cleaned_features(state)
             
             await self.preliminary_classification(state)
             print(state['preliminary_classification'])
@@ -1762,8 +1818,28 @@ class SpectralAnalysisAuditor(BaseAgent):
         )
 
     def _common_prompt_header(self, state: SpectroState) -> str:
-        peak_json = json.dumps(state['peaks'][:10], ensure_ascii=False)
-        trough_json = json.dumps(state['troughs'], ensure_ascii=False)
+        peaks_info = [
+            {
+                "wavelength": pe.get('wavelength'),
+                "flux": pe.get('mean_flux'),
+                "width": pe.get('width_mean'),
+                "prominance": pe.get('max_prominence'),
+                "seen_in_scales_of_sigma": pe.get('seen_in_scales_of_sigma'),
+                "describe": pe.get('describe')
+            }
+            for pe in state.get('cleaned_peaks', [])[:15]
+        ]
+        peak_json = json.dumps(peaks_info, ensure_ascii=False)
+        trough_info = [
+            {
+                "wavelength": tr.get('wavelength'),
+                "flux": tr.get('mean_flux'),
+                "width": tr.get('width_mean'),
+                "seen_in_scales_of_sigma": tr.get('seen_in_scales_of_sigma'), 
+            }
+            for tr in state.get('cleaned_troughs', [])[:15]
+        ]
+        trough_json = json.dumps(trough_info, ensure_ascii=False)
         a = state["pixel_to_value"]["x"]["a"]
         rms = state["pixel_to_value"]["x"]["rms"]
         tolerence = getenv_int("TOL_PIXELS", 10)
@@ -1803,6 +1879,28 @@ class SpectralAnalysisAuditor(BaseAgent):
 
 该光谱的波长范围是{state['spectrum']['new_wavelength'][0]} Å 到 {state['spectrum']['new_wavelength'][-1]} Å。
 """
+        band_name = state['band_name']
+        band_wavelength = state['band_wavelength']
+        if band_name: 
+            overlap_regions = find_overlap_regions(band_name, band_wavelength)
+            wws = np.max([wp.get('width_mean') for wp in state.get('wiped_peaks', [])[:5]])
+            for key in overlap_regions:
+                range = overlap_regions[key]
+                overlap_regions[key] = [range[0]-wws, range[1]+wws] # Broaden the overlap regions to make sure LLM won't miss them
+            overlap_regions_json = json.dumps(overlap_regions, ensure_ascii=False)
+            wiped = [
+                {
+                    "wavelength": wp.get('wavelength'),
+                    "flux": wp.get('mean_flux'),
+                    "width": wp.get('width_mean'),
+                    # "seen_in_scales_of_sigma": wp.get('seen_in_scales_of_sigma')
+                }
+                for wp in state.get('wiped_peaks', [])[:5]
+            ]
+            wiped_json = json.dumps(wiped, ensure_ascii=False)
+            advanced = f"""如果报告中的峰值落在以下区间附近\n    {overlap_regions_json}\n则峰值可能被当作噪声信号清除。这些峰值是：\n      {wiped_json}\n请注意考察这些峰值作为 C IV 或 C III] 的可能性"""
+        else:
+            advanced = ""
         prompt_2 = f"""
 
 我希望光谱分析报告能够尽可能好地匹配 Lyα、C IV、C III]、Mg II 等典型发射线，但也允许在由于光谱边缘的信号残缺或信噪比不佳导致部分发射线不可见。
@@ -1820,7 +1918,7 @@ class SpectralAnalysisAuditor(BaseAgent):
         tolerance: int = {tolerence},     
         rms_lambda = {rms}: float    
 """
-        return prompt_1 + prompt_2
+        return prompt_1 + advanced + prompt_2
 
     async def auditing(self, state: SpectroState):
         system_prompt = self._common_prompt_header(state)
@@ -1867,8 +1965,29 @@ class SpectralRefinementAssistant(BaseAgent):
         )
 
     def _common_prompt_header(self, state) -> str:
-        peak_json = json.dumps(state['peaks'][:10], ensure_ascii=False)
-        trough_json = json.dumps(state['troughs'], ensure_ascii=False)
+        peaks_info = [
+            {
+                "wavelength": pe.get('wavelength'),
+                "flux": pe.get('mean_flux'),
+                "width": pe.get('width_mean'),
+                "prominance": pe.get('max_prominence'),
+                "seen_in_global_scales_of_sigma": pe.get('max_global_sigma_seen', None),
+                "describe": pe.get('describe')
+            }
+            for pe in state.get('cleaned_peaks', [])[:15]
+        ]
+        peak_json = json.dumps(peaks_info, ensure_ascii=False)
+
+        trough_info = [
+            {
+                "wavelength": tr.get('wavelength'),
+                "flux": tr.get('mean_flux'),
+                "width": tr.get('width_mean'),
+                "seen_in_scales_of_sigma": tr.get('seen_in_scales_of_sigma')
+            }
+            for tr in state.get('cleaned_troughs', [])[:15]
+        ]
+        trough_json = json.dumps(trough_info, ensure_ascii=False)
         rule_analysis = "\n\n".join(str(item) for item in state['rule_analysis_QSO'])
         a = state["pixel_to_value"]["x"]["a"]
         rms = state["pixel_to_value"]["x"]["rms"]
@@ -1909,6 +2028,28 @@ class SpectralRefinementAssistant(BaseAgent):
 
 该光谱的波长范围是{state['spectrum']['new_wavelength'][0]} Å 到 {state['spectrum']['new_wavelength'][-1]} Å。
 """
+        band_name = state['band_name']
+        band_wavelength = state['band_wavelength']
+        if band_name: 
+            overlap_regions = find_overlap_regions(band_name, band_wavelength)
+            wws = np.max([wp.get('width_mean') for wp in state.get('wiped_peaks', [])[:5]])
+            for key in overlap_regions:
+                range = overlap_regions[key]
+                overlap_regions[key] = [range[0]-wws, range[1]+wws] # Broaden the overlap regions to make sure LLM won't miss them
+            overlap_regions_json = json.dumps(overlap_regions, ensure_ascii=False)
+            wiped = [
+                {
+                    "wavelength": wp.get('wavelength'),
+                    "flux": wp.get('mean_flux'),
+                    "width": wp.get('width_mean'),
+                    # "seen_in_scales_of_sigma": wp.get('seen_in_scales_of_sigma')
+                }
+                for wp in state.get('wiped_peaks', [])[:5]
+            ]
+            wiped_json = json.dumps(wiped, ensure_ascii=False)
+            advanced = f"""如果报告中的峰值落在以下区间附近\n    {overlap_regions_json}\n则峰值可能被当作噪声信号清除。这些峰值是：\n      {wiped_json}\n请注意考察这些峰值作为 C IV 或 C III] 的可能性"""
+        else:
+            advanced = ""
 
         prompt_2 = f"""
 
@@ -1927,7 +2068,7 @@ class SpectralRefinementAssistant(BaseAgent):
         tolerance: int = {tolerence},     
         rms_lambda = {rms}: float 
 """
-        return prompt_1 + prompt_2
+        return prompt_1 + advanced + prompt_2
 
     async def refine(self, state: SpectroState):
         system_prompt = self._common_prompt_header(state)

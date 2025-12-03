@@ -310,39 +310,122 @@ def _process_and_extract_curve_points(input_path: str):
     # 返回曲线点数量（简化信息）
     return curve_points, curve_gray_values
 
-def weighted_average_flux(wavelength, flux, gray):
+# def weighted_average_flux(wavelength, flux, gray):
+#     """
+#     根据灰度值对同一波长的flux进行加权平均。
+
+#     参数：
+#     - wavelength: 一维数组，表示波长
+#     - flux: 一维数组，表示光谱强度（flux）
+#     - gray: 一维数组，表示每个像素的灰度值（权重）
+
+#     返回：
+#     - unique_wavelength: 每个唯一波长的数组
+#     - weighted_flux: 每个波长对应的加权平均flux值
+#     """
+#     df = pd.DataFrame({
+#         'wavelength': wavelength,
+#         'flux': flux,
+#         'gray': gray
+#     })
+
+#     # 对每个唯一的波长进行加权平均
+#     weighted_flux = df.groupby('wavelength', group_keys=False).apply(
+#         # lambda x: np.sum(x['flux'] * x['gray']) / np.sum(x['gray']),
+#         lambda x: np.average(x['flux']),
+#         include_groups=False
+#     )
+
+#     unique_wavelength = weighted_flux.index.to_numpy()
+#     return unique_wavelength, weighted_flux.to_numpy()
+
+# def _convert_to_spectrum(points, gray, axis_fitting_info):
+#     """
+#     转换曲线的像素坐标信息到波长（wavelength）和光谱强度（flux），
+#     并根据灰度值对同一波长的flux进行加权平均。
+
+#     输入：
+#     - points: 曲线像素坐标，形状为 (n, 2) 的数组，第一列为 x 坐标，第二列为 y 坐标
+#     - gray: 灰度值，形状为 (n,) 的数组，表示每个像素的灰度值（权重）
+#     - x_axis: x 轴像素到物理量的转换系数，字典形式 {'a': x_scale, 'b': x_offset}
+#     - y_axis: y 轴像素到物理量的转换系数，字典形式 {'a': y_scale, 'b': y_offset}
+
+#     输出：
+#     - spectrum_dict: 包含转换后的波长、flux 和加权平均后的波长与flux的字典
+#     """
+#     # 提取坐标
+#     points = np.array(points)
+#     xs = points[:, 0]
+#     ys = points[:, 1]
+
+#     # 提取 x 轴和 y 轴的物理量转换系数
+#     a_y = axis_fitting_info['y']['a']
+#     b_y = axis_fitting_info['y']['b']
+#     flux = a_y * ys + b_y
+
+#     a_x = axis_fitting_info['x']['a']
+#     b_x = axis_fitting_info['x']['b']
+#     wavelength = a_x * xs + b_x
+
+#     # 计算加权平均flux
+#     unique_wavelength, weighted_flux = weighted_average_flux(wavelength, flux, gray)
+
+#     max_unresolved_flux = []
+#     min_unresolved_flux = []
+#     for i, w in enumerate(unique_wavelength):
+#         unresolved_flux = flux[wavelength == w]
+#         max_unresolved_flux.append(np.max(unresolved_flux))
+#         min_unresolved_flux.append(np.min(unresolved_flux))
+    
+#     denominator = np.array(max_unresolved_flux) - np.array(min_unresolved_flux)
+#     effective_snr = np.where(
+#         denominator != 0,
+#         np.array(weighted_flux) / denominator,
+#         np.nan  # 或 np.nan，取决于你希望如何表示“无效 SNR”
+#     )
+#     # effective_snr = np.array(weighted_flux.tolist())/(np.array(max_unresolved_flux) - np.array(min_unresolved_flux))
+
+#     # 构造最终结果
+#     spectrum_dict = {
+#         'flux': flux.tolist(),
+#         'wavelength': wavelength.tolist(),
+#         'unique_wavelength': unique_wavelength.tolist(),
+#         'weighted_flux': weighted_flux.tolist(),
+#         'max_unresolved_flux': max_unresolved_flux,
+#         'min_unresolved_flux': min_unresolved_flux, 
+#         'effective_snr': effective_snr
+#     }
+
+#     return spectrum_dict
+
+def average_flux_by_wavelength(wavelength, flux):
     """
-    根据灰度值对同一波长的flux进行加权平均。
+    对同一波长的flux进行简单平均。
 
     参数：
     - wavelength: 一维数组，表示波长
     - flux: 一维数组，表示光谱强度（flux）
-    - gray: 一维数组，表示每个像素的灰度值（权重）
 
     返回：
-    - new_wavelength: 每个唯一波长的数组
-    - weighted_flux: 每个波长对应的加权平均flux值
+    - unique_wavelength: 每个唯一波长的数组
+    - mean_flux: 每个波长对应的平均flux值
     """
     df = pd.DataFrame({
         'wavelength': wavelength,
-        'flux': flux,
-        'gray': gray
+        'flux': flux
     })
 
-    # 对每个唯一的波长进行加权平均
-    weighted_flux = df.groupby('wavelength', group_keys=False).apply(
-        # lambda x: np.sum(x['flux'] * x['gray']) / np.sum(x['gray']),
-        lambda x: np.average(x['flux']),
-        include_groups=False
-    )
+    # 对每个唯一的波长进行简单平均
+    mean_flux = df.groupby('wavelength', group_keys=False)['flux'].mean()
 
-    unique_wavelength = weighted_flux.index.to_numpy()
-    return unique_wavelength, weighted_flux.to_numpy()
+    unique_wavelength = mean_flux.index.to_numpy()
+    return unique_wavelength, mean_flux.to_numpy()
+
 
 def _convert_to_spectrum(points, gray, axis_fitting_info):
     """
     转换曲线的像素坐标信息到波长（wavelength）和光谱强度（flux），
-    并根据灰度值对同一波长的flux进行加权平均。
+    并对同一波长的flux进行平均。
 
     输入：
     - points: 曲线像素坐标，形状为 (n, 2) 的数组，第一列为 x 坐标，第二列为 y 坐标
@@ -351,7 +434,7 @@ def _convert_to_spectrum(points, gray, axis_fitting_info):
     - y_axis: y 轴像素到物理量的转换系数，字典形式 {'a': y_scale, 'b': y_offset}
 
     输出：
-    - spectrum_dict: 包含转换后的波长、flux 和加权平均后的波长与flux的字典
+    - spectrum_dict: 包含转换后的波长、flux 和平均后的波长与flux的字典
     """
     # 提取坐标
     points = np.array(points)
@@ -367,33 +450,53 @@ def _convert_to_spectrum(points, gray, axis_fitting_info):
     b_x = axis_fitting_info['x']['b']
     wavelength = a_x * xs + b_x
 
-    # 计算加权平均flux
-    unique_wavelength, weighted_flux = weighted_average_flux(wavelength, flux, gray)
+    # 计算每个波长的平均flux
+    unique_wavelength, mean_flux = average_flux_by_wavelength(wavelength, flux)
 
     max_unresolved_flux = []
     min_unresolved_flux = []
-    for i, w in enumerate(unique_wavelength):
+    std_flux = []  # 存储每个波长的标准差
+    
+    # 计算每个波长的统计量
+    for w in unique_wavelength:
         unresolved_flux = flux[wavelength == w]
         max_unresolved_flux.append(np.max(unresolved_flux))
         min_unresolved_flux.append(np.min(unresolved_flux))
+        
+        # 计算标准差
+        if len(unresolved_flux) > 1:
+            # 使用无偏估计（除以 n-1）计算样本标准差
+            std_val = np.std(unresolved_flux, ddof=1)
+        else:
+            # 如果只有一个数据点，标准差设为 0
+            std_val = 0.0
+        std_flux.append(std_val)
     
-    denominator = np.array(max_unresolved_flux) - np.array(min_unresolved_flux)
-    effective_snr = np.where(
-        denominator != 0,
-        np.array(weighted_flux) / denominator,
-        np.nan  # 或 np.nan，取决于你希望如何表示“无效 SNR”
+    # 计算 delta_flux
+    delta_flux = np.array(max_unresolved_flux) - np.array(min_unresolved_flux)
+    
+    # 计算信噪比 SNR = mean / std
+    # 处理标准差为0的情况（当所有值相同时）
+    snr = np.where(
+        np.array(std_flux) != 0,
+        mean_flux / np.array(std_flux),
+        np.inf  # 如果标准差为0，SNR为无穷大
     )
-    # effective_snr = np.array(weighted_flux.tolist())/(np.array(max_unresolved_flux) - np.array(min_unresolved_flux))
+    
+    # 将无穷大值替换为一个大数（可选）
+    # snr[snr == np.inf] = 1e6
 
     # 构造最终结果
     spectrum_dict = {
         'flux': flux.tolist(),
         'wavelength': wavelength.tolist(),
         'new_wavelength': unique_wavelength.tolist(),
-        'weighted_flux': weighted_flux.tolist(),
+        'weighted_flux': mean_flux.tolist(),
         'max_unresolved_flux': max_unresolved_flux,
-        'min_unresolved_flux': min_unresolved_flux, 
-        'effective_snr': effective_snr
+        'min_unresolved_flux': min_unresolved_flux,
+        'delta_flux': delta_flux.tolist(),
+        'std_flux': std_flux,
+        'effective_snr': snr.tolist()
     }
 
     return spectrum_dict
@@ -746,7 +849,7 @@ def _find_features_multiscale(
         #     continuum = gaussian_filter1d(flux, sigma=300)
 
         sigma_list = [0] + sigma_list  # 原始光谱权重最高
-        print(f"Using sigma list: {sigma_list}")
+        # print(f"Using sigma list: {sigma_list}")
 
         peaks_by_sigma = []
         for s in sigma_list:
@@ -1138,7 +1241,7 @@ def _process_feature_type(wavelength, flux, global_list, roi_list, tol_pixels, f
     except Exception as e:
         logging.error(f"Error in _process_feature_type: {e}")
 
-def plot_merged_features(state):
+def plot_cleaned_features(state):
     sigma_list, _, _, _, _, plot_peaks, plot_troughs = _load_feature_params()
     fig = plt.figure(figsize=(10,3))
     spec = state["spectrum"]
@@ -1154,9 +1257,13 @@ def plot_merged_features(state):
     troughs_to_plot = min(plot_troughs, len(state['cleaned_troughs']))
     for peak_ in state['cleaned_peaks'][:peaks_to_plot]:
         plt.axvline(peak_['wavelength'], linestyle='-', c='red', alpha=0.5)
+        # 添加text：peak_['wavelength']
+        plt.text(peak_['wavelength'], 1.1, f'{peak_["wavelength"]:.2f}', rotation=90, verticalalignment='bottom', horizontalalignment='center')
     for trough_ in state['cleaned_troughs'][:troughs_to_plot]:
         if trough_['wavelength'] > 0:
             plt.axvline(trough_['wavelength'], linestyle=':', c='blue', alpha=0.5)
+            # 添加text：trough_['wavelength']
+            plt.text(trough_['wavelength'], 1.1, f'{trough_["wavelength"]:.2f}', rotation=90, verticalalignment='bottom', horizontalalignment='center')
 
     plt.plot([], [], linestyle='-', c='red', alpha=0.5, label='peaks')
     plt.plot([], [], linestyle=':', c='blue', alpha=0.5, label='troughs')  # 注意：图例颜色与实际线条颜色的一致性
@@ -1168,6 +1275,7 @@ def plot_merged_features(state):
 
     # savefig_unique(fig, os.path.join(state['output_dir'], f'{state['image_name']}_features.png'))
     fig.savefig(os.path.join(state['output_dir'], f'{state['image_name']}_features.png'), bbox_inches='tight')
+    plt.close(fig)
 
 def find_overlap_regions(band_names, band_wavelengths):
     """

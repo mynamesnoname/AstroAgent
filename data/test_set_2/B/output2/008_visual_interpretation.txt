@@ -1,0 +1,33 @@
+{
+  "continuum_description": {
+    "shape": "拱形，蓝端较低，红端逐渐升高至峰值后下降",
+    "features": "类似黑体辐射的特征，无明显断裂"
+  },
+  "lines_description": {
+    "dominant_line_type": "窄线",
+    "asymmetric_peaks_wavelength": null
+  },
+  "SNR_description": {
+    "overall_SNR": "较低",
+    "signal_characteristics": "信号波动明显且背景噪声较大",
+    "unreliable_wavelength_ranges": [
+      [
+        3500,
+        3800
+      ],
+      [
+        5700,
+        5900
+      ],
+      [
+        7500,
+        7700
+      ],
+      [
+        9200,
+        9400
+      ]
+    ],
+    "note": "粉红区域在上述波长范围相对蓝色信号更明显，表明数据不可靠"
+  }
+}
