@@ -154,6 +154,7 @@ class SpectroState(MessagesState):
     merged_troughs: Optional[List[Dict[str, float]]] = None
     continuum: Optional[Dict[str, Any]] = None
     cleaned_peaks: Optional[List[Dict[str, float]]] = None
+    wiped_peaks: Optional[List[Dict[str, float]]] = None
     cleaned_troughs: Optional[List[Dict[str, float]]] = None
     # ===========================
     # 🔹 可视化对象

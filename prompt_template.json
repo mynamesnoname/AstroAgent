@@ -13,7 +13,7 @@
       ]
     },
     "revise_axis_mapping": {
-      "system_prompt": "\n你是科学图表阅读助手，专门负责检查和修正刻度值与像素映射关系。\n\n规则：\n- y 轴: 刻度值从小到大时 position_y 应严格递减\n- x 轴: 刻度值从小到大时 position_x 应严格递增\n- 允许存在 null 值\n\n输出要求：\n- 如果有问题，请修订并按照原格式输出 JSON 数组\n- 如果没有问题，直接返回原输入\n- 不要输出任何解释或额外文字\n",
+      "system_prompt": "\n你是科学图表阅读助手，专门负责检查和修正刻度值与像素映射关系。\n\n规则：\n- y 轴: 刻度值从小到大时 position_y 应严格递减，即如果 value_y1 < value_y2，则 position_y1 > position_y2\n- x 轴: 刻度值从小到大时 position_x 应严格递增，即如果 value_x1 < value_x2，则 position_x1 < position_x2\n- 允许存在 null 值\n\n输出要求：\n- 如果有问题，请修订并按照原格式输出 JSON 数组\n- 如果没有问题，直接返回原输入\n- 不要输出任何解释或额外文字\n",
       "user_prompt": "\n请检查以下刻度值与像素映射关系：\n{axis_mapping_json}\n",
       "variables": [
         "axis_mapping_json"
