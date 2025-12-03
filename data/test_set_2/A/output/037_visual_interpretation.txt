@@ -1,0 +1,20 @@
+{
+  "continuum_description": {
+    "overall_trend": "蓝端增强，红端减弱，呈现拱形特征",
+    "spectrum_type": "类似于幂律谱",
+    "breaks_or_features": "没有明显断裂"
+  },
+  "lines_description": {
+    "dominant_line_type": "窄线",
+    "asymmetric_peaks_wavelength": null
+  },
+  "SNR_description": {
+    "overall_SNR": "低",
+    "low_SNR_regions": "尤其在短波长区域",
+    "unreliable_wavelength_ranges": [
+      "3500-4000 Å",
+      "9200-9800 Å"
+    ],
+    "note": "粉红区域在上述波长范围内相对蓝色信号更加明显，表明这些波长范围的数据不可靠"
+  }
+}

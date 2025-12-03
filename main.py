@@ -119,7 +119,7 @@ async def main():
             csv_path = os.path.join(output_dir, 'in_brief.csv')
             with open(csv_path, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
-                writer.writerow(['image_name', 'type', 'redshift', 'rms'])
+                writer.writerow(['image_name', 'type', 'redshift', 'rms', 'human'])
                 writer.writerows(collect)
 
         logging.info("🎉 所有任务已完成")

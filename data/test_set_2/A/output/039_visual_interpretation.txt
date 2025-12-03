@@ -1,0 +1,32 @@
+{
+  "continuum_description": {
+    "shape": "拱形",
+    "blue_end": "下降",
+    "red_end": "下降",
+    "peak_wavelength": 5500,
+    "resembles": "黑体辐射",
+    "discontinuities": "无明显断裂"
+  },
+  "lines_description": {
+    "dominant_line_type": "窄线",
+    "asymmetric_peaks_wavelength": null
+  },
+  "SNR_description": {
+    "overall": "低",
+    "unreliable_regions": [
+      {
+        "start": 3500,
+        "end": 3800
+      },
+      {
+        "start": 5700,
+        "end": 5900
+      },
+      {
+        "start": 7500,
+        "end": 7700
+      }
+    ],
+    "note": "粉红区明显覆盖蓝色信号，数据不可靠"
+  }
+}
