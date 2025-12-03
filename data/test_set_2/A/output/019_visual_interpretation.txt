@@ -1,0 +1,35 @@
+{
+  "continuum_description": {
+    "shape": "拱形",
+    "red_end": "增强",
+    "blue_end": "较弱",
+    "spectral_type": "幂律谱",
+    "breaks": "无明显断裂"
+  },
+  "lines_description": {
+    "dominant_line_type": "窄线",
+    "asymmetric_peaks_wavelength": null
+  },
+  "SNR_description": {
+    "overall_SNR": "较低",
+    "blue_signal": "在大部分波长范围内波动较小且接近基线",
+    "unreliable_regions": [
+      {
+        "range": "3500-3800 Å",
+        "color": "粉红"
+      },
+      {
+        "range": "5700-5900 Å",
+        "color": "粉红"
+      },
+      {
+        "range": "7500-7700 Å",
+        "color": "粉红"
+      },
+      {
+        "range": "9200-9400 Å",
+        "color": "粉红"
+      }
+    ]
+  }
+}

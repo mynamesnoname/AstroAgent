@@ -1,0 +1,30 @@
+{
+  "continuum_description": {
+    "overall_trend": "蓝端增强，红端减弱，呈现拱形特征",
+    "spectrum_type": "类似于幂律谱",
+    "breaks_or_features": "无明显断裂"
+  },
+  "lines_description": {
+    "dominant_line_type": "宽线",
+    "asymmetric_peaks_wavelength": [
+      4300.0
+    ]
+  },
+  "SNR_description": {
+    "overall_snr": "信噪比较低",
+    "weak_signal_regions": [
+      "长波段（>7000 Å）信号微弱且噪声明显"
+    ],
+    "unreliable_wavelength_ranges": [
+      [
+        3500,
+        4000
+      ],
+      [
+        9000,
+        9800
+      ]
+    ],
+    "note": "粉红区域在3500–4000 Å和9000–9800 Å范围内相对蓝色信号更加明显，表明这些波长范围的数据不可靠"
+  }
+}

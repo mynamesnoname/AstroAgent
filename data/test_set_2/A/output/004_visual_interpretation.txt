@@ -1,0 +1,47 @@
+{
+  "continuum_description": {
+    "shape": "拱形，蓝端增强、红端减弱",
+    "type": "类似幂律谱",
+    "breaks": "未观察到明显断裂"
+  },
+  "lines_description": {
+    "dominant_line_type": "宽线",
+    "asymmetric_peaks_wavelength": [
+      4050.0,
+      5300.0
+    ]
+  },
+  "SNR_description": {
+    "overall_snr": "低",
+    "noisy_regions": [
+      {
+        "wavelength_range": [
+          3500,
+          3800
+        ],
+        "note": "粉红区域，数据不可靠"
+      },
+      {
+        "wavelength_range": [
+          4000,
+          4200
+        ],
+        "note": "显著噪声，粉红区域，数据不可靠"
+      },
+      {
+        "wavelength_range": [
+          5500,
+          6000
+        ],
+        "note": "粉红区域，数据不可靠"
+      },
+      {
+        "wavelength_range": [
+          9000,
+          9700
+        ],
+        "note": "粉红区域，数据不可靠"
+      }
+    ]
+  }
+}

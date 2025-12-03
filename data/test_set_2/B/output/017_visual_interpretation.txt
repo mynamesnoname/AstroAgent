@@ -1,0 +1,25 @@
+{
+  "continuum_description": {
+    "shape": "拱形趋势，蓝端和红端通量较高，中间波段（约7000 Å）通量最低",
+    "features": "平滑的凹形曲线，无明显断裂或突变",
+    "classification": "不符合典型黑体辐射、幂律谱或平坦谱特征"
+  },
+  "lines_description": {
+    "dominant_line_type": "窄线",
+    "asymmetric_peaks_wavelength": null
+  },
+  "SNR_description": {
+    "overall_quality": "信噪比较低",
+    "low_SNR_ranges": [
+      "3500-4000 Å",
+      "8500-9500 Å"
+    ],
+    "unreliable_ranges": [
+      "3500-4000 Å",
+      "5500-6000 Å",
+      "7500-8000 Å",
+      "8500-9500 Å"
+    ],
+    "note": "粉红区域在上述波长范围相对蓝色信号更明显，表明数据不可靠"
+  }
+}

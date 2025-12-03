@@ -1,8 +1,8 @@
 {
   "continuum_description": {
-    "shape": "拱形，蓝端增强、红端减弱",
-    "type": "类似幂律谱",
-    "breaks": "无明显断裂"
+    "overall_trend": "蓝端增强，红端减弱，呈现拱形下降特征",
+    "spectrum_type": "类似于幂律谱",
+    "breaks_or_features": "无明显断裂"
   },
   "lines_description": {
     "dominant_line_type": "宽线",
@@ -11,7 +11,7 @@
     ]
   },
   "SNR_description": {
-    "overall": "低",
+    "overall_snr": "低",
     "low_snr_regions": [
       {
         "range": [
@@ -51,6 +51,6 @@
         "unit": "Å"
       }
     ],
-    "note": "粉红区域在上述波长范围内相对蓝色信号更明显，表明数据不可靠"
+    "note": "粉红区在上述波长范围内相对蓝色信号更加明显，表明这些波长范围的数据不可靠"
   }
 }

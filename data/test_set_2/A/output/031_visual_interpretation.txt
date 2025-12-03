@@ -1,0 +1,8 @@
+{
+  "continuum_description": "整体趋势为蓝端增强，红端减弱，呈现拱形下降特征。该连续谱类似于幂律谱，无明显断裂。",
+  "lines_description": {
+    "dominant_line_type": "窄线",
+    "asymmetric_peaks_wavelength": null
+  },
+  "SNR_description": "信噪比低，尤其在波长3500-4000和9000-10000区域，粉红区明显覆盖蓝色信号，表明这些区域数据不可靠。"
+}

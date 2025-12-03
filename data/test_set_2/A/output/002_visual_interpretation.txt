@@ -2,7 +2,7 @@
   "continuum_description": {
     "overall_trend": "蓝端增强，红端减弱，呈现拱形特征",
     "spectrum_type": "类似于幂律谱",
-    "breaks_or_features": "没有明显断裂"
+    "breaks_or_features": "无明显断裂"
   },
   "lines_description": {
     "dominant_line_type": "窄线",
@@ -10,11 +10,11 @@
   },
   "SNR_description": {
     "overall_snr": "信噪比较低",
-    "low_snr_regions": [
+    "low_snr_ranges": [
       "3500-4000",
       "9000-10000"
     ],
-    "unreliable_regions": [
+    "unreliable_ranges": [
       "3500-4000",
       "5500-6000",
       "9000-10000"

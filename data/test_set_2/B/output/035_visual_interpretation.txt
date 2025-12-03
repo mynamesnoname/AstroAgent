@@ -1,0 +1,33 @@
+{
+  "continuum_description": {
+    "shape": "拱形，蓝端增强、红端减弱",
+    "type": "类似幂律谱",
+    "breaks": "未观察到明显断裂"
+  },
+  "lines_description": {
+    "dominant_line_type": "宽线",
+    "asymmetric_peaks_wavelength": [
+      3900.0
+    ]
+  },
+  "SNR_description": {
+    "overall": "低",
+    "low_snr_regions": [
+      {
+        "range": [
+          3500,
+          4000
+        ],
+        "unit": "Å"
+      },
+      {
+        "range": [
+          4800,
+          5200
+        ],
+        "unit": "Å"
+      }
+    ],
+    "reliability_note": "粉红区在3500-4000 Å和4800-5200 Å范围内相对蓝色信号更加明显，表明这些波长范围的数据不可靠"
+  }
+}
