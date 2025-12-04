@@ -1,0 +1,44 @@
+{
+  "continuum_description": {
+    "shape": "拱形，蓝端和红端较高，中间在6000 Å附近出现最低点",
+    "characteristics": "不似黑体或幂律谱，具有明显的凹陷特征，可能与吸收或发射过程有关，但无明显断裂"
+  },
+  "lines_description": {
+    "dominant_line_type": "窄线",
+    "asymmetric_peaks_wavelength": null
+  },
+  "SNR_description": {
+    "overall_quality": "信噪比较低，信号波动明显且整体较弱",
+    "unreliable_regions": [
+      {
+        "range": [
+          3500,
+          3800
+        ],
+        "unit": "Å"
+      },
+      {
+        "range": [
+          5600,
+          5700
+        ],
+        "unit": "Å"
+      },
+      {
+        "range": [
+          7500,
+          7700
+        ],
+        "unit": "Å"
+      },
+      {
+        "range": [
+          9200,
+          9400
+        ],
+        "unit": "Å"
+      }
+    ],
+    "note": "粉红区域在上述波长范围相对蓝色信号更加明显，表明数据不可靠"
+  }
+}

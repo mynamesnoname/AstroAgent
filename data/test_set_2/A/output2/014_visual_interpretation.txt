@@ -1,0 +1,24 @@
+{
+  "continuum_description": {
+    "overall_shape": "拱形，蓝端和红端均下降",
+    "peak_location": "约6000 Å",
+    "characteristics": "类似于黑体辐射，具有明显的峰值，但无明显断裂"
+  },
+  "lines_description": {
+    "dominant_line_type": "窄线",
+    "asymmetric_peaks_wavelength": null
+  },
+  "SNR_description": {
+    "overall_snr": "较低",
+    "low_snr_regions": [
+      "4000-4500 Å",
+      "7500-8000 Å"
+    ],
+    "unreliable_regions": [
+      "4000-4500 Å",
+      "7500-8000 Å",
+      "9000-10000 Å"
+    ],
+    "note": "粉红区域在上述波长范围内相对蓝色信号更加明显，表明这些区域数据不可靠"
+  }
+}

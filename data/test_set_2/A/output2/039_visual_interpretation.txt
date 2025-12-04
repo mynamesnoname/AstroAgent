@@ -1,0 +1,27 @@
+{
+  "continuum_description": {
+    "shape": "拱形，蓝端和红端均下降",
+    "peak_wavelength": 5500,
+    "spectral_type": "接近平坦谱但有轻微起伏，不像黑体或幂律谱",
+    "discontinuities": "无明显断裂"
+  },
+  "lines_description": {
+    "dominant_line_type": "窄线",
+    "asymmetric_peaks_wavelength": null
+  },
+  "SNR_description": {
+    "overall_SNR": "低",
+    "reliable_regions": "大部分波长范围（除粉红区域外）",
+    "unreliable_regions": [
+      3500,
+      3800,
+      5700,
+      5900,
+      7500,
+      7700,
+      9200,
+      9500
+    ],
+    "notes": "粉红区域在约3500-3800 Å、5700-5900 Å、7500-7700 Å和9200-9500 Å处相对蓝色信号更加明显，表明这些波长范围的数据不可靠"
+  }
+}

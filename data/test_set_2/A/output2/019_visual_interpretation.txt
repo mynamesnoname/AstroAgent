@@ -1,0 +1,36 @@
+{
+  "continuum_description": {
+    "shape": "拱形",
+    "red_end": "增强",
+    "blue_end": "较弱",
+    "type": "幂律谱",
+    "breaks": "无明显断裂"
+  },
+  "lines_description": {
+    "dominant_line_type": "窄线",
+    "asymmetric_peaks_wavelength": null
+  },
+  "SNR_description": {
+    "overall_snr": "较低",
+    "signal_characteristics": "信号波动明显且背景噪声较大",
+    "unreliable_regions": [
+      {
+        "start": 3500,
+        "end": 3800
+      },
+      {
+        "start": 5700,
+        "end": 5900
+      },
+      {
+        "start": 7500,
+        "end": 7700
+      },
+      {
+        "start": 9200,
+        "end": 9400
+      }
+    ],
+    "note": "粉红区域在上述波长范围内相对蓝色信号更加明显，数据不可靠"
+  }
+}
