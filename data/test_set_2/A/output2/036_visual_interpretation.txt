@@ -1,0 +1,57 @@
+{
+  "continuum_description": {
+    "shape": "拱形下降",
+    "trend": "蓝端增强、红端减弱",
+    "type": "幂律谱",
+    "breaks": "无明显断裂"
+  },
+  "lines_description": {
+    "dominant_line_type": "宽线",
+    "asymmetric_peaks_wavelength": [
+      4300.0
+    ]
+  },
+  "SNR_description": {
+    "overall": "信噪比较低",
+    "low_SNR_regions": [
+      {
+        "range": [
+          3500,
+          4000
+        ],
+        "unit": "Å"
+      },
+      {
+        "range": [
+          9000,
+          9800
+        ],
+        "unit": "Å"
+      }
+    ],
+    "unreliable_regions": [
+      {
+        "range": [
+          3500,
+          4000
+        ],
+        "unit": "Å"
+      },
+      {
+        "range": [
+          5500,
+          5700
+        ],
+        "unit": "Å"
+      },
+      {
+        "range": [
+          9000,
+          9800
+        ],
+        "unit": "Å"
+      }
+    ],
+    "note": "粉红区域在上述波长范围相对蓝色信号更明显，表明数据不可靠"
+  }
+}

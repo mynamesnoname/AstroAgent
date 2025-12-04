@@ -1,0 +1,34 @@
+{
+  "continuum_description": {
+    "shape": "拱形，从蓝端到红端逐渐增强，且在红端趋于平缓",
+    "type": "类似于幂律谱",
+    "breaks": "无明显断裂"
+  },
+  "lines_description": {
+    "dominant_line_type": "窄线",
+    "asymmetric_peaks_wavelength": null
+  },
+  "SNR_description": {
+    "overall_quality": "信噪比较低",
+    "noise_characteristics": "信号波动明显且背景噪声较大",
+    "unreliable_wavelength_ranges": [
+      [
+        3500,
+        3800
+      ],
+      [
+        5600,
+        5800
+      ],
+      [
+        7500,
+        7700
+      ],
+      [
+        9200,
+        9400
+      ]
+    ],
+    "note": "粉红区域在上述波长范围相对蓝色信号更加明显，表明数据不可靠"
+  }
+}
