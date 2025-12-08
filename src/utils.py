@@ -121,7 +121,7 @@ def _detect_axis_ticks(image_path, config=None):
 
     return tick_values
 
-def _detect_chart_border(image_path: str, margin: int = 10) -> dict:
+def _detect_chart_border(image_path: str, margin: List = [10, 10, 10, 10]) -> dict:
     """
     检测图像中图表的外围边框，并微调尺寸。
     
@@ -156,10 +156,10 @@ def _detect_chart_border(image_path: str, margin: int = 10) -> dict:
     x, y, w, h = cv2.boundingRect(contours[0])
     
     # 微调边框
-    x += margin
-    y += margin
-    w -= 2*margin
-    h -= 2*margin
+    x += margin[0]
+    y += margin[1]
+    w -= (margin[0]+margin[2])
+    h -= (margin[1]+margin[3])
 
     return {"x": x, "y": y, "w": w, "h": h}
 
