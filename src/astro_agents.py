@@ -2,6 +2,7 @@ import json
 import os
 import numpy as np
 import matplotlib.pyplot as plt
+import logging
 
 from scipy.ndimage import gaussian_filter1d
 
@@ -254,6 +255,7 @@ class SpectralVisualInterpreter(BaseAgent):
             description="刻度-像素映射"
         )
         state["tick_pixel_raw"] = tick_pixel_raw
+        print(tick_pixel_raw)
 
     # --------------------------
     # Step 1.4: 校验与修正
@@ -280,6 +282,49 @@ class SpectralVisualInterpreter(BaseAgent):
     # --------------------------
     # Step 1.5 图像裁剪
     # --------------------------
+
+    async def check_border(self, state):
+        system_prompt = """
+你是一个专业的科学图表分析助手，专注于处理天文学领域的 matplotlib 光谱图。你具备识别图像边缘是否残留坐标轴边框或装饰性直线的能力，并能基于视觉内容做出精准判断。
+"""
+        user_prompt = """
+你将接收到两张图像：
+- 一张是原始光谱图像，可能带有绘图边框。
+- 一张是经过 OCR 与 OpenCV 预处理后的 matplotlib 天文学光谱图。已尝试裁剪掉原始图表的边框及其外部区域。
+
+请判断图像四条边缘（上、右、下、左）是否仍残留有明显的直线型边框痕迹（例如：长而直的黑色或深色线段，通常为坐标轴外框的一部分）。
+
+判断标准：
+- 如果某一边缘**完全看不到**此类直线段，则视为“裁剪干净”。
+- 如果某一边缘**仍可见**明显的直线段（即使很细），则视为“未裁剪干净”。
+
+请严格按以下 JSON 格式输出结果，仅包含四个键，值必须为字符串 'true'（表示干净）或 'false'（表示不干净）：
+
+{
+    "top": "true" or "false",
+    "right": "true" or "false",
+    "bottom": "true" or "false",
+    "left": "true" or "false"
+}
+
+不要输出其他内容。
+"""
+        response = await self.call_llm_with_context(
+            system_prompt,
+            user_prompt,
+            image_path=[state['image_path'], state['crop_path']],
+            parse_json=True,
+            description='检查裁剪'
+        )
+        try:
+            response['top'] = safe_to_bool(response['top'])
+            response['right'] = safe_to_bool(response['right'])
+            response['bottom'] = safe_to_bool(response['bottom'])
+            response['left'] = safe_to_bool(response['left'])
+            return response
+        except:
+            logging.error(f"LLM 输出格式错误: {response}")
+
 
     async def peak_trough_detection(self, state: SpectroState):
         try:
@@ -384,8 +429,17 @@ class SpectralVisualInterpreter(BaseAgent):
             spec = state["spectrum"]
             wavelengths = np.array(spec["new_wavelength"])
             flux = np.array(spec["weighted_flux"])
-            # 使用高斯滤波进行简单的continuum拟合
-            continuum_flux = gaussian_filter1d(flux, sigma=300)
+            # mask = (wavelengths>4000) & (wavelengths<10000)
+            # if mask.any():  # 使用 .any() 而不是直接使用 mask
+            #     wavelengths = wavelengths[mask]
+            #     flux = flux[mask]
+            # # 使用高斯滤波进行简单的continuum拟合
+            sigma_contunuum = getenv_int('CONTINUUM_SMOOTHING_SIGMA', None)
+            print(f'CONTINUUM_SMOOTHING_SIGMA: {sigma_contunuum}')
+            if sigma_contunuum == None:
+                logging.error("CONTINUUM_SMOOTHING_SIGMA 未设置")
+                return
+            continuum_flux = gaussian_filter1d(flux, sigma=sigma_contunuum)
             state['continuum'] = {
                 'wavelength': wavelengths.tolist(),
                 'flux': continuum_flux.tolist()
@@ -404,18 +458,37 @@ class SpectralVisualInterpreter(BaseAgent):
             await self.detect_axis_ticks(state)
             # Step 1.2: OCR 提取刻度
             state["OCR_detected_ticks"] = _detect_axis_ticks(state['image_path'])
+            print(state["OCR_detected_ticks"])
             # Step 1.3: 合并
             await self.combine_axis_mapping(state)
             # Step 1.4: 修正
             await self.revise_axis_mapping(state)
             # Step 1.5: 边框检测与裁剪
-            box_new = []
-            state['margin'] = [10, 10, 10, 10]
-            while box_new is not None:
+            state['margin'] = {
+                'top': 20,
+                'right': 10,
+                'bottom': 15,
+                'left': 10,
+            }
+            stop = False
+            while stop is False:
                 state["chart_border"] = _detect_chart_border(state['image_path'], state['margin'])
                 _crop_img(state['image_path'], state["chart_border"], state['crop_path'])
-                # box_new = await self.check_crop(state)
+                box_new = await self.check_border(state)
+                values = [box_new['top'], box_new['bottom'], box_new['left'], box_new['right']]
+                margin = [state['margin']['top'], state['margin']['right'], state['margin']['bottom'], state['margin']['left']] 
+                if all(values):  # 所有都是 True（非零/非False）
+                    stop = True
+                elif any(m > 30 for m in margin):
+                    stop = True
+                else:
+                    for k, v in box_new.items():
+                        if v == True:
+                            state['margin'][k] = state['margin'][k]
+                        else:
+                            state['margin'][k] = state['margin'][k] + 2
                 print(f"box_new: {box_new}")
+                print(f"margin: {state['margin']}")
 
             # Step 1.6: 重映射像素
             state["tick_pixel_remap"] = _remap_to_cropped_canvas(state['tick_pixel_raw'], state["chart_border"])
@@ -596,7 +669,7 @@ Flux 误差：{delta_t_json}
                 parse_json=True,
                 description="视觉光谱定性描述——continuum"
             )
-
+            
             user_prompt_2 = function_prompt['_visual']['user_prompt_lines']
             response_2 = await self.call_llm_with_context(
                 system_prompt=system_prompt,
@@ -666,29 +739,44 @@ Flux 误差：{delta_t_json}
     async def preliminary_classification(self, state: SpectroState) -> str:
         """初步分类：根据光谱形态初步判断天体类型"""
 
-        visual_interpretation_json = json.dumps(state['visual_interpretation']['continuum_description'], ensure_ascii=False)
+        continuum_interpretation_json = json.dumps(state['visual_interpretation']['continuum_description'], ensure_ascii=False)
+        line_interpretation_json = json.dumps(state['visual_interpretation']['lines_description'], ensure_ascii=False)
+
         system_prompt = """
 你是一位经验丰富的天文学光谱分析助手。
 
 你的任务是根据光谱的定性描述和特征数据，猜测天体可能属于的类别。
 
-如果连续谱呈现蓝端较低，红端较高的趋势，则该天体为 Galaxy；
-如果连续谱呈现蓝端较高，红端较低的趋势，则该天体为 QSO。
+如果连续谱呈现蓝端较高，红端较低的趋势（即高→低），则该天体为 QSO；
+如果连续谱呈现蓝端较低，中段较高，红端下降的趋势（即低→高→低），则该天体为 QSO ；
+
+如果连续谱呈现蓝端较低，红端较高的趋势（即低→高），则该天体为 Galaxy ；
+
+比较两种光源的概率，给出你的选择。
 
 输出天体类别，格式为 json，格式如下：
 {
     'type': str,  # 天体类别，可能的取值为 "Galaxy", "QSO"
 }
-仅根据连续谱进行判断；仅输出唯一选项。不要输出其他信息。
+
+仅输出唯一选项。不要输出其他信息。
 """
         user_prompt = f"""
 请根据以下光谱数据进行分析：
 
 前一位天文学助手已经定性地描述了光谱的整体形态：
-{visual_interpretation_json}
+{continuum_interpretation_json}
 
-请根据描述，猜测该光谱可能属于哪一类天体。
+请根据描述和图像，猜测该光谱可能属于哪一类天体。
+"""+"""
+输出为 json，格式如下：
+{
+    'type': str,  # 天体类别，可能的取值为 "Galaxy", "QSO"
+}
 """
+#         user_prompt = f"""
+# 请根据图像，猜测该光谱可能属于哪一类天体。
+# """
         response = await self.call_llm_with_context(
             system_prompt = system_prompt,
             user_prompt = user_prompt,
@@ -707,10 +795,12 @@ Flux 误差：{delta_t_json}
 {preliminary_classification_json}
 
 请输出这份猜测里给出的光源类别。
-
-输出格式为数组 List[str]，数组的元素必须在 "Star", "Galaxy" 和 "QSO" 中选择。
-
-- 注意：即使只有一个满足条件的光源类别，也要以 List[str] 的格式输出。
+"""+"""
+格式为 json，格式如下：
+{
+    'type': str,  # 天体类别，可能的取值为 "Galaxy", "QSO"
+}
+不要输出其他内容
 """
         response = await self.call_llm_with_context(
             system_prompt = '',
@@ -724,135 +814,149 @@ Flux 误差：{delta_t_json}
     ###################################
     async def _QSO(self, state):
         """QSO"""
-        peaks_info = [
-            {
-                "wavelength": pe.get('wavelength'),
-                "flux": pe.get('mean_flux'),
-                "width": pe.get('width_mean'),
-                "width_in_km_s": pe.get('width_in_km_s'),
-                "prominance": pe.get('max_prominence'),
-                "seen_in_max_global_smoothing_scale_sigma": pe.get('max_global_sigma_seen', None),
-                "seen_in_max_local_smoothing_scale_sigma": pe.get('max_roi_sigma_seen', None),
-                "describe": pe.get('describe')
-            }
-            for pe in state.get('cleaned_peaks', [])[:15]
-        ]
-        peak_json = json.dumps(peaks_info, ensure_ascii=False)
+        try:
+            peaks_info = [
+                {
+                    "wavelength": pe.get('wavelength'),
+                    "flux": pe.get('mean_flux'),
+                    "width": pe.get('width_mean'),
+                    "width_in_km_s": pe.get('width_in_km_s'),
+                    "prominance": pe.get('max_prominence'),
+                    "seen_in_max_global_smoothing_scale_sigma": pe.get('max_global_sigma_seen', None),
+                    "seen_in_max_local_smoothing_scale_sigma": pe.get('max_roi_sigma_seen', None),
+                    "describe": pe.get('describe')
+                }
+                for pe in state.get('cleaned_peaks', [])[:15]
+            ]
+            peak_json = json.dumps(peaks_info, ensure_ascii=False)
 
-        # 初始化Lyα候选线列表
-        Lyalpha_candidate = []
+            # 初始化Lyα候选线列表
+            Lyalpha_candidate = []
 
-        # 获取光谱波长范围
-        wl_left = state['spectrum']['new_wavelength'][0]
-        wl_right = state['spectrum']['new_wavelength'][-1]
-        mid_wavelength = (wl_left + wl_right) / 2
+            # 获取光谱波长范围
+            wl_left = state['spectrum']['new_wavelength'][0]
+            wl_right = state['spectrum']['new_wavelength'][-1]
+            mid_wavelength = (wl_left + wl_right) / 2
 
-        # 筛选条件1：优先使用全局平滑尺度的信噪比
-        for peak in peaks_info:
-            # 检查是否在光谱蓝端（波长小于中间值）
-            if peak['wavelength'] < mid_wavelength:
-                # 检查谱线宽度是否足够（>=2000 km/s）
-                if peak['width_in_km_s'] >= 2000:
-                    # 检查全局平滑尺度的信噪比条件
-                    if (peak['seen_in_max_global_smoothing_scale_sigma'] is not None and 
-                        peak['seen_in_max_global_smoothing_scale_sigma'] > 2):
-                        Lyalpha_candidate.append(peak['wavelength'])
-
-        # 筛选条件2：如果条件1没有找到候选，使用局部平滑尺度的信噪比
-        if len(Lyalpha_candidate) == 0:
+            # 筛选条件1：优先使用全局平滑尺度的信噪比
             for peak in peaks_info:
+                # 检查是否在光谱蓝端（波长小于中间值）
                 if peak['wavelength'] < mid_wavelength:
+                    # 检查谱线宽度是否足够（>=2000 km/s）
                     if peak['width_in_km_s'] >= 2000:
-                        # 检查局部平滑尺度的信噪比条件
-                        if (peak['seen_in_max_local_smoothing_scale_sigma'] is not None and 
-                            peak['seen_in_max_local_smoothing_scale_sigma'] > 2):
+                        # 检查全局平滑尺度的信噪比条件
+                        if (peak['seen_in_max_global_smoothing_scale_sigma'] is not None and 
+                            peak['seen_in_max_global_smoothing_scale_sigma'] > 2):
                             Lyalpha_candidate.append(peak['wavelength'])
 
-        # 将候选线转换为JSON格式并打印
-        Lyalpha_candidate_json = json.dumps(Lyalpha_candidate, ensure_ascii=False)
-        print(f"Lyalpha_candidate: {Lyalpha_candidate}")
+            # 筛选条件2：如果条件1没有找到候选，使用局部平滑尺度的信噪比
+            if len(Lyalpha_candidate) == 0:
+                for peak in peaks_info:
+                    if peak['wavelength'] < mid_wavelength:
+                        if peak['width_in_km_s'] >= 2000:
+                            # 检查局部平滑尺度的信噪比条件
+                            if (peak['seen_in_max_local_smoothing_scale_sigma'] is not None and 
+                                peak['seen_in_max_local_smoothing_scale_sigma'] > 2):
+                                Lyalpha_candidate.append(peak['wavelength'])
 
-        trough_info = [
-            {
-                "wavelength": tr.get('wavelength'),
-                "flux": tr.get('mean_flux'),
-                "width": tr.get('width_mean'),
-                "seen_in_scales_of_sigma": tr.get('seen_in_scales_of_sigma')
-            }
-            for tr in state.get('cleaned_troughs', [])[:15]
-        ]
-        trough_json = json.dumps(trough_info, ensure_ascii=False)
+            # 将候选线转换为JSON格式并打印
+            Lyalpha_candidate_json = json.dumps(Lyalpha_candidate, ensure_ascii=False)
+            print(f"Lyalpha_candidate: {Lyalpha_candidate}")
+
+            trough_info = [
+                {
+                    "wavelength": tr.get('wavelength'),
+                    "flux": tr.get('mean_flux'),
+                    "width": tr.get('width_mean'),
+                    "seen_in_scales_of_sigma": tr.get('seen_in_scales_of_sigma')
+                }
+                for tr in state.get('cleaned_troughs', [])[:15]
+            ]
+            trough_json = json.dumps(trough_info, ensure_ascii=False)
+            # print(f"trough_info: {trough_info}")
+        except Exception as e:
+            logging.error(f"Error in _QSO: {e}")
+            raise e
 
         def _common_prompt_header_QSO(state, include_rule_analysis=True, include_step_1_only=False):
             """构造每个 step 公共的 prompt 前段"""
-            visual_json = json.dumps(state['visual_interpretation'], ensure_ascii=False)
-            # peak_json = json.dumps(state['peaks'][:10], ensure_ascii=False)
-            # trough_json = json.dumps(state['troughs'], ensure_ascii=False)
-            header = f"""
-    你是一位天文学光谱分析助手。
+            try:
+                visual_json = json.dumps(state['visual_interpretation'], ensure_ascii=False)
+                # peak_json = json.dumps(state['peaks'][:10], ensure_ascii=False)
+                # trough_json = json.dumps(state['troughs'], ensure_ascii=False)
+                header = f"""
+你是一位天文学光谱分析助手。
 
-    以下信息可能来自于一个未知红移的 QSO 光谱。
+以下信息可能来自于一个未知红移的 QSO 光谱。
 
-    之前的助手已经对这个光谱进行了初步描述：
-    {visual_json}
+之前的助手已经对这个光谱进行了初步描述：
+{visual_json}
 
-    该光谱的波长范围是{state['spectrum']['new_wavelength'][0]} Å 到 {state['spectrum']['new_wavelength'][-1]} Å。
-    """
+该光谱的波长范围是{state['spectrum']['new_wavelength'][0]} Å 到 {state['spectrum']['new_wavelength'][-1]} Å。
+"""
 
-            if include_rule_analysis and state['rule_analysis_QSO']:
-                if include_step_1_only==True:
-                    rule_json = json.dumps(state['rule_analysis_QSO'][0], ensure_ascii=False)
-                else:
-                    rule_json = json.dumps("\n".join(str(item) for item in state['rule_analysis_QSO']), ensure_ascii=False)
-                header += f"\n之前的助手已经进行了一些分析:\n{rule_json}\n"
+                if include_rule_analysis and state['rule_analysis_QSO']:
+                    if include_step_1_only==True:
+                        rule_json = json.dumps(state['rule_analysis_QSO'][0], ensure_ascii=False)
+                    else:
+                        rule_json = json.dumps("\n".join(str(item) for item in state['rule_analysis_QSO']), ensure_ascii=False)
+                    header += f"\n之前的助手已经进行了一些分析:\n{rule_json}\n"
 
-            tol_pixels = getenv_int("TOL_PIXELS", 10)
-            a_x = state['pixel_to_value']['x']['a']
-            tol_wavelength = a_x * tol_pixels
-            header += f"""
-    综合原曲线和 smoothing 尺度为 sigma={state['sigma_list']} 的高斯平滑曲线，使用 scipy 函数进行了峰/谷识别。
-    关于峰/谷的讨论以以下数据为准：
-    - 代表性的前 10 条发射线：
-    {peak_json}
-    - 可能的吸收线：
-    {trough_json}
-    - 波长误差在 ~ ±{tol_wavelength/2} Å 的量级或更大
-    """
-            return header
+                tol_pixels = getenv_int("TOL_PIXELS", 10)
+                a_x = state['pixel_to_value']['x']['a']
+                tol_wavelength = a_x * tol_pixels
+                header += f"""
+综合原曲线和 smoothing 尺度为 sigma={state['sigma_list']} 的高斯平滑曲线，使用 scipy 函数进行了峰/谷识别。
+关于峰/谷的讨论以以下数据为准：
+- 代表性的前 10 条发射线：
+{peak_json}
+- 可能的吸收线：
+{trough_json}
+- 波长误差在 ~ ±{tol_wavelength/2} Å 的量级或更大
+"""
+                return header
+            except Exception as e:
+                logging.error(f"Error in _common_prompt_header_QSO: {e}")
+                raise e
 
         def _common_prompt_tail(step_title, extra_notes=""):
             """构造每个 step 公共尾部，保留 step 特有输出/分析指示"""
-            tail = f"""
-    ---
+            try:
+                tail = f"""
+---
 
-    输出格式为：
-    {step_title}
-    ...
+输出格式为：
+{step_title}
+...
 
-    ---
+---
 
-    🧭 注意：
-    - 计算得来的非原始数据，输出时保留 3 位小数。
-    - 不需要进行重复总结。
-    - 不需要逐行地重复输入数据；
-    - 重点在物理推理与合理解释；
-    - 请保证最终输出完整，不要中途截断。
-    """
-            if extra_notes:
-                tail = extra_notes + "\n" + tail
-            return tail
-    
+🧭 注意：
+- 计算得来的非原始数据，输出时保留 3 位小数。
+- 不需要进行重复总结。
+- 不需要逐行地重复输入数据；
+- 重点在物理推理与合理解释；
+- 请保证最终输出完整，不要中途截断。
+"""
+                if extra_notes:
+                    tail = extra_notes + "\n" + tail
+                return tail
+            except Exception as e:
+                logging.error(f"Error in _common_prompt_tail: {e}")
+                raise e
+        
         async def step_1_QSO(state):
-            header = _common_prompt_header_QSO(state, include_rule_analysis=False)
-            tail = _common_prompt_tail("Step 1: Lyα 谱线检测")
-            if len(Lyalpha_candidate) > 0:
-                candidate_str = f"\n算法筛选的 Lyα 候选线包括：\n{Lyalpha_candidate_json}\n你也可以自己推测其他选项。\n"
-            else:
-                candidate_str = ""
+            try:
+                print("Step 1: Lyα 谱线检测")
+                header = _common_prompt_header_QSO(state, include_rule_analysis=False)
+                tail = _common_prompt_tail("Step 1: Lyα 谱线检测")
+                if len(Lyalpha_candidate) > 0:
+                    candidate_str = f"\n算法筛选的 Lyα 候选线包括：\n{Lyalpha_candidate_json}\n你也可以自己推测其他选项。\n"
+                else:
+                    candidate_str = ""
 
-            system_prompt = header + tail
-
-            user_prompt = f"""
+                system_prompt = header + tail
+                user_prompt = f"""
 请按以下步骤分析:
 
 Step 1: Lyα 谱线检测
@@ -868,44 +972,50 @@ Step 1: Lyα 谱线检测
 3. 使用工具 calculate_redshift 计算该峰为 Lyα 发射线时的红移 z。
 4. 检查蓝端（短波长方向）是否存在 Lyα forest 特征：吸收线相对更密集、较窄且分布在 Lyα 蓝端附近。请指出并进行简短说明。
 """ 
-            
-            response = await self.call_llm_with_context(
-                system_prompt=system_prompt, 
-                user_prompt=user_prompt, 
-                parse_json=True, 
-                description="Step 1 Lyα 分析"
-            )
-            state['rule_analysis_QSO'].append(response)
+                
+                response = await self.call_llm_with_context(
+                    system_prompt=system_prompt, 
+                    user_prompt=user_prompt, 
+                    parse_json=True, 
+                    description="Step 1 Lyα 分析"
+                )
+                state['rule_analysis_QSO'].append(response)
+            except Exception as e:
+                logging.error(f"Error in step_1_QSO: {e}")
+                raise e
 
         async def step_2_QSO(state):
-            header = _common_prompt_header_QSO(state)
-            tail = _common_prompt_tail("Step 2: 其他显著发射线分析")
-            system_prompt = header + tail
+            print("Step 2: 其他显著发射线分析")
+            try:
+                header = _common_prompt_header_QSO(state)
+                tail = _common_prompt_tail("Step 2: 其他显著发射线分析")
+                system_prompt = header + tail
 
-            band_name = state['band_name']
-            band_wavelength = state['band_wavelength']
-            if band_name: 
-                overlap_regions = find_overlap_regions(band_name, band_wavelength)
-                wws = np.max([wp.get('width_mean') for wp in state.get('wiped_peaks', [])[:5]])
-                for key in overlap_regions:
-                    range = overlap_regions[key]
-                    overlap_regions[key] = [range[0]-wws, range[1]+wws] # Broaden the overlap regions to make sure LLM won't miss them
-                overlap_regions_json = json.dumps(overlap_regions, ensure_ascii=False)
-                wiped = [
-                    {
-                        "wavelength": wp.get('wavelength'),
-                        "flux": wp.get('mean_flux'),
-                        "width": wp.get('width_mean'),
-                        # "seen_in_scales_of_sigma": wp.get('seen_in_scales_of_sigma')
-                    }
-                    for wp in state.get('wiped_peaks', [])[:5]
-                ]
-                wiped_json = json.dumps(wiped, ensure_ascii=False)
-                advanced = f"""\n    - 注意：如果某些理论峰值落在以下区间附近：\n        {overlap_regions_json}\n    则峰值可能被当作噪声信号清除。这些峰值是：\n        {wiped_json}\n    请优先考虑这些因素，再次分析"""
-            else:
-                advanced = ""
+                band_name = state['band_name']
+                band_wavelength = state['band_wavelength']
+                if band_name: 
+                    overlap_regions = find_overlap_regions(band_name, band_wavelength)
+                    wws = np.max([wp.get('width_mean') for wp in state.get('wiped_peaks', [])[:5]])
+                    print(f"wws: {wws}")
+                    for key in overlap_regions:
+                        range = overlap_regions[key]
+                        overlap_regions[key] = [range[0]-wws, range[1]+wws] # Broaden the overlap regions to make sure LLM won't miss them
+                    overlap_regions_json = json.dumps(overlap_regions, ensure_ascii=False)
+                    wiped = [
+                        {
+                            "wavelength": wp.get('wavelength'),
+                            "flux": wp.get('mean_flux'),
+                            "width": wp.get('width_mean'),
+                            # "seen_in_scales_of_sigma": wp.get('seen_in_scales_of_sigma')
+                        }
+                        for wp in state.get('wiped_peaks', [])[:5]
+                    ]
+                    wiped_json = json.dumps(wiped, ensure_ascii=False)
+                    advanced = f"""\n    - 注意：如果某些理论峰值落在以下区间附近：\n        {overlap_regions_json}\n    则峰值可能被当作噪声信号清除。这些峰值是：\n        {wiped_json}\n    请优先考虑这些因素，再次分析"""
+                else:
+                    advanced = ""
 
-            user_prompt = f"""
+                user_prompt = f"""
 请继续分析:
 
 Step 2: 其他显著发射线分析
@@ -914,15 +1024,19 @@ Step 2: 其他显著发射线分析
 3. 如果存在发射线与观测峰值的匹配，根据匹配结果，分别使用工具 calculate_redshift 计算红移。按“发射线名--静止系波长--观测波长--红移”的格式输出。
 """
 
-            response = await self.call_llm_with_context(system_prompt, user_prompt, parse_json=False, description="Step 2 发射线分析")
-            state['rule_analysis_QSO'].append(response)
+                response = await self.call_llm_with_context(system_prompt, user_prompt, parse_json=False, description="Step 2 发射线分析")
+                state['rule_analysis_QSO'].append(response)
+            except Exception as e:
+                logging.error(f"Error in step_2_QSO: {e}")
+                raise e
 
         async def step_3_QSO(state):
-            header = _common_prompt_header_QSO(state)
-            tail = _common_prompt_tail("Step 3: 综合判断")
-            system_prompt = header + tail
+            try:
+                header = _common_prompt_header_QSO(state)
+                tail = _common_prompt_tail("Step 3: 综合判断")
+                system_prompt = header + tail
 
-            user_prompt = """
+                user_prompt = """
 请继续分析:
 
 Step 3: 综合判断
@@ -933,15 +1047,19 @@ Step 3: 综合判断
 2.仅在有显著的 Lyα 峰值，且红移计算结果与其他谱线基本一致时，进行以下操作：
     - 因为天文学中存在外流等现象，请将当前所有匹配中**最低电离态谱线的红移**作为光谱的红移。输出红移结果。（因为存在不对称和展宽，Lyα的置信度是较低的）
 """
-            response = await self.call_llm_with_context(system_prompt, user_prompt, parse_json=False, description="Step 3 综合判断")
-            state['rule_analysis_QSO'].append(response)
+                response = await self.call_llm_with_context(system_prompt, user_prompt, parse_json=False, description="Step 3 综合判断")
+                state['rule_analysis_QSO'].append(response)
+            except Exception as e:
+                logging.error(f"Error in step_3_QSO: {e}")
+                raise e
             
         async def step_4_QSO(state):
-            header = _common_prompt_header_QSO(state, include_step_1_only=True)
-            tail = _common_prompt_tail("Step 4: 补充步骤（假设 Step 1 所选择的谱线并非 Lyα）")
-            system_prompt = header + tail
+            try: 
+                header = _common_prompt_header_QSO(state, include_step_1_only=True)
+                tail = _common_prompt_tail("Step 4: 补充步骤（假设 Step 1 所选择的谱线并非 Lyα）")
+                system_prompt = header + tail
 
-            user_prompt = """
+                user_prompt = """
 请继续分析:
 
 Step 4: 补充步骤（假设 Step 1 所选择的谱线并非 Lyα）
@@ -961,8 +1079,11 @@ Step 4: 补充步骤（假设 Step 1 所选择的谱线并非 Lyα）
 - 注意：允许在由于光谱边缘的信号残缺或信噪比不佳导致部分发射线不可见。
 """ + tail
 
-            response = await self.call_llm_with_context(system_prompt, user_prompt, parse_json=False, description="Step 4 补充分析")
-            state['rule_analysis_QSO'].append(response)
+                response = await self.call_llm_with_context(system_prompt, user_prompt, parse_json=False, description="Step 4 补充分析")
+                state['rule_analysis_QSO'].append(response)
+            except Exception as e:
+                logging.error(f"Error in step_4_QSO: {e}")
+                raise e
         
         await step_1_QSO(state)
         await step_2_QSO(state)
@@ -1012,33 +1133,34 @@ class SpectralAnalysisAuditor(BaseAgent):
         )
 
     def _common_prompt_header(self, state: SpectroState) -> str:
-        peaks_info = [
-            {
-                "wavelength": pe.get('wavelength'),
-                "flux": pe.get('mean_flux'),
-                "width": pe.get('width_mean'),
-                "prominance": pe.get('max_prominence'),
-                "seen_in_scales_of_sigma": pe.get('seen_in_scales_of_sigma'),
-                "describe": pe.get('describe')
-            }
-            for pe in state.get('cleaned_peaks', [])[:15]
-        ]
-        peak_json = json.dumps(peaks_info, ensure_ascii=False)
-        trough_info = [
-            {
-                "wavelength": tr.get('wavelength'),
-                "flux": tr.get('mean_flux'),
-                "width": tr.get('width_mean'),
-                "seen_in_scales_of_sigma": tr.get('seen_in_scales_of_sigma'), 
-            }
-            for tr in state.get('cleaned_troughs', [])[:15]
-        ]
-        trough_json = json.dumps(trough_info, ensure_ascii=False)
-        a = state["pixel_to_value"]["x"]["a"]
-        rms = state["pixel_to_value"]["x"]["rms"]
-        tolerence = getenv_int("TOL_PIXELS", 10)
-        rule_analysis = "\n\n".join(str(item) for item in state['rule_analysis_QSO'])
-        prompt_1 = f"""
+        try:
+            peaks_info = [
+                {
+                    "wavelength": pe.get('wavelength'),
+                    "flux": pe.get('mean_flux'),
+                    "width": pe.get('width_mean'),
+                    "prominance": pe.get('max_prominence'),
+                    "seen_in_scales_of_sigma": pe.get('seen_in_scales_of_sigma'),
+                    "describe": pe.get('describe')
+                }
+                for pe in state.get('cleaned_peaks', [])[:15]
+            ]
+            peak_json = json.dumps(peaks_info, ensure_ascii=False)
+            trough_info = [
+                {
+                    "wavelength": tr.get('wavelength'),
+                    "flux": tr.get('mean_flux'),
+                    "width": tr.get('width_mean'),
+                    "seen_in_scales_of_sigma": tr.get('seen_in_scales_of_sigma'), 
+                }
+                for tr in state.get('cleaned_troughs', [])[:15]
+            ]
+            trough_json = json.dumps(trough_info, ensure_ascii=False)
+            a = state["pixel_to_value"]["x"]["a"]
+            rms = state["pixel_to_value"]["x"]["rms"]
+            tolerence = getenv_int("TOL_PIXELS", 10)
+            rule_analysis = "\n\n".join(str(item) for item in state['rule_analysis_QSO'])
+            prompt_1 = f"""
 你是一位严谨的【天文学光谱报告审查分析师】。
 
 任务目标：
@@ -1073,29 +1195,29 @@ class SpectralAnalysisAuditor(BaseAgent):
 
 该光谱的波长范围是{state['spectrum']['new_wavelength'][0]} Å 到 {state['spectrum']['new_wavelength'][-1]} Å。
 """
-        band_name = state['band_name']
-        band_wavelength = state['band_wavelength']
-        if band_name: 
-            overlap_regions = find_overlap_regions(band_name, band_wavelength)
-            wws = np.max([wp.get('width_mean') for wp in state.get('wiped_peaks', [])[:5]])
-            for key in overlap_regions:
-                range = overlap_regions[key]
-                overlap_regions[key] = [range[0]-wws, range[1]+wws] # Broaden the overlap regions to make sure LLM won't miss them
-            overlap_regions_json = json.dumps(overlap_regions, ensure_ascii=False)
-            wiped = [
-                {
-                    "wavelength": wp.get('wavelength'),
-                    "flux": wp.get('mean_flux'),
-                    "width": wp.get('width_mean'),
-                    # "seen_in_scales_of_sigma": wp.get('seen_in_scales_of_sigma')
-                }
-                for wp in state.get('wiped_peaks', [])[:5]
-            ]
-            wiped_json = json.dumps(wiped, ensure_ascii=False)
-            advanced = f"""如果报告中的峰值落在以下区间附近\n    {overlap_regions_json}\n则峰值可能被当作噪声信号清除。这些峰值是：\n      {wiped_json}\n请注意考察这些峰值作为 C IV 或 C III] 的可能性"""
-        else:
-            advanced = ""
-        prompt_2 = f"""
+            band_name = state['band_name']
+            band_wavelength = state['band_wavelength']
+            if band_name: 
+                overlap_regions = find_overlap_regions(band_name, band_wavelength)
+                wws = np.max([wp.get('width_mean') for wp in state.get('wiped_peaks', [])[:5]])
+                for key in overlap_regions:
+                    range = overlap_regions[key]
+                    overlap_regions[key] = [range[0]-wws, range[1]+wws] # Broaden the overlap regions to make sure LLM won't miss them
+                overlap_regions_json = json.dumps(overlap_regions, ensure_ascii=False)
+                wiped = [
+                    {
+                        "wavelength": wp.get('wavelength'),
+                        "flux": wp.get('mean_flux'),
+                        "width": wp.get('width_mean'),
+                        # "seen_in_scales_of_sigma": wp.get('seen_in_scales_of_sigma')
+                    }
+                    for wp in state.get('wiped_peaks', [])[:5]
+                ]
+                wiped_json = json.dumps(wiped, ensure_ascii=False)
+                advanced = f"""如果报告中的峰值落在以下区间附近\n    {overlap_regions_json}\n则峰值可能被当作噪声信号清除。这些峰值是：\n      {wiped_json}\n请注意考察这些峰值作为 C IV 或 C III] 的可能性"""
+            else:
+                advanced = ""
+            prompt_2 = f"""
 
 我希望光谱分析报告能够尽可能好地匹配 Lyα、C IV、C III]、Mg II 等典型发射线，但也允许在由于光谱边缘的信号残缺或信噪比不佳导致部分发射线不可见。
 
@@ -1107,27 +1229,31 @@ class SpectralAnalysisAuditor(BaseAgent):
 
 使用工具 QSO_rms 计算红移误差 ± Δz
     - 工具的输入为
-        wavelength_rest: List[float], #最低电离态的发射线的静止系波长
+        wavelength_rest: List[float], # 最低电离态的发射线的静止系波长（Lyα易受展宽影响，不适用于此处，尽量选择Lyα外的谱线）
         a: float = {a},           
         tolerance: int = {tolerence},     
         rms_lambda = {rms}: float    
 """
-        return prompt_1 + advanced + prompt_2
+            return prompt_1 + advanced + prompt_2
+        except Exception as e:
+            print(f"Error in _common_prompt_header: {e}")
+            return ""
 
     async def auditing(self, state: SpectroState):
-        system_prompt = self._common_prompt_header(state)
+        try:
+            system_prompt = self._common_prompt_header(state)
 
-        if state['count'] == 0:
-            body = f"""
+            if state['count'] == 0:
+                body = f"""
 请对这份分析报告进行检查。
 """
-        elif state['count']: 
-            auditing_history = state['auditing_history_QSO'][-1] 
-            auditing_history_json = json.dumps(auditing_history, ensure_ascii=False)
-            response_history = state['refine_history_QSO'][-1]
-            response_history_json = json.dumps(response_history, ensure_ascii=False)
+            elif state['count']: 
+                auditing_history = state['auditing_history_QSO'][-1] 
+                auditing_history_json = json.dumps(auditing_history, ensure_ascii=False)
+                response_history = state['refine_history_QSO'][-1]
+                response_history_json = json.dumps(response_history, ensure_ascii=False)
 
-            body = f"""
+                body = f"""
 你对这份分析报告的最新质疑为
 {auditing_history_json}
 
@@ -1136,9 +1262,11 @@ class SpectralAnalysisAuditor(BaseAgent):
 
 请回应其他分析师的回答，并继续进行审查。
 """
-        user_prompt = body
-        response = await self.call_llm_with_context(system_prompt, user_prompt, parse_json=False, description="报告审查")
-        state['auditing_history_QSO'].append(response)
+            user_prompt = body
+            response = await self.call_llm_with_context(system_prompt, user_prompt, parse_json=False, description="报告审查")
+            state['auditing_history_QSO'].append(response)
+        except Exception as e:
+            print(f"Error in auditing: {e}")
 
     async def run(self, state: SpectroState) -> SpectroState:
         if state['preliminary_classification']['type'] == "QSO":
@@ -1159,34 +1287,35 @@ class SpectralRefinementAssistant(BaseAgent):
         )
 
     def _common_prompt_header(self, state) -> str:
-        peaks_info = [
-            {
-                "wavelength": pe.get('wavelength'),
-                "flux": pe.get('mean_flux'),
-                "width": pe.get('width_mean'),
-                "prominance": pe.get('max_prominence'),
-                "seen_in_global_scales_of_sigma": pe.get('max_global_sigma_seen', None),
-                "describe": pe.get('describe')
-            }
-            for pe in state.get('cleaned_peaks', [])[:15]
-        ]
-        peak_json = json.dumps(peaks_info, ensure_ascii=False)
+        try:
+            peaks_info = [
+                {
+                    "wavelength": pe.get('wavelength'),
+                    "flux": pe.get('mean_flux'),
+                    "width": pe.get('width_mean'),
+                    "prominance": pe.get('max_prominence'),
+                    "seen_in_global_scales_of_sigma": pe.get('max_global_sigma_seen', None),
+                    "describe": pe.get('describe')
+                }
+                for pe in state.get('cleaned_peaks', [])[:15]
+            ]
+            peak_json = json.dumps(peaks_info, ensure_ascii=False)
 
-        trough_info = [
-            {
-                "wavelength": tr.get('wavelength'),
-                "flux": tr.get('mean_flux'),
-                "width": tr.get('width_mean'),
-                "seen_in_scales_of_sigma": tr.get('seen_in_scales_of_sigma')
-            }
-            for tr in state.get('cleaned_troughs', [])[:15]
-        ]
-        trough_json = json.dumps(trough_info, ensure_ascii=False)
-        rule_analysis = "\n\n".join(str(item) for item in state['rule_analysis_QSO'])
-        a = state["pixel_to_value"]["x"]["a"]
-        rms = state["pixel_to_value"]["x"]["rms"]
-        tolerence = getenv_int("TOL_PIXELS", 10)
-        prompt_1 = f"""
+            trough_info = [
+                {
+                    "wavelength": tr.get('wavelength'),
+                    "flux": tr.get('mean_flux'),
+                    "width": tr.get('width_mean'),
+                    "seen_in_scales_of_sigma": tr.get('seen_in_scales_of_sigma')
+                }
+                for tr in state.get('cleaned_troughs', [])[:15]
+            ]
+            trough_json = json.dumps(trough_info, ensure_ascii=False)
+            rule_analysis = "\n\n".join(str(item) for item in state['rule_analysis_QSO'])
+            a = state["pixel_to_value"]["x"]["a"]
+            rms = state["pixel_to_value"]["x"]["rms"]
+            tolerence = getenv_int("TOL_PIXELS", 10)
+            prompt_1 = f"""
 你是一位具备反思能力的【天文学光谱分析师】。
 
 任务目标：
@@ -1222,30 +1351,30 @@ class SpectralRefinementAssistant(BaseAgent):
 
 该光谱的波长范围是{state['spectrum']['new_wavelength'][0]} Å 到 {state['spectrum']['new_wavelength'][-1]} Å。
 """
-        band_name = state['band_name']
-        band_wavelength = state['band_wavelength']
-        if band_name: 
-            overlap_regions = find_overlap_regions(band_name, band_wavelength)
-            wws = np.max([wp.get('width_mean') for wp in state.get('wiped_peaks', [])[:5]])
-            for key in overlap_regions:
-                range = overlap_regions[key]
-                overlap_regions[key] = [range[0]-wws, range[1]+wws] # Broaden the overlap regions to make sure LLM won't miss them
-            overlap_regions_json = json.dumps(overlap_regions, ensure_ascii=False)
-            wiped = [
-                {
-                    "wavelength": wp.get('wavelength'),
-                    "flux": wp.get('mean_flux'),
-                    "width": wp.get('width_mean'),
-                    # "seen_in_scales_of_sigma": wp.get('seen_in_scales_of_sigma')
-                }
-                for wp in state.get('wiped_peaks', [])[:5]
-            ]
-            wiped_json = json.dumps(wiped, ensure_ascii=False)
-            advanced = f"""如果报告中的峰值落在以下区间附近\n    {overlap_regions_json}\n则峰值可能被当作噪声信号清除。这些峰值是：\n      {wiped_json}\n请注意考察这些峰值作为 C IV 或 C III] 的可能性"""
-        else:
-            advanced = ""
+            band_name = state['band_name']
+            band_wavelength = state['band_wavelength']
+            if band_name: 
+                overlap_regions = find_overlap_regions(band_name, band_wavelength)
+                wws = np.max([wp.get('width_mean') for wp in state.get('wiped_peaks', [])[:5]])
+                for key in overlap_regions:
+                    range = overlap_regions[key]
+                    overlap_regions[key] = [range[0]-wws, range[1]+wws] # Broaden the overlap regions to make sure LLM won't miss them
+                overlap_regions_json = json.dumps(overlap_regions, ensure_ascii=False)
+                wiped = [
+                    {
+                        "wavelength": wp.get('wavelength'),
+                        "flux": wp.get('mean_flux'),
+                        "width": wp.get('width_mean'),
+                        # "seen_in_scales_of_sigma": wp.get('seen_in_scales_of_sigma')
+                    }
+                    for wp in state.get('wiped_peaks', [])[:5]
+                ]
+                wiped_json = json.dumps(wiped, ensure_ascii=False)
+                advanced = f"""如果报告中的峰值落在以下区间附近\n    {overlap_regions_json}\n则峰值可能被当作噪声信号清除。这些峰值是：\n      {wiped_json}\n请注意考察这些峰值作为 C IV 或 C III] 的可能性"""
+            else:
+                advanced = ""
 
-        prompt_2 = f"""
+            prompt_2 = f"""
 
 我希望光谱分析报告能够尽可能好地匹配 Lyα、C IV、C III]、Mg II 等典型发射线，但也允许在由于光谱边缘的信号残缺或信噪比不佳导致部分发射线不可见。
 
@@ -1257,26 +1386,34 @@ class SpectralRefinementAssistant(BaseAgent):
 
 使用工具 QSO_rms 计算红移误差 ± Δz
     - 工具的输入为
-        wavelength_rest: List[float], # 最低电离态的发射线的静止系波长
+        wavelength_rest: List[float], # 最低电离态的发射线的静止系波长（Lyα易受展宽影响，不适用于此处，尽量选择Lyα外的谱线）
         a: float = {a},           
         tolerance: int = {tolerence},     
         rms_lambda = {rms}: float 
 """
-        return prompt_1 + advanced + prompt_2
+            return prompt_1 + advanced + prompt_2
+        except Exception as e:
+            logging.error(f"Error in _common_prompt_header: {e}")
+            raise e
+            
 
     async def refine(self, state: SpectroState):
-        system_prompt = self._common_prompt_header(state)
-        auditing_history = state['auditing_history_QSO'][-1]
-        auditing_history_json = json.dumps(auditing_history, ensure_ascii=False)
-        body = f"""
+        try:
+            system_prompt = self._common_prompt_header(state)
+            auditing_history = state['auditing_history_QSO'][-1]
+            auditing_history_json = json.dumps(auditing_history, ensure_ascii=False)
+            body = f"""
 负责核验报告的审查分析师给出的最新建议为
 {auditing_history_json}
 
 请对建议进行回应。
 """
-        user_prompt = body
-        response = await self.call_llm_with_context(system_prompt, user_prompt, parse_json=False, description="回应审查")
-        state['refine_history_QSO'].append(response)
+            user_prompt = body
+            response = await self.call_llm_with_context(system_prompt, user_prompt, parse_json=False, description="回应审查")
+            state['refine_history_QSO'].append(response)
+        except Exception as e:
+            logging.error(f"Error in refine: {e}")
+            raise e
 
     async def run(self, state: SpectroState) -> SpectroState:
         try:
