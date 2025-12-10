@@ -26,26 +26,50 @@ def image_to_base64(image_path):
     with open(image_path, "rb") as f:
         return base64.b64encode(f.read()).decode("utf-8")
 
+# def user_query(system_prompt, user_prompt, image_path=None):
+#     # 创建系统消息
+#     system_message = SystemMessage(content=system_prompt)
+    
+#     if not image_path:
+#         # 如果没有图片，创建纯文本用户消息
+#         human_message = HumanMessage(content=[{"type": "text", "text": user_prompt}])
+#         return [system_message, human_message]
+    
+#     # 处理单张图片或多张图片的情况
+#     base64_image = image_to_base64(image_path)
+    
+#     # 构建包含文本和图片的用户消息内容
+#     content = [{"type": "text", "text": user_prompt}]
+#     content.append({
+#         "type": "image_url",
+#         "image_url": {
+#             "url": f"data:image/jpeg;base64,{base64_image}"
+#         }
+#     })
+    
+#     human_message = HumanMessage(content=content)
+#     return [system_message, human_message]
+
 def user_query(system_prompt, user_prompt, image_path=None):
     # 创建系统消息
     system_message = SystemMessage(content=system_prompt)
     
-    if not image_path:
-        # 如果没有图片，创建纯文本用户消息
-        human_message = HumanMessage(content=[{"type": "text", "text": user_prompt}])
-        return [system_message, human_message]
-    
-    # 处理单张图片或多张图片的情况
-    base64_image = image_to_base64(image_path)
-    
-    # 构建包含文本和图片的用户消息内容
+    # 构建消息内容，始终包含文本
     content = [{"type": "text", "text": user_prompt}]
-    content.append({
-        "type": "image_url",
-        "image_url": {
-            "url": f"data:image/jpeg;base64,{base64_image}"
-        }
-    })
+    
+    # 处理图片
+    if image_path:
+        # 统一处理为列表，方便迭代
+        image_paths = [image_path] if isinstance(image_path, str) else image_path
+        
+        for img_path in image_paths:
+            base64_image = image_to_base64(img_path)
+            content.append({
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:image/jpeg;base64,{base64_image}"
+                }
+            })
     
     human_message = HumanMessage(content=content)
     return [system_message, human_message]
@@ -90,13 +114,16 @@ def _load_feature_params():
 
 def _detect_axis_ticks(image_path, config=None):
     if config is None:
-        # config = r'--oem 3 --psm 6 -c tessedit_char_whitelist=0123456789.-eE'
-        config = r'--oem 3 --psm 11 -c tessedit_char_whitelist=0123456789.-eE+ '  # 注意末尾加空格
+        # config = r'--oem 3 --psm 5 -c tessedit_char_whitelist=0123456789.-eE+ '
+        config = r'--oem 3 --psm 6 -c tessedit_char_whitelist=0123456789.-eE+ '
+        # config = r'--oem 3 --psm 11 -c tessedit_char_whitelist=0123456789.-eE+ '
 
     img = cv2.imread(image_path)
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    # _, thresh = cv2.threshold(gray, 200, 255, cv2.THRESH_BINARY_INV)
-    thresh = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 11, 2)
+    blurred = cv2.GaussianBlur(gray, (3, 3), 0)
+    sharpened = cv2.addWeighted(gray, 1.5, blurred, -0.5, 0)
+    # # _, thresh = cv2.threshold(gray, 200, 255, cv2.THRESH_BINARY_INV)
+    thresh = cv2.adaptiveThreshold(sharpened, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 11, 2)
 
     data = pytesseract.image_to_data(
         thresh, config=config, output_type=pytesseract.Output.DICT
@@ -121,7 +148,15 @@ def _detect_axis_ticks(image_path, config=None):
 
     return tick_values
 
-def _detect_chart_border(image_path: str, margin: List = [10, 10, 10, 10]) -> dict:
+def _detect_chart_border(
+        image_path: str, 
+        margin: Dict = {
+            'top': 10,
+            'right': 10,
+            'bottom': 10,
+            'left': 10
+        }
+    ) -> dict:
     """
     检测图像中图表的外围边框，并微调尺寸。
     
@@ -156,10 +191,10 @@ def _detect_chart_border(image_path: str, margin: List = [10, 10, 10, 10]) -> di
     x, y, w, h = cv2.boundingRect(contours[0])
     
     # 微调边框
-    x += margin[0]
-    y += margin[1]
-    w -= (margin[0]+margin[2])
-    h -= (margin[1]+margin[3])
+    x += margin['left']
+    y += margin['top']
+    w -= (margin['left'] + margin['right'])
+    h -= (margin['top'] + margin['bottom'])
 
     return {"x": x, "y": y, "w": w, "h": h}
 
@@ -270,6 +305,7 @@ def _pixel_tickvalue_fitting(arr: list) -> dict:
             "rms": float(rms),
             "residuals": residual.tolist()
         }
+        print(f"{axis}: {results[axis]}")
 
     return results
 
@@ -846,7 +882,7 @@ def _find_features_multiscale(
             continuum = median_filter(flux, size=cont_window, mode="reflect")
             continuum = np.where(continuum == 0, 1.0, continuum)
         # if feature == "peak":
-        #     continuum = gaussian_filter1d(flux, sigma=300)
+        #     continuum = gaussian_filter1d(flux, sigma=100)
 
         sigma_list = [0] + sigma_list  # 原始光谱权重最高
         # print(f"Using sigma list: {sigma_list}")

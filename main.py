@@ -59,7 +59,7 @@ async def main():
                 end_num = int(end_str)
                 
                 # 如果原始字符串有前导零，保留格式
-                if start_str.startswith('0') or end_str.startswith('0'):
+                if start_str.startswith('0') and end_str.startswith('0'):
                     width = max(len(start_str), len(end_str))
                     return start_num, end_num, width
                 else:
@@ -69,6 +69,7 @@ async def main():
             end_str = os.getenv('END', '0')
 
             start, end, width = parse_image_range(start_str, end_str)
+            print(start, end, width)
 
             collect = []
             for i in range(start, end + 1):

@@ -225,6 +225,7 @@ class WorkflowOrchestrator:
         BAND_NAME = os.getenv('BAND_NAME', None)
         if BAND_NAME is not None:
             BAND_NAME = BAND_NAME.split(',')
+        print(f"🔍 分析设置 - 波段名称: {BAND_NAME}")
         # BAND_WAVELENGTH=3600-5800,5760-7620,7520-9824
         BAND_WAVELENGTH = os.getenv('BAND_WAVELENGTH', None)
         if BAND_WAVELENGTH is not None:
