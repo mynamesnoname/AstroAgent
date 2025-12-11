@@ -840,14 +840,12 @@ Flux 误差：{delta_t_json}
 
             # 筛选条件1：优先使用全局平滑尺度的信噪比
             for peak in peaks_info:
-                # 检查是否在光谱蓝端（波长小于中间值）
-                if peak['wavelength'] < mid_wavelength:
-                    # 检查谱线宽度是否足够（>=2000 km/s）
-                    if peak['width_in_km_s'] >= 2000:
-                        # 检查全局平滑尺度的信噪比条件
-                        if (peak['seen_in_max_global_smoothing_scale_sigma'] is not None and 
-                            peak['seen_in_max_global_smoothing_scale_sigma'] > 2):
-                            Lyalpha_candidate.append(peak['wavelength'])
+                # 检查谱线宽度是否足够（>=2000 km/s）
+                if peak['width_in_km_s'] >= 2000:
+                    # 检查全局平滑尺度的信噪比条件
+                    if (peak['seen_in_max_global_smoothing_scale_sigma'] is not None and 
+                        peak['seen_in_max_global_smoothing_scale_sigma'] > 2):
+                        Lyalpha_candidate.append(peak['wavelength'])
 
             # 筛选条件2：如果条件1没有找到候选，使用局部平滑尺度的信噪比
             if len(Lyalpha_candidate) == 0:
@@ -962,7 +960,7 @@ Flux 误差：{delta_t_json}
 Step 1: Lyα 谱线检测
 假设该光谱中存在 Lyα 发射线（λ_rest = 1216 Å）：
 {candidate_str}
-1. 在光谱蓝端，流量较大，大 smoothing 尺度可见且有一定宽度的峰中，推测哪条最可能为 Lyα 线。
+1. 在光谱流量较大，大 smoothing 尺度可见且有一定宽度的峰中，推测哪条最可能为 Lyα 线。
     - 从提供的峰列表中选择
     - 候选谱线宽度相近（20 Å 以内）时，优先考虑流量更高的峰。
 2. 输出：
