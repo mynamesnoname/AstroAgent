@@ -1,0 +1,21 @@
+{
+  "continuum_description": {
+    "overall_trend": "蓝端通量较高，从中段开始逐渐下降，至红端趋于平稳。",
+    "discontinuities": "无明显断裂。"
+  },
+  "lines_description": {
+    "dominant_line_type": "宽线",
+    "asymmetric_peaks_wavelength": [
+      2800.0
+    ]
+  },
+  "SNR_description": {
+    "overall_snr": "信噪比较低",
+    "low_snr_range": "2000-3000 Å",
+    "unreliable_ranges": [
+      "2700-2800 Å",
+      "3500-3600 Å"
+    ],
+    "note": "粉红区域在2700-2800 Å和3500-3600 Å附近相对蓝色信号更加明显，表明这些波长范围的数据不可靠。"
+  }
+}

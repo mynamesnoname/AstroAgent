@@ -1,0 +1,35 @@
+{
+  "continuum_description": {
+    "overall_trend": "蓝端通量较高，随着波长增加，通量逐渐下降，红端通量最低。",
+    "breaks": "无明显断裂。"
+  },
+  "lines_description": {
+    "dominant_line_type": "宽线",
+    "asymmetric_peaks_wavelength": [
+      2500.0
+    ]
+  },
+  "SNR_description": {
+    "overall_snr": "信噪比低",
+    "low_snr_ranges": [
+      [
+        2000,
+        2500
+      ],
+      [
+        3000,
+        3500
+      ]
+    ],
+    "unreliable_ranges": [
+      [
+        2400,
+        2600
+      ],
+      [
+        3100,
+        3300
+      ]
+    ]
+  }
+}

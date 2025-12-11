@@ -1,35 +1,32 @@
 {
   "continuum_description": {
-    "overall_trend": "蓝端通量较低，中段（约5000 Å附近）达到峰值，红端逐渐下降。",
-    "breaks": "无明显断裂。"
+    "overall_trend": "蓝端通量较低，从中段开始逐渐上升，在约5300 Å处达到峰值，随后向红端逐渐下降。",
+    "discontinuities": "无明显断裂。"
   },
   "lines_description": {
     "dominant_line_type": "宽线",
     "asymmetric_peaks_wavelength": [
-      4800.0
+      4800.0,
+      6200.0
     ]
   },
   "SNR_description": {
-    "low_SNR_ranges": [
-      [
-        2000,
-        4800
-      ],
-      [
-        6200,
-        8000
-      ]
-    ],
-    "unreliable_ranges": [
-      [
-        4800,
-        5000
-      ],
-      [
-        6100,
-        6300
-      ]
-    ],
-    "note": "粉红区域在波长范围4800-5000和6100-6300处相对蓝色信号更加明显，表明这些区域数据不可靠。"
+    "overall_snr": "信噪比较低，尤其在无明显谱线的区域。",
+    "unreliable_regions": [
+      {
+        "wavelength_range": [
+          4800,
+          5000
+        ],
+        "note": "粉红区域相对蓝色信号更加明显，数据不可靠"
+      },
+      {
+        "wavelength_range": [
+          6100,
+          6200
+        ],
+        "note": "粉红区域相对蓝色信号更加明显，数据不可靠"
+      }
+    ]
   }
 }

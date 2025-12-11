@@ -1,0 +1,39 @@
+{
+  "continuum_description": {
+    "overall_trend": "蓝端通量较低，中段（约4500–5000 Å）达到峰值，红端逐渐下降，呈现典型的热辐射谱形。",
+    "discontinuities": "无明显断裂。"
+  },
+  "lines_description": {
+    "dominant_line_type": "宽线",
+    "asymmetric_peaks_wavelength": [
+      4500.0
+    ]
+  },
+  "SNR_description": {
+    "low_SNR_regions": [
+      [
+        2000,
+        3000
+      ],
+      [
+        7000,
+        8000
+      ]
+    ],
+    "unreliable_regions": [
+      [
+        3500,
+        4000
+      ],
+      [
+        4500,
+        5000
+      ],
+      [
+        5500,
+        6000
+      ]
+    ],
+    "note": "粉红区域在波长3500-4000、4500-5000和5500-6000区间相对蓝色信号更加明显，表明这些区域数据不可靠。"
+  }
+}

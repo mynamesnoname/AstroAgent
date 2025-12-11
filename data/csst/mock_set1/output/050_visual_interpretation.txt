@@ -1,0 +1,28 @@
+{
+  "continuum_description": {
+    "overall_trend": "蓝端通量较低，中段（约5000 Å附近）达到峰值，红端逐渐下降。",
+    "breaks": "无明显断裂。"
+  },
+  "lines_description": {
+    "dominant_line_type": "宽线",
+    "asymmetric_peaks_wavelength": [
+      5200.0
+    ]
+  },
+  "SNR_description": {
+    "low_SNR_regions": [
+      [
+        2000,
+        3000
+      ],
+      [
+        6500,
+        8000
+      ]
+    ],
+    "unreliable_data_region": [
+      5000,
+      5500
+    ]
+  }
+}

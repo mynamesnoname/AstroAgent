@@ -1,0 +1,39 @@
+{
+  "continuum_description": {
+    "overall_trend": "蓝端通量较低，中段（约4000 Å）达到峰值，红端逐渐下降。",
+    "breaks": "无明显断裂。"
+  },
+  "lines_description": {
+    "dominant_line_type": "宽线",
+    "asymmetric_peaks_wavelength": [
+      4200,
+      5400
+    ]
+  },
+  "SNR_description": {
+    "low_SNR_ranges": [
+      [
+        2000,
+        3000
+      ],
+      [
+        5000,
+        8000
+      ]
+    ],
+    "unreliable_ranges": [
+      [
+        2000,
+        3000
+      ],
+      [
+        3500,
+        4000
+      ],
+      [
+        5000,
+        6000
+      ]
+    ]
+  }
+}

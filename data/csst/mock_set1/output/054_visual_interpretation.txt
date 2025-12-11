@@ -1,0 +1,14 @@
+{
+  "continuum_description": {
+    "overall_trend": "蓝端通量较低，从中段开始上升，在约5000 Å处达到峰值，随后向红端逐渐下降。",
+    "breaks": "无明显断裂。"
+  },
+  "lines_description": {
+    "dominant_line_type": "宽线",
+    "asymmetric_peaks_wavelength": [
+      5000,
+      6500
+    ]
+  },
+  "SNR_description": "信噪比低，尤其在波长范围约5000-5100和6400-6500处，粉红区域明显覆盖蓝色信号，数据不可靠。"
+}

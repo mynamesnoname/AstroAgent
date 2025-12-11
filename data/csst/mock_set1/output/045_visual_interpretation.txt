@@ -1,0 +1,39 @@
+{
+  "continuum_description": {
+    "overall_trend": "蓝端通量较低，中段（约4000 Å）达到峰值，红端逐渐下降。",
+    "breaks": "无明显断裂。"
+  },
+  "lines_description": {
+    "dominant_line_type": "宽线",
+    "asymmetric_peaks_wavelength": [
+      4500.0
+    ]
+  },
+  "SNR_description": {
+    "low_SNR_ranges": [
+      [
+        2000,
+        3500
+      ],
+      [
+        5500,
+        8000
+      ]
+    ],
+    "unreliable_ranges": [
+      [
+        2000,
+        3500
+      ],
+      [
+        4500,
+        5000
+      ],
+      [
+        5500,
+        8000
+      ]
+    ],
+    "note": "粉红区域在波长2000-3500、4500-5000以及5500-8000范围内相对蓝色信号更加明显，表明这些区域数据不可靠。"
+  }
+}

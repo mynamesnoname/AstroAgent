@@ -1,0 +1,40 @@
+{
+  "continuum_description": {
+    "overall_trend": "蓝端通量较高，从中段开始逐渐下降至红端，呈现平滑递减趋势。",
+    "discontinuities": "无明显断裂。"
+  },
+  "lines_description": {
+    "dominant_line_type": "宽线",
+    "asymmetric_peaks_wavelength": [
+      3600.0
+    ]
+  },
+  "SNR_description": {
+    "overall_snr": "信噪比较低",
+    "noisy_regions": [
+      {
+        "wavelength_range": [
+          3500,
+          4000
+        ],
+        "note": "存在显著噪声"
+      }
+    ],
+    "unreliable_regions": [
+      {
+        "wavelength_range": [
+          3500,
+          4000
+        ],
+        "reason": "粉红区域相对蓝色信号更加明显，数据不可靠"
+      },
+      {
+        "wavelength_range": [
+          4600,
+          4800
+        ],
+        "reason": "粉红区域相对蓝色信号更加明显，数据不可靠"
+      }
+    ]
+  }
+}

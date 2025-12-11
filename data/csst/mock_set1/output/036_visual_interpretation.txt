@@ -1,0 +1,36 @@
+{
+  "continuum_description": {
+    "overall_trend": "蓝端通量高于红端，从蓝端到红端通量逐渐下降",
+    "breaks": "无明显断裂"
+  },
+  "lines_description": {
+    "dominant_line_type": "宽线",
+    "asymmetric_peaks_wavelength": [
+      3800.0,
+      4800.0
+    ]
+  },
+  "SNR_description": {
+    "overall_snr": "信噪比低",
+    "low_snr_regions": [
+      [
+        2000,
+        3500
+      ],
+      [
+        4500,
+        8000
+      ]
+    ],
+    "unreliable_regions": [
+      [
+        3700,
+        4000
+      ],
+      [
+        4800,
+        5000
+      ]
+    ]
+  }
+}
