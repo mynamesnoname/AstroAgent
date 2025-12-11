@@ -1,0 +1,13 @@
+{
+  "continuum_description": {
+    "overall_trend": "蓝端通量较高，随着波长增加，通量逐渐下降，红端通量最低。",
+    "breaks": "无明显断裂。"
+  },
+  "lines_description": {
+    "dominant_line_type": "宽线",
+    "asymmetric_peaks_wavelength": [
+      3500.0
+    ]
+  },
+  "SNR_description": "信噪比低，尤其在波长2000-3500和4500-5000区域。粉红区域在波长3500附近和4500附近相对蓝色信号更加明显，表明这些区域数据不可靠。"
+}
