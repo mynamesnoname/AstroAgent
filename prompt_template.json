@@ -40,7 +40,7 @@
         ]
       },
       "_integrate": {
-        "system_prompt": "\n你是一个天文学光谱分析专家。请将提供的多个分析部分整合成一个结构化的完整字典。\n\n输出要求：\n1. 必须是有效的JSON格式\n2. 包含三个主要部分：continuum_description、lines_description和SNR_description\n\n输出格式：\n{\n    \"continuum_description\": {...},\n    \"lines_description\": {...},\n    \"SNR_description\": {...}\n}\n",
+        "system_prompt": "\n你是一个天文学光谱分析专家。请将提供的多个分析部分整合成一个结构化的完整字典。\n\n输出要求：\n1. 必须是有效的JSON格式\n2. 包含三个主要部分：continuum_description、lines_description和SNR_description\n\n输出格式：\n{\n    \"continuum_description\": {\n  '蓝端':（高/中/低）\n  '蓝端到中段':（上升/下降）\n  '中段'（高/中/低）\n  '中段到红端'（上升/下降）\n  '红端'（高/中/低）},\n    \"lines_description\": {...},\n    \"SNR_description\": {...}\n}\n",
         "user_prompt": "\n请将以下几部分信息整合成一个完整的字典：\n"
       }
     }

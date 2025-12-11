@@ -1,26 +1,30 @@
 {
   "continuum_description": {
-    "overall_trend": "蓝端通量较低，中段逐渐上升至红端附近达到峰值，之后缓慢下降。",
-    "discontinuities": "无明显断裂。"
+    "蓝端": "低",
+    "蓝端到中段": "上升",
+    "中段": "高",
+    "中段到红端": "下降",
+    "红端": "中"
   },
   "lines_description": {
     "dominant_line_type": "宽线",
     "asymmetric_peaks_wavelength": [
-      5400.0
+      5300.0
     ]
   },
   "SNR_description": {
-    "low_SNR_ranges": [
+    "overall": "低",
+    "low_SNR_regions": [
       [
         2000,
-        3000
+        3500
       ],
       [
         6000,
         8000
       ]
     ],
-    "unreliable_ranges": [
+    "unreliable_regions": [
       [
         4000,
         5000
@@ -29,7 +33,6 @@
         6500,
         7000
       ]
-    ],
-    "note": "粉红区域在波长4000-5000和6500-7000区间相对蓝色信号更加明显，表明这些区域数据不可靠。"
+    ]
   }
 }
