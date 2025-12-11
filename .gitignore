@@ -1,15 +1,34 @@
+# ====================
+# Data & outputs (RECURSIVE)
+# ====================
+data/
+!data/.gitkeep          # 可选：若需保留空 data/ 目录结构
+
+# 或更精细控制（推荐）：
+# data/**/*.png
+# data/**/*.jpg
+# data/**/*.tar.gz
+# data/**/output/
+# data/**/input/          # 如果 input 也是生成的
+# data/test_set/
+
+# Logs
+log/
+logs/
+
+# Environments
+.env
+.env.*
+!.env.example           # 显式保留模板
+
+# VS Code
 .vscode/
 
-.env
-
-./log/*
-
-./data/LRG/*
-./data/QSO/*
-./data/ELG
-./data/test_set_2/A/output/*
-
 # Python
-**/__pycache__/
+__pycache__/
 *.py[cod]
-utils/__pycache__/tools.cpython-312.pyc
+*.so
+.Python
+.venv/
+env/
+ENV/
