@@ -1,10 +1,10 @@
-# English version of astro_agents.py
-
 import json
 import os
+import numpy as np
+import matplotlib.pyplot as plt
 import logging
-import traceback
-from typing import Any
+
+from scipy.ndimage import gaussian_filter1d
 
 from .context_manager import SpectroState
 from .base_agent import BaseAgent
@@ -15,23 +15,21 @@ from .utils import (
     _remap_to_cropped_canvas, _pixel_tickvalue_fitting,
     _process_and_extract_curve_points, _convert_to_spectrum,
     _find_features_multiscale, _plot_spectrum, _plot_features,
-    parse_list, getenv_float, getenv_int
+    parse_list, getenv_float, getenv_int, _load_feature_params, 
+    _ROI_features_finding, merge_features, plot_cleaned_features, 
+    safe_to_bool, find_overlap_regions
 )
 
-# 配置 logger
-logger = logging.getLogger(__name__)
-
 # ---------------------------------------------------------
-# 1. Visual Assistant — 负责图像理解与坐标阅读
+# 1. Visual Assistant — Responsible for image understanding and coordinate reading
 # ---------------------------------------------------------
-
 class SpectralVisualInterpreter(BaseAgent):
     """
-    SpectralVisualInterpreter:
-    Automatically extract information such as axis ticks, borders, pixel-to-value mappings and peaks/troughs 
-    from input scientific spectral plots.
-    """
+    SpectralVisualInterpreter
 
+    Automatically extracts axis ticks, borders, pixel mappings, peaks/troughs, and other information from scientific spectral plots.
+    """
+    
     def __init__(self, mcp_manager: MCPManager):
         super().__init__(
             agent_name='Spectral Visual Interpreter',
@@ -39,254 +37,308 @@ class SpectralVisualInterpreter(BaseAgent):
         )
 
     # --------------------------
-    # Step 1.1: detect axis tick marks
+    # Step 1.1: Detect axis ticks
     # --------------------------
     async def detect_axis_ticks(self, state: SpectroState):
         """
-        Call the visual LLM to detect axis tick marks. 
-        Raise an error if no image is provided or if the image is not a spectrum plot.
+        Invoke a vision LLM to detect axis ticks. Raise an error if no image is provided or the image is not a spectral plot.
         """
-        try:
-            if not state['image_path'] or not os.path.exists(state['image_path']):
-                raise ValueError("No image input or image path does not exist")
+        class NoImageError(Exception): pass
+        class NotSpectralImageError(Exception): pass
 
-            prompt = """
-You are a professional visual analysis model, specialized in extracting axis tick information from scientific charts.
-If the input does not contain a spectrum plot, output "Not a spectrum plot".
-Strictly output according to the following JSON Schema:
-{
-  "x_axis": {
-    "label_and_Unit": "str",
-    "tick_range": {"min": float, "max": float},
-    "ticks": List[float]
-  },
-  "y_axis": {
-    "label_and_Unit": "str",
-    "tick_range": {"min": float, "max": float},
-    "ticks": List[float]
-  }
-}
-"""
+        if not state['image_path'] or not os.path.exists(state['image_path']):
+            print(state['image_path'])
+            raise NoImageError("❌ No image provided or image path does not exist")
 
-            axis_info = await self.call_llm_with_context(
-                prompt,
-                image_path=state['image_path'],
-                parse_json=True,
-                description="axis info"
-            )
+        system_prompt = state['prompt'][f'{self.agent_name}']['detect_axis_ticks']['system_prompt']
+        user_prompt = state['prompt'][f'{self.agent_name}']['detect_axis_ticks']['user_prompt']
 
-            if axis_info == "Not a spectrum plot":
-                raise ValueError("The image is not a spectrum plot")
-
-            state["axis_info"] = axis_info
-        
-        except Exception as e:
-            logger.error("❌ [detect_axis_ticks] Failed to detect axis ticks", exc_info=True)
-            raise RuntimeError(f"Axis tick detection failed: {str(e)}") from e
+        axis_info = await self.call_llm_with_context(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            image_path=state['image_path'],
+            parse_json=True,
+            description="Axis information"
+        )
+        if axis_info == "Non-spectral image":
+            raise NotSpectralImageError(f"❌ The input image is not a spectral plot. LLM output: {axis_info}")
+        # print(axis_info)
+        state["axis_info"] = axis_info
 
     # --------------------------
-    # Step 1.3: Merge the visual LLM and OCR results
+    # Steps 1.2–1.3: Merge visual + OCR ticks
     # --------------------------
     async def combine_axis_mapping(self, state: SpectroState):
-        """Generate pixel-to-value mapping by combining visual LLM and OCR results"""
-        try:
-            axis_info_json = json.dumps(state['axis_info'], ensure_ascii=False)
-            ocr_json = json.dumps(state['OCR_detected_ticks'], ensure_ascii=False)
+        """Combine vision-based results and OCR results to generate a pixel-to-value mapping."""
+        axis_info_json = json.dumps(state['axis_info'], ensure_ascii=False)
+        ocr_json = json.dumps(state['OCR_detected_ticks'], ensure_ascii=False)
 
-            prompt_1 = f"""
-You are a **scientific chart interpretation assistant**.
-
-You will receive two sets of axis tick information:
-
-1. **Visual model output:** 
-{axis_info_json}
-2. **OCR/OpenCV output:** 
-{ocr_json}
-
----
-
-### **Task:**
-
-- According to those results above, perform **consistency correction and completion** on the OCR tick recognition data.
-
----
-
-### **Rules:**
-
-1. **Conflict Correction**
-   - If conflicts exist between the OCR and visual model results (e.g., mismatched positions or values), prioritize the visual model results and correct the OCR data accordingly.
-2. **Monotonicity Constraints**
-   - For the **x-axis**, `position_x` must increase monotonically as the tick values increase.
-   - For the **y-axis**, `position_y` must decrease monotonically as the tick values increase.
-3. **Missing Data Completion**
-   - If tick values are missing, first attempt linear interpolation using adjacent ticks.
-   - If interpolation is not possible (e.g., at boundaries), fill the value with `null`.
-   - If `bounding-box-scale_x` or `bounding-box-scale_y` are missing, fill them with `null`.
-4. **Derived Parameter Calculation**
-   - Compute `sigma_pixel = bounding-box-scale / 2`.
-   - If the corresponding scale is missing, set `sigma_pixel` to `null`.
-5. **Confidence Assignment (`conf_llm`)**
-   - High-confidence OCR result → **0.9**
-   - Interpolated or corrected result → **0.7**
-   - Missing value inferred from visual prediction → **0.5** 
-
-"""
-            prompt_2 = """
-Output:  
-- Strictly output a JSON array, each element containing: 
-{
-  "axis" ("x" or "y"): "str", 
-  "value": float, 
-  "position_x": int, 
-  "position_y": int,
-  "bounding-box-scale_x": int, 
-  "bounding-box-scale_y": int, 
-  "sigma_pixel": float, 
-  "conf_llm": float
-}  
-- Do not output any explanations or additional text.
-"""
-            prompt = prompt_1 + prompt_2
-            tick_pixel_raw = await self.call_llm_with_context(
-                prompt,
-                # image_path=state['image_path'],
-                parse_json=True,
-                description="tick-value-to-pixel mapping"
-            )
-
-            state["tick_pixel_raw"] = tick_pixel_raw
-        except Exception as e:
-            logger.error("❌ [combine_axis_mapping] Failed to combine axis mapping", exc_info=True)
-            raise RuntimeError(f"Axis mapping combination failed: {str(e)}") from e
+        system_prompt = state['prompt'][f'{self.agent_name}']['combine_axis_mapping']['system_prompt']
+        user_prompt = state['prompt'][f'{self.agent_name}']['combine_axis_mapping']['user_prompt'].format(
+            axis_info_json=axis_info_json,
+            ocr_json=ocr_json
+        )
+        tick_pixel_raw = await self.call_llm_with_context(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            image_path=None,
+            parse_json=True,
+            description="Tick-to-pixel mapping"
+        )
+        state["tick_pixel_raw"] = tick_pixel_raw
+        print(tick_pixel_raw)
 
     # --------------------------
-    # Step 1.4: Check and correct
+    # Step 1.4: Validation and correction
     # --------------------------
     async def revise_axis_mapping(self, state: SpectroState):
-        """Check and correct the mapping between tick values and pixel positions."""
-        try: 
-            axis_mapping_json = json.dumps(state['tick_pixel_raw'], ensure_ascii=False)
+        """Verify and correct the correspondence between tick values and pixel positions."""
+        axis_mapping_json = json.dumps(state['tick_pixel_raw'], ensure_ascii=False)
 
-            prompt = f"""
-You are a scientific chart reading assistant.
-Check the following mapping between tick values and pixel positions:
-{axis_mapping_json}
+        system_prompt = state['prompt'][f'{self.agent_name}']['revise_axis_mapping']['system_prompt']
+        user_prompt = state['prompt'][f'{self.agent_name}']['revise_axis_mapping']['user_prompt'].format(
+            axis_mapping_json=axis_mapping_json
+        )
 
-Rules:
+        tick_pixel_revised = await self.call_llm_with_context(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            image_path=None,
+            parse_json=True,
+            description="Revised tick mapping"
+        )
+        state["tick_pixel_raw"] = tick_pixel_revised
+        # print(tick_pixel_revised)
 
-- Y-axis: position_y must strictly decrease as tick values increase
-- X-axis: position_x must strictly increase as tick values increase
-- null values are allowed
-
-If there are issues, revise and output the JSON array in the same format as the input; otherwise, return the original input.
-Do not output any explanations or extra text.
+    # --------------------------
+    # Step 1.5: Image cropping
+    # --------------------------
+    async def check_border(self, state):
+        system_prompt = """
+You are a professional scientific chart analysis assistant specialized in processing matplotlib-style spectral plots in astronomy. You can accurately identify whether residual axis borders or decorative lines remain along the image edges and make precise judgments based on visual content.
 """
-            tick_pixel_revised = await self.call_llm_with_context(
-                prompt,
-                # image_path=state['image_path'],
-                parse_json=True,
-                description="revised tick-value-to-pixel mapping"
-            )
+        user_prompt = """
+You will receive two images:
+- One is the original spectral image, which may include plot borders.
+- The other is a preprocessed matplotlib astronomical spectral plot after OCR and OpenCV operations, where an attempt has already been made to crop out the original chart's borders and external regions.
 
-            state["tick_pixel_raw"] = tick_pixel_revised
-        except Exception as e:
-            logger.error("❌ [revise_axis_mapping] Failed to revise axis mapping", exc_info=True)
-            raise RuntimeError(f"Axis mapping revision failed: {str(e)}") from e
+Please evaluate whether obvious straight-line border remnants (e.g., long, straight black or dark line segments—typically part of the outer axis frame) remain along each of the four edges (top, right, bottom, left).
 
-    def _load_feature_params(self):
-        """Safely retrieve the parameters for peak and trough detection"""
-        sigma_list = parse_list(os.getenv("SIGMA_LIST"), [2, 4, 16])
-        tol_pixels = getenv_int("TOL_PIXELS", 10)
-        prom_peaks = getenv_float("PROM_THRESHOLD_PEAKS", 0.01)
-        prom_troughs = getenv_float("PROM_THRESHOLD_TROUGHS", 0.05)
-        weight_original = getenv_float("WEIGHT_ORIGINAL", 1.0)
-        plot_peaks = getenv_int("PLOT_PEAKS_NUMBER", 10)
-        plot_troughs = getenv_int("PLOT_TROUGHS_NUMBER", 15)
+Judgment criteria:
+- If **no such line segment** is visible on a given edge, mark it as “cleanly cropped”.
+- If **any clear line segment** (even very thin) remains visible on an edge, mark it as “not cleanly cropped”.
 
-        return sigma_list, tol_pixels, prom_peaks, prom_troughs, weight_original, plot_peaks, plot_troughs
+Output your result strictly in the following JSON format, containing only four keys. Values must be the string 'true' (clean) or 'false' (not clean):
 
-    # --------------------------
-    # Step 1.1~1.11: main
-    # --------------------------
-    async def run(self, state: SpectroState, plot: bool = True):
-        """Run the complete visual analysis pipeline with per-step error reporting."""
-        step_errors = []
+{
+    "top": "true" or "false",
+    "right": "true" or "false",
+    "bottom": "true" or "false",
+    "left": "true" or "false"
+}
 
+Do not output any additional content.
+"""
+        response = await self.call_llm_with_context(
+            system_prompt,
+            user_prompt,
+            image_path=[state['image_path'], state['crop_path']],
+            parse_json=True,
+            description='Border cropping check'
+        )
         try:
-            await self.detect_axis_ticks(state)
-            logger.info("✅ Step 1.1: Axis ticks detected")
+            response['top'] = safe_to_bool(response['top'])
+            response['right'] = safe_to_bool(response['right'])
+            response['bottom'] = safe_to_bool(response['bottom'])
+            response['left'] = safe_to_bool(response['left'])
+            return response
+        except:
+            logging.error(f"LLM output format error: {response}")
 
-            state["OCR_detected_ticks"] = _detect_axis_ticks(state['image_path'])
-            logger.info("✅ Step 1.2: OCR ticks extracted")
-
-            await self.combine_axis_mapping(state)
-            logger.info("✅ Step 1.3: Axis mapping combined")
-
-            await self.revise_axis_mapping(state)
-            logger.info("✅ Step 1.4: Axis mapping revised")
-
-            state["chart_border"] = _detect_chart_border(state['image_path'])
-            _crop_img(state['image_path'], state["chart_border"], state['crop_path'])
-            logger.info("✅ Step 1.5: Image cropped")
-
-            state["tick_pixel_remap"] = _remap_to_cropped_canvas(state['tick_pixel_raw'], state["chart_border"])
-            logger.info("✅ Step 1.6: Pixel remapping completed")
-
-            state["pixel_to_value"] = _pixel_tickvalue_fitting(state['tick_pixel_remap'])
-            logger.info("✅ Step 1.7: Pixel-to-value mapping fitted")
-
-            curve_points, curve_gray_values = _process_and_extract_curve_points(state['crop_path'])
-            state["curve_points"] = curve_points
-            state["curve_gray_values"] = curve_gray_values
-            logger.info("✅ Step 1.8: Curve points extracted")
-
-            state["spectrum"] = _convert_to_spectrum(state['curve_points'], state['curve_gray_values'], state['pixel_to_value'])
-            logger.info("✅ Step 1.9: Spectrum converted")
-
-            # Step 1.10
-            sigma_list, tol_pixels, prom_peaks, prom_troughs, weight_original, plot_peaks, plot_troughs = self._load_feature_params()
+    async def peak_trough_detection(self, state: SpectroState):
+        try:
+            sigma_list, tol_pixels, prom_peaks, prom_troughs, weight_original, _, _ = _load_feature_params()
             state['sigma_list'] = sigma_list
-            try:
-                state["peaks"] = _find_features_multiscale(
+
+            spec = state["spectrum"]
+            wavelengths = np.array(spec["new_wavelength"])
+            flux = np.array(spec["weighted_flux"])
+
+            state["peaks"] = _find_features_multiscale(
+                wavelengths, flux,
+                state, feature="peak", sigma_list=sigma_list,
+                prom=prom_peaks, tol_pixels=tol_pixels, weight_original=weight_original,
+                use_continuum_for_trough=True
+            )
+            state["troughs"] = _find_features_multiscale(
+                wavelengths, flux,
+                state, feature="trough", sigma_list=sigma_list,
+                prom=prom_troughs, tol_pixels=tol_pixels, weight_original=weight_original,
+                use_continuum_for_trough=True,
+                min_depth=0.08
+            )
+            # print(len(state["peaks"]), len(state["troughs"]))
+
+            # Divide wavelengths into ROIs of 500 Ångströms each and perform peak/trough detection per ROI
+            ROI_peaks = []
+            ROI_troughs = []
+            roi_size = 500  # Width of each ROI in Ångströms
+            roi_edges = np.arange(wavelengths[0], wavelengths[-1], roi_size)
+            for i in range(len(roi_edges)-1):
+                roi_start = roi_edges[i]
+                roi_end = roi_edges[i+1]
+                mask = (wavelengths >= roi_start) & (wavelengths < roi_end)
+                roi_wavelengths = np.where(mask, wavelengths, 0)
+                roi_flux = np.where(mask, flux, 0)
+                if len(roi_wavelengths) == 0:
+                    continue
+                roi_peaks = _find_features_multiscale(
+                    roi_wavelengths, roi_flux,
                     state, feature="peak", sigma_list=sigma_list,
                     prom=prom_peaks, tol_pixels=tol_pixels, weight_original=weight_original,
                     use_continuum_for_trough=True
                 )
-                state["troughs"] = _find_features_multiscale(
+                roi_troughs = _find_features_multiscale(
+                    roi_wavelengths, roi_flux,
                     state, feature="trough", sigma_list=sigma_list,
                     prom=prom_troughs, tol_pixels=tol_pixels, weight_original=weight_original,
                     use_continuum_for_trough=True,
                     min_depth=0.08
                 )
-                logger.info(f"✅ Step 1.10: Detected {len(state['peaks'])} peaks and {len(state['troughs'])} troughs")
-            except Exception as e:
-                logger.exception("❌ Step 1.10: Feature detection failed")
-                raise
+                ROI_peaks.extend(roi_peaks)
+                ROI_troughs.extend(roi_troughs)
+            roi_edges_ = roi_edges + 250
+            for i in range(len(roi_edges_)-1):
+                roi_start = roi_edges_[i]
+                roi_end = roi_edges_[i+1]
+                mask = (wavelengths >= roi_start) & (wavelengths < roi_end)
+                roi_wavelengths = np.where(mask, wavelengths, 0)
+                roi_flux = np.where(mask, flux, 0)
+                if len(roi_wavelengths) == 0:
+                    continue
+                roi_peaks = _find_features_multiscale(
+                    roi_wavelengths, roi_flux,
+                    state, feature="peak", sigma_list=sigma_list,
+                    prom=prom_peaks, tol_pixels=tol_pixels, weight_original=weight_original,
+                    use_continuum_for_trough=True
+                )
+                roi_troughs = _find_features_multiscale(
+                    roi_wavelengths, roi_flux,
+                    state, feature="trough", sigma_list=sigma_list,
+                    prom=prom_troughs, tol_pixels=tol_pixels, weight_original=weight_original,
+                    use_continuum_for_trough=True,
+                    min_depth=0.08
+                )
+                ROI_peaks.extend(roi_peaks)
+                ROI_troughs.extend(roi_troughs)
+            state["ROI_peaks"] = ROI_peaks
+            state["ROI_troughs"] = ROI_troughs
+            state['merged_peaks'], state['merged_troughs'] = merge_features(
+                wavelengths, flux,
+                global_peaks=state["peaks"],
+                global_troughs=state["troughs"],
+                ROI_peaks=state["ROI_peaks"],
+                ROI_troughs=state["ROI_troughs"],
+                tol_pixels=tol_pixels
+            )
+        except Exception as e:
+            print(f"❌ peak_trough_detection: {e}")
+        return state
 
-            # Step 1.11: Plotting
+    async def continuum_fitting(self, state: SpectroState):
+        """Perform simple continuum fitting."""
+        try:
+            spec = state["spectrum"]
+            wavelengths = np.array(spec["new_wavelength"])
+            flux = np.array(spec["weighted_flux"])
+            sigma_contunuum = getenv_int('CONTINUUM_SMOOTHING_SIGMA', None)
+            print(f'CONTINUUM_SMOOTHING_SIGMA: {sigma_contunuum}')
+            if sigma_contunuum is None:
+                logging.error("CONTINUUM_SMOOTHING_SIGMA is not set")
+                return
+            continuum_flux = gaussian_filter1d(flux, sigma=sigma_contunuum)
+            state['continuum'] = {
+                'wavelength': wavelengths.tolist(),
+                'flux': continuum_flux.tolist()
+            }
+        except Exception as e:
+            print(f"❌ continuum_fitting: {e}")
+        return state
+
+    # --------------------------
+    # Steps 1.1–1.11: Main pipeline
+    # --------------------------
+    async def run(self, state: SpectroState, plot: bool = True):
+        """Execute the full visual analysis pipeline."""
+        try:
+            # Step 1.1: Use vision LLM to extract axis info
+            await self.detect_axis_ticks(state)
+            # Step 1.2: Extract ticks via OCR
+            state["OCR_detected_ticks"] = _detect_axis_ticks(state['image_path'])
+            print(state["OCR_detected_ticks"])
+            # Step 1.3: Merge results
+            await self.combine_axis_mapping(state)
+            # Step 1.4: Revise mapping
+            await self.revise_axis_mapping(state)
+            # Step 1.5: Border detection and cropping
+            state['margin'] = {
+                'top': 20,
+                'right': 10,
+                'bottom': 15,
+                'left': 10,
+            }
+            stop = False
+            while not stop:
+                state["chart_border"] = _detect_chart_border(state['image_path'], state['margin'])
+                _crop_img(state['image_path'], state["chart_border"], state['crop_path'])
+                box_new = await self.check_border(state)
+                values = [box_new['top'], box_new['bottom'], box_new['left'], box_new['right']]
+                margin = [state['margin']['top'], state['margin']['right'], state['margin']['bottom'], state['margin']['left']] 
+                if all(values):  # All edges are clean
+                    stop = True
+                elif any(m > 30 for m in margin):
+                    stop = True
+                else:
+                    for k, v in box_new.items():
+                        if v:
+                            state['margin'][k] = state['margin'][k]
+                        else:
+                            state['margin'][k] += 2
+                print(f"box_new: {box_new}")
+                print(f"margin: {state['margin']}")
+            # Step 1.6: Remap pixels to cropped canvas
+            state["tick_pixel_remap"] = _remap_to_cropped_canvas(state['tick_pixel_raw'], state["chart_border"])
+            # Step 1.7: Fit pixel-to-value relationship
+            state["pixel_to_value"] = _pixel_tickvalue_fitting(state['tick_pixel_remap'])
+            # Step 1.8: Extract curve & convert to grayscale
+            curve_points, curve_gray_values = _process_and_extract_curve_points(state['crop_path'])
+            state["curve_points"] = curve_points
+            state["curve_gray_values"] = curve_gray_values
+            # Step 1.9: Reconstruct spectrum
+            state["spectrum"] = _convert_to_spectrum(state['curve_points'], state['curve_gray_values'], state['pixel_to_value'])
+            # Step 1.10: Detect peaks and troughs
+            await self.peak_trough_detection(state)
+            print(f"Detected {len(state['merged_peaks'])} peaks and {len(state['merged_troughs'])} troughs.")
+            # Step 1.10.5: Continuum fitting
+            await self.continuum_fitting(state)
+            # Step 1.11: Optional plotting
             if plot:
                 try:
                     state["spectrum_fig"] = _plot_spectrum(state)
-                    state["features_fig"] = _plot_features(state, sigma_list, [plot_peaks, plot_troughs])
-                    logger.info("✅ Step 1.11: Plots generated")
                 except Exception as e:
-                    logger.exception("❌ Step 1.11: Plotting failed")
+                    print(f"❌ Plotting spectrum or features failed with error: {e}")
                     raise
-
             return state
-        
         except Exception as e:
-            print(f"❌ run pipeline terminated with error: {e}")
+            print(f"❌ Pipeline execution failed with error: {e}")
             raise
 
 # ---------------------------------------------------------
-# 2. Rule-based Analyst — 负责基于规则的物理分析
+# 2. Rule-based Analyst — Responsible for rule-based physical analysis
 # ---------------------------------------------------------
 class SpectralRuleAnalyst(BaseAgent):
-    
     """
-    Rule-based analyst: 
-    perform qualitative analysis based on given physical and spectral line knowledge.
+    Rule-driven analyst: performs qualitative analysis based on given physical and spectral line knowledge.
     """
 
     def __init__(self, mcp_manager: MCPManager):
@@ -296,144 +348,360 @@ class SpectralRuleAnalyst(BaseAgent):
         )
 
     async def describe_spectrum_picture(self, state: SpectroState):
-        prompt = f"""
-You are an experienced astronomical spectral analysis assistant.
+        function_prompt = state['prompt'][f'{self.agent_name}']['describe_spectrum_picture']
+        async def _filter_noise(state):
+            band_name = state['band_name']
+            band_wavelength = state['band_wavelength']
 
-You will be presented with an astronomical spectrum (from an object with unknown redshift).
+            if not band_name or not band_wavelength:
+                return {
+                    "filter_noise": 'false',
+                    "filter_noise_wavelength": None
+                }
+            else:
+                # Identify overlapping regions
+                overlap_regions = find_overlap_regions(band_name, band_wavelength)
+                spec = state['spectrum']
+                wl = np.array(spec['new_wavelength'])
+                d_f = np.array(spec['delta_flux'])
 
-Using the image, **qualitatively describe the overall morphology of the spectrum**, including but not limited to the following aspects:
-
----
-
-### Step 1: Continuum Shape
-
-- Overall flux distribution trend (e.g., enhanced at blue end / enhanced at red end / roughly flat / arch-shaped, etc.).
-- Whether features of a power-law continuum, blackbody continuum, or flat continuum are apparent.
-- Any obvious breaks or inflection points in the continuum (e.g., Balmer break, Lyα forest region, etc.).
-
-### Step 2: Major Emission and Absorption Features
-
-- Presence of prominent emission peaks or absorption troughs.
-- Approximate number and relative strengths of emission or absorption lines.
-- Whether these lines are broad or narrow, symmetric or asymmetric.
-- Avoid giving precise numerical values (exact wavelengths or fluxes); just describe relative positions and characteristics.
-
-### Step 3: Overall Structure and Noise Features
-
-- General impression of the spectrum’s signal-to-noise ratio (high / medium / low).
-- Presence of noise fluctuations, abnormal spikes, or data gaps.
-- Any change in data quality toward the short-wavelength or long-wavelength ends.
-
----
-
-⚠️ **Notes:**
-
-- Do not output precise numerical values or tables.
-- Do not attempt to calculate redshift.
-- Focus on visual and morphological description, making qualitative judgments like a human astronomer.
-- Do not call any external tools.
-
-Finally, present your observations in a structured format, for example, using section headings:
-
-- (Continuum)
-- (Emission & Absorption)
-- (Noise & Data Quality)
+                system_prompt = function_prompt['_filter_noise']['system_prompt']
+                band_name_json = json.dumps(band_name, ensure_ascii=False)
+                ham = f"""
+The camera/filters used for this spectrum are named:
+{band_name_json}
+Below is sample data from the spectrum near the boundaries between these camera/filters.
 """
-        
-        response = await self.call_llm_with_context(
-            prompt,
-            image_path=state['image_path'],
-            parse_json=False,
-            description="Visual Qualitative Description of a Spectrum"
-        )
-        state['visual_interpretation'] = response
-        
+                for key in overlap_regions.keys():
+                    overlap = overlap_regions[key]
+                    scale = overlap[1] - overlap[0]
+                    scale = scale * 2
+                    center = (overlap[0] + overlap[1]) / 2
+                    left = center - scale / 2
+                    right = center + scale / 2
+                    mask = (wl >= left) & (wl <= right)
+                    wl_t = wl[mask]
+                    wl_t = wl_t.tolist()
+                    wl_t_json = json.dumps(wl_t, ensure_ascii=False)
+                    delta_t = d_f[mask]
+                    delta_t = delta_t.tolist()
+                    delta_t_json = json.dumps(delta_t, ensure_ascii=False)
+
+                    ham += f"""
+Boundary region {key}:
+Wavelength: {wl_t_json}
+Flux error: {delta_t_json}
+"""
+                user_prompt = function_prompt['_filter_noise']['user_prompt']
+                user_prompt = ham + user_prompt
+
+                response = await self.call_llm_with_context(
+                    system_prompt=system_prompt,
+                    user_prompt=user_prompt,
+                    image_path=None,
+                    parse_json=True,
+                    description="Noise filtering judgment"
+                )
+                return response
+
+        async def _cleaning(state):
+            filter_noise = state['visual_interpretation'][0]
+            if not safe_to_bool(filter_noise.get('filter_noise', False)):
+                state['cleaned_peaks'] = state['merged_peaks']
+                state['cleaned_troughs'] = state['merged_troughs']
+            else:
+                filter_noise_wl = filter_noise.get('filter_noise_wavelength', [])
+                filter_noise_wl = np.array(filter_noise_wl)
+                wavelength = np.array(state['spectrum']['new_wavelength'])
+                peaks = state['merged_peaks']
+                cleaned_peaks = []
+                wiped_peaks = []
+                for p in peaks:
+                    wl = p['wavelength']
+                    width = p['width_mean']
+
+                    distance = abs(wl - filter_noise_wl)
+                    # If any distance value is less than or equal to the peak width, consider it within a noise region
+                    if np.any(distance <= width):
+                        is_artifact = True
+                    else:
+                        is_artifact = False
+                    if not is_artifact:
+                        if p['width_in_km_s'] is not None and p['wavelength'] > wavelength[0]:
+                            if p['width_in_km_s'] > 2000:
+                                p['describe'] = 'broad line'
+                            elif p['width_in_km_s'] < 1000:
+                                p['describe'] = 'narrow line'
+                            else:
+                                p['describe'] = 'medium-width line'
+                            cleaned_peaks.append(p)
+                    else:
+                        wiped_peaks.append(p)
+                state['cleaned_peaks'] = cleaned_peaks
+                state['wiped_peaks'] = wiped_peaks
+
+                cleaned_troughs = []
+                for t in state['merged_troughs']:
+                    wl = t['wavelength']
+                    distance = abs(wl - filter_noise_wl)
+                    if np.any(distance <= width):
+                        is_artifact = True
+                    else:
+                        is_artifact = False
+                    if not is_artifact:
+                        if t['width_in_km_s'] is not None and t['wavelength'] > wavelength[0]:
+                            if t['width_in_km_s'] > 2000:
+                                t['describe'] = 'broad trough'
+                            elif t['width_in_km_s'] < 1000:
+                                t['describe'] = 'narrow trough'
+                            else:
+                                t['describe'] = 'medium-width trough'
+                        else:
+                            t['describe'] = 'unprocessed'
+                        cleaned_troughs.append(t)
+                state['cleaned_troughs'] = cleaned_troughs
+            return state
+
+        async def _visual(state):
+            system_prompt = function_prompt['_visual']['system_prompt']
+            user_prompt_1 = function_prompt['_visual']['user_prompt_continuum']
+            response_1 = await self.call_llm_with_context(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt_1,
+                image_path=state['continuum_path'],
+                parse_json=True,
+                description="Visual qualitative description — continuum"
+            )
+            
+            user_prompt_2 = function_prompt['_visual']['user_prompt_lines']
+            response_2 = await self.call_llm_with_context(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt_2,
+                image_path=state['spec_extract_path'],
+                parse_json=True,
+                description="Visual qualitative description — lines"
+            )
+
+            user_prompt_3 = function_prompt['_visual']['user_prompt_quality']
+            response_3 = await self.call_llm_with_context(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt_3,
+                image_path=state['spec_extract_path'],
+                parse_json=True,
+                description="Visual qualitative description — quality"
+            )
+            return '\n'.join([response_1, response_2, response_3])
+
+        async def _integrate(state):
+            visual_json = json.dumps(state['visual_interpretation'][1], ensure_ascii=False)
+
+            system_prompt = function_prompt['_integrate']['system_prompt']
+            ham = f"""
+{visual_json}
+"""
+            user_prompt_integrate = function_prompt['_integrate']['user_prompt'] + ham
+            response = await self.call_llm_with_context(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt_integrate,
+                parse_json=True,
+                description="Integrated visual qualitative description"
+            )
+            return response
+
+        result_filter_noise = await _filter_noise(state)
+        state['visual_interpretation'] = [result_filter_noise]
+        await _cleaning(state)
+        result_visual = await _visual(state)
+        state['visual_interpretation'].append(result_visual)
+        result_integrate = await _integrate(state)
+        state['visual_interpretation'] = result_integrate
+
+        visual_interpretation_path = os.path.join(state['output_dir'], f'{state["image_name"]}_visual_interpretation.txt')
+        with open(visual_interpretation_path, 'w', encoding='utf-8') as f:
+            json_str = json.dumps(state['visual_interpretation'], indent=2, ensure_ascii=False)
+            f.write(json_str)
+        print('Finished describe_spectrum_picture')
     
     async def preliminary_classification(self, state: SpectroState) -> str:
-        """
-        Preliminary Classification: 
-        Make an initial assessment of the object type based on the spectral morphology.
-        """
+        """Preliminary classification: roughly classify the astronomical object based on spectral morphology."""
 
-        visual_interpretation_json = json.dumps(state['visual_interpretation'], ensure_ascii=False)
-        prompt = f"""
+        continuum_interpretation_json = json.dumps(state['visual_interpretation']['continuum_description'], ensure_ascii=False)
+        line_interpretation_json = json.dumps(state['visual_interpretation']['lines_description'], ensure_ascii=False)
+
+        system_prompt = """
 You are an experienced astronomical spectral analysis assistant.
 
-You will see an astronomical spectrum (from an object with unknown redshift), which may belong to one of the following three categories:
+Your task is to guess the likely class of the astronomical object based on qualitative descriptions and spectral features.
 
-- **Star**: Strong continuum, spectral lines are usually absorption lines (e.g., Balmer series, metal lines), with little or no noticeable redshift.
-- **Galaxy**: Exhibits some redshift, often with emission or absorption lines (e.g., [O II], Hβ, [O III], Hα), lines are relatively narrow, and the continuum is relatively weak.
-- **QSO**: Strong broad emission lines spanning the visible/UV range, line widths significantly larger than typical galaxies, usually with noticeable redshift.
+- If the continuum shows a trend of being higher in the blue end and lower in the red end (i.e., high → low), the object is a QSO.
+- If the continuum shows a trend of being lower in the blue end, peaking in the middle, and dropping again toward the red end (i.e., low → high → low), the object is also a QSO.
+- If the continuum shows a trend of being lower in the blue end and higher in the red end (i.e., low → high), the object is a Galaxy.
 
-The previous astronomical assistant has already provided a qualitative description of the overall spectral morphology:
+Compare the likelihoods of these two possibilities and provide your choice.
 
-{visual_interpretation_json}
+Output the object type in JSON format as follows:
+{
+    "type": str  # Possible values: "Galaxy", "QSO"
+}
 
-Based on their description, please assess which category or categories the spectrum is most likely to belong to, and provide a confidence level.
+Output only one option. Do not include any other information.
+"""
+        user_prompt = f"""
+Please analyze the following spectral data:
 
-Your answer must strictly follow this format:
+A previous assistant has already provided a qualitative description of the overall spectral shape:
+{continuum_interpretation_json}
 
-Guess 1:
-
-- **Category**: Star / Galaxy / QSO (choose one)
-- **Reason**: Brief explanation of the classification (e.g., line width, redshift features, continuum morphology)
-- **Confidence**: High / Medium / Low
-
-Guess 2:
-
-- **Category**: Star / Galaxy / QSO (choose one)
-- **Reason**: Brief explanation of the classification
-- **Confidence**: High / Medium / Low
-
-… and so on.
-
-⚠️ **Note:**
-
-- Only provide answers with medium confidence or higher
-- Do not include exact numerical values or tables
-- Do not attempt to calculate redshift
-- Focus on visual and morphological assessment, making qualitative judgments like a human astronomer
-- Do not call any external tools
+Based on this description and the image, guess which class this spectrum likely belongs to.
+""" + """
+Output in JSON format as follows:
+{
+    "type": str  // Possible values: "Galaxy", "QSO"
+}
 """
         response = await self.call_llm_with_context(
-            prompt,
-            image_path=state['image_path'],
-            parse_json=False,
-            description="Preliminary Classification"
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            image_path=None,
+            parse_json=True,
+            description="Preliminary classification"
         )
         state['preliminary_classification'] = response
-        
-    def _common_prompt_header_QSO(self, state, include_rule_analysis=True):
-        visual_json = json.dumps(state['visual_interpretation'], ensure_ascii=False)
-        peak_json = json.dumps(state['peaks'][:10], ensure_ascii=False)
-        trough_json = json.dumps(state['troughs'], ensure_ascii=False)
 
-        header = f"""
+    async def preliminary_classification_monkey(self, state):
+        """My dear monkey friend and its typewriter"""
+        preliminary_classification_json = json.dumps(state['preliminary_classification'], ensure_ascii=False)
+        prompt = f"""
+You are an astronomical spectral analysis assistant.
+You have received a preliminary guess from another assistant regarding the source type of a spectrum:
+{preliminary_classification_json}
+
+Please output the source type indicated in this guess.
+""" + """
+Format the output as JSON:
+{
+    "type": str  // Possible values: "Galaxy", "QSO"
+}
+Do not output anything else.
+"""
+        response = await self.call_llm_with_context(
+            system_prompt='',
+            user_prompt=prompt,
+            parse_json=True,
+            description="Preliminary classification monkey"
+        )
+        return response
+
+    ###################################
+    # QSO part
+    ###################################
+    async def _QSO(self, state):
+        """QSO analysis pipeline"""
+        try:
+            peaks_info = [
+                {
+                    "wavelength": pe.get('wavelength'),
+                    "flux": pe.get('mean_flux'),
+                    "width": pe.get('width_mean'),
+                    "width_in_km_s": pe.get('width_in_km_s'),
+                    "prominence": pe.get('max_prominence'),
+                    "seen_in_max_global_smoothing_scale_sigma": pe.get('max_global_sigma_seen', None),
+                    "seen_in_max_local_smoothing_scale_sigma": pe.get('max_roi_sigma_seen', None),
+                    "describe": pe.get('describe')
+                }
+                for pe in state.get('cleaned_peaks', [])[:15]
+            ]
+            peak_json = json.dumps(peaks_info, ensure_ascii=False)
+
+            # Initialize Lyα candidate list
+            Lyalpha_candidate = []
+
+            # Get spectral wavelength range
+            wl_left = state['spectrum']['new_wavelength'][0]
+            wl_right = state['spectrum']['new_wavelength'][-1]
+            mid_wavelength = (wl_left + wl_right) / 2
+
+            # Selection criterion 1: prioritize global smoothing scale SNR
+            for peak in peaks_info:
+                # Check if line width is sufficiently broad (>=2000 km/s)
+                if peak['width_in_km_s'] >= 2000:
+                    # Check global smoothing scale SNR condition
+                    if (peak['seen_in_max_global_smoothing_scale_sigma'] is not None and 
+                        peak['seen_in_max_global_smoothing_scale_sigma'] > 2):
+                        Lyalpha_candidate.append(peak['wavelength'])
+
+            # Selection criterion 2: if no candidates found above, use local smoothing scale SNR
+            if len(Lyalpha_candidate) == 0:
+                for peak in peaks_info:
+                    if peak['wavelength'] < mid_wavelength:
+                        if peak['width_in_km_s'] >= 2000:
+                            # Check local smoothing scale SNR condition
+                            if (peak['seen_in_max_local_smoothing_scale_sigma'] is not None and 
+                                peak['seen_in_max_local_smoothing_scale_sigma'] > 2):
+                                Lyalpha_candidate.append(peak['wavelength'])
+
+            # Convert candidate list to JSON and print
+            Lyalpha_candidate_json = json.dumps(Lyalpha_candidate, ensure_ascii=False)
+            print(f"Lyalpha_candidate: {Lyalpha_candidate}")
+
+            trough_info = [
+                {
+                    "wavelength": tr.get('wavelength'),
+                    "flux": tr.get('mean_flux'),
+                    "width": tr.get('width_mean'),
+                    "seen_in_scales_of_sigma": tr.get('seen_in_scales_of_sigma')
+                }
+                for tr in state.get('cleaned_troughs', [])[:15]
+            ]
+            trough_json = json.dumps(trough_info, ensure_ascii=False)
+        except Exception as e:
+            logging.error(f"Error in _QSO: {e}")
+            raise e
+
+        def _common_prompt_header_QSO(state, include_rule_analysis=True, include_step_1_only=False):
+            """Construct common prompt header for each step"""
+            try:
+                visual_json = json.dumps(state['visual_interpretation'], ensure_ascii=False)
+                header = f"""
 You are an astronomical spectral analysis assistant.
 
 The following information may come from a QSO spectrum with unknown redshift.
 
 A previous assistant has already provided a preliminary description of this spectrum:
 {visual_json}
+
+The wavelength range of this spectrum is from {state['spectrum']['new_wavelength'][0]} Å to {state['spectrum']['new_wavelength'][-1]} Å.
 """
 
-        if include_rule_analysis and state.get('rule_analysis'):
-            rule_json = json.dumps("\n".join(str(item) for item in state['rule_analysis']), ensure_ascii=False)
-            header += f"\nThe previous assistant also performed an initial analysis under the assumption that Lyα lines are present:\n{rule_json}\n"
+                if include_rule_analysis and state['rule_analysis_QSO']:
+                    if include_step_1_only:
+                        rule_json = json.dumps(state['rule_analysis_QSO'][0], ensure_ascii=False)
+                    else:
+                        rule_json = json.dumps("\n".join(str(item) for item in state['rule_analysis_QSO']), ensure_ascii=False)
+                    header += f"\nPrevious assistants have already performed some analysis:\n{rule_json}\n"
 
-        
-        header += f"""
-Using the original spectrum and Gaussian-smoothed curves with sigma={state['sigma_list']}, peaks and troughs were identified with scipy functions.
-The discussion of peaks/troughs is based on the following data:
+                tol_pixels = getenv_int("TOL_PIXELS", 10)
+                a_x = state['pixel_to_value']['x']['a']
+                tol_wavelength = a_x * tol_pixels
+                header += f"""
+Peak/trough identification was performed using scipy functions on both the original curve and Gaussian-smoothed curves at sigma={state['sigma_list']}.
+
+All discussions about peaks and troughs should be based on the following data:
 - Top 10 representative emission lines:
 {peak_json}
-- Possible absorption lines:
+- Potential absorption lines:
 {trough_json}
+- Wavelength uncertainty is approximately ±{tol_wavelength/2} Å or larger.
 """
-        return header
+                return header
+            except Exception as e:
+                logging.error(f"Error in _common_prompt_header_QSO: {e}")
+                raise e
 
-    def _common_prompt_tail(self, step_title, extra_notes=""):
-        tail = f"""
+        def _common_prompt_tail(step_title, extra_notes=""):
+            """Construct common tail for each step, preserving step-specific instructions"""
+            try:
+                tail = f"""
 ---
 
 Output format:
@@ -443,122 +711,175 @@ Output format:
 ---
 
 🧭 Notes:
-
-- For computed (non-original) data, keep 3 decimal places in the output.
-- No need for repetitive summaries.
+- Non-original computed values should be reported with 3 decimal places.
+- Avoid redundant summaries.
 - Do not repeat input data line by line.
-- Focus on physical reasoning and reasonable explanations.
-- Ensure the final output is complete; do not truncate midway.
+- Focus on physical reasoning and plausible explanations.
+- Ensure the final output is complete and not truncated.
 """
-        if extra_notes:
-            tail = extra_notes + "\n" + tail
-        return tail
-    
-    async def step_1(self, state):
-        header = self._common_prompt_header_QSO(state, include_rule_analysis=False)
-        tail = self._common_prompt_tail("Step 1: Lyα Analysis")
-
-        prompt = header + """
-Analyze according to the following steps:
-
-**Step 1: Lyα Line Detection**
-Assuming the spectrum contains a Lyα emission line (λ_rest = 1216 Å):
-
-1. Assuming the observed emission line with the highest flux as Lyα (select from the provided peak list).
-2. Output:
-   - **λ_obs** (observed wavelength)
-   - **Intensity** (relative strength or qualitative description)
-   - **Line width** (FWHM or approximate pixel width)
-3. Use the tool `calculate_redshift` to compute the redshift (z) based on this emission line.
-4. Examine the blue end (short-wavelength side) for Lyα forest features:
-
-   - If absorption lines are denser, narrower, and clustered near the Lyα blue side, note this and provide a brief qualitative description.
-""" + tail
+                if extra_notes:
+                    tail = extra_notes + "\n" + tail
+                return tail
+            except Exception as e:
+                logging.error(f"Error in _common_prompt_tail: {e}")
+                raise e
         
-        response = await self.call_llm_with_context(prompt, parse_json=False, description="Step 1 Lyα 分析")
-        state['rule_analysis'].append(response)
+        async def step_1_QSO(state):
+            try:
+                print("Step 1: Lyα line detection")
+                header = _common_prompt_header_QSO(state, include_rule_analysis=False)
+                tail = _common_prompt_tail("Step 1: Lyα line detection")
+                if len(Lyalpha_candidate) > 0:
+                    candidate_str = f"\nAlgorithm-selected Lyα candidates include:\n{Lyalpha_candidate_json}\nYou may also propose other options.\n"
+                else:
+                    candidate_str = ""
 
-    async def step_2(self, state):
-        header = self._common_prompt_header_QSO(state)
-        tail = self._common_prompt_tail("Step 2: Analysis of Other Significant Emission Lines")
+                system_prompt = header + tail
+                user_prompt = f"""
+Please analyze as follows:
 
-        prompt = header + """
-Continue the analysis:
+Step 1: Lyα line detection
+Assume this spectrum contains a Lyα emission line (λ_rest = 1216 Å):
+{candidate_str}
+1. Among the prominent, broad peaks visible at large smoothing scales, identify which is most likely the Lyα line.
+   - Choose from the provided peak list.
+   - When candidate lines have similar widths (within 20 Å), prefer the one with higher flux.
+2. Output:
+   - Observed wavelength λ_obs
+   - Flux
+   - Line width
+3. Use the tool `calculate_redshift` to compute the redshift z assuming this peak is Lyα.
+4. Check whether the blueward (shorter-wavelength) side shows features of the Lyα forest: relatively dense, narrow absorption lines clustered near the blue side of Lyα. Briefly comment if present.
+""" 
+                
+                response = await self.call_llm_with_context(
+                    system_prompt=system_prompt, 
+                    user_prompt=user_prompt, 
+                    parse_json=True, 
+                    description="Step 1 Lyα analysis"
+                )
+                state['rule_analysis_QSO'].append(response)
+            except Exception as e:
+                logging.error(f"Error in step_1_QSO: {e}")
+                raise e
 
-**Step 2: Analysis of Other Significant Emission Lines**
+        async def step_2_QSO(state):
+            print("Step 2: Analysis of other prominent emission lines")
+            try:
+                header = _common_prompt_header_QSO(state)
+                tail = _common_prompt_tail("Step 2: Analysis of other prominent emission lines")
+                system_prompt = header + tail
 
-1. Using the redshift obtained in Step 1 as a reference, use the tool `predict_obs_wavelength` to check whether other significant emission lines (e.g., C IV 1549, C III] 1909, Mg II 2799, Hβ, Hα, etc.) may be present in the spectrum. Do **not** calculate these manually.
-2. Are there any other emission lines that require attention?
+                band_name = state['band_name']
+                band_wavelength = state['band_wavelength']
+                if band_name: 
+                    overlap_regions = find_overlap_regions(band_name, band_wavelength)
+                    wws = np.max([wp.get('width_mean') for wp in state.get('wiped_peaks', [])[:5]])
+                    print(f"wws: {wws}")
+                    for key in overlap_regions:
+                        range_val = overlap_regions[key]
+                        overlap_regions[key] = [range_val[0] - wws, range_val[1] + wws]  # Broaden regions to avoid missing features
+                    overlap_regions_json = json.dumps(overlap_regions, ensure_ascii=False)
+                    wiped = [
+                        {
+                            "wavelength": wp.get('wavelength'),
+                            "flux": wp.get('mean_flux'),
+                            "width": wp.get('width_mean'),
+                        }
+                        for wp in state.get('wiped_peaks', [])[:5]
+                    ]
+                    wiped_json = json.dumps(wiped, ensure_ascii=False)
+                    advanced = f"""\n    - Note: if any theoretical line falls near the following intervals:\n        {overlap_regions_json}\n    it may have been removed as noise. These removed peaks are:\n        {wiped_json}\n    Please reconsider these when analyzing."""
+                else:
+                    advanced = ""
+
+                user_prompt = f"""
+Please continue the analysis:
+
+Step 2: Analysis of other prominent emission lines
+1. Using the redshift from Step 1, use the tool `predict_obs_wavelength` to compute the expected observed positions of the following three major emission lines: C IV 1549, C III] 1909, Mg II 2799.
+2. Are there matching peaks in the provided spectrum? {advanced}
+3. If matches exist, compute their redshifts using `calculate_redshift`. Output in the format: "Line name -- rest wavelength -- observed wavelength -- redshift".
+"""
+
+                response = await self.call_llm_with_context(system_prompt, user_prompt, parse_json=False, description="Step 2 emission line analysis")
+                state['rule_analysis_QSO'].append(response)
+            except Exception as e:
+                logging.error(f"Error in step_2_QSO: {e}")
+                raise e
+
+        async def step_3_QSO(state):
+            try:
+                header = _common_prompt_header_QSO(state)
+                tail = _common_prompt_tail("Step 3: Final synthesis")
+                system_prompt = header + tail
+
+                user_prompt = """
+Please continue the analysis:
+
+Step 3: Final synthesis
+1. In Steps 1–2, if:
+   - Either C IV or C III] is missing or significantly offset, OR
+   - The redshift derived from Lyα is inconsistent with those from other lines,
+   then output: “We should prioritize the assumption that the Lyα line was not captured by the peak-finding algorithm,” and terminate Step 3. Do not output anything else.
+2. Only if a significant Lyα peak exists AND its redshift is consistent with other lines, proceed as follows:
+   - Due to astrophysical phenomena like outflows, adopt the redshift from the **lowest-ionization-state line** among all matched lines as the final redshift. Output this redshift value. (Note: Lyα is less reliable due to asymmetry and broadening.)
+"""
+                response = await self.call_llm_with_context(system_prompt, user_prompt, parse_json=False, description="Step 3 final synthesis")
+                state['rule_analysis_QSO'].append(response)
+            except Exception as e:
+                logging.error(f"Error in step_3_QSO: {e}")
+                raise e
+            
+        async def step_4_QSO(state):
+            try: 
+                header = _common_prompt_header_QSO(state, include_step_1_only=True)
+                tail = _common_prompt_tail("Step 4: Supplementary analysis (assuming the line selected in Step 1 is NOT Lyα)")
+                system_prompt = header + tail
+
+                user_prompt = """
+Please continue the analysis:
+
+Step 4: Supplementary analysis (assuming the line selected in Step 1 is NOT Lyα)
+- Disregard prior conclusions. Consider that the peak chosen in Step 1 might actually be another major emission line.
+  - Assume this peak corresponds to C IV:
+      - Output its properties:
+          - Observed wavelength λ_obs
+          - Flux
+          - Line width
+          - Use `calculate_redshift` to estimate redshift z based on λ_rest = 1549 Å
+      - Use `predict_obs_wavelength` to compute expected positions of other major lines (e.g., Lyα, C III], Mg II) at this redshift. Are matching emission lines present?
+      - If Lyα falls within the spectral range, check for its presence.
+      - For any plausible matches, compute redshifts using `calculate_redshift` and output in the format: "Line name -- rest wavelength -- observed wavelength -- redshift".
+  
+  - If this assumption is unreasonable, assume the peak corresponds to C III] or another major line, and repeat the inference. Check for the presence of other expected lines (e.g., Lyα, C III], Mg II) if they fall within the spectral range.
+
+- Note: It is acceptable that some emission lines may be absent due to edge effects or low signal-to-noise ratio.
 """ + tail
 
-        response = await self.call_llm_with_context(prompt, parse_json=False, description="Step 2 Analysis of Other Significant Emission Lines")
-        state['rule_analysis'].append(response)
+                response = await self.call_llm_with_context(system_prompt, user_prompt, parse_json=False, description="Step 4 supplementary analysis")
+                state['rule_analysis_QSO'].append(response)
+            except Exception as e:
+                logging.error(f"Error in step_4_QSO: {e}")
+                raise e
+        
+        await step_1_QSO(state)
+        await step_2_QSO(state)
+        await step_3_QSO(state)
+        await step_4_QSO(state)
 
-    async def step_3(self, state):
-        header = self._common_prompt_header_QSO(state)
-        tail = self._common_prompt_tail("Step 3: Comprehensive Assessment")
-
-        prompt = header + """
-Continue the analysis:
-
-**Step 3: Comprehensive Assessment**
-
-- From Step 1 to Step 2, if there is insufficient evidence for the presence of Lyα (e.g., no clear peak at the corresponding wavelength or redshift inconsistent with other lines), **assume Lyα is absent** and terminate the analysis.
-- Only include Lyα in the combined redshift calculation if there is strong evidence for its presence (significant peak + consistent redshift with other lines).
-- If the redshift results from Step 1 and Step 2 are consistent, integrate the analyses from Step 1 and Step 2, using the matched lines to provide:
-
-  - Redshift of each line
-  - Weighted average redshift (z ± Δz), using the flux at the smallest shared sigma smoothing as the weight and the tool `weighted_average` (do **not** calculate manually)
-  - The calculation of redshift must use the tool `calculate_redshift`; manual computation is not allowed.
-- Provide the wavelengths and line names of all emission lines confirmed at this redshift.
-""" + tail
-
-        response = await self.call_llm_with_context(prompt, parse_json=False, description="Step 3 Comprehensive Assessment")
-        state['rule_analysis'].append(response)
-
-    async def step_4(self, state):
-        header = self._common_prompt_header_QSO(state)
-        tail = self._common_prompt_tail("Step 4: Supplementary Step (Suppose the strongest emission line is not Lyα)")
-
-        prompt = header + """
-Continue the analysis:
-
-**Step 4: Supplementary Step (Suppose the strongest emission line is not Lyα)**
-
-- Suppose the strongest emission line is not Lyα
-- Based on typical QSO spectral features, identify the **strongest peak** in the spectrum.
-- Guess which spectral line this peak may correspond to (e.g., C IV, C III], Mg II, Hβ, Hα, etc.).
-- Follow the logic of Steps 1–3. Use the tool `calculate_redshift` for redshift calculations and `predict_obs_wavelength` for observed line wavelength predictions. Manual calculations are not allowed.
-
-  - Output information for this peak’s spectral line:
-
-    - Line name
-    - λ_obs
-    - Intensity
-    - Line width
-    - Preliminary redshift z based on λ_rest (must use `calculate_redshift`)
-  - If possible, predict other visible emission lines and calculate their redshifts
-  - Combine all lines to provide the most likely redshift and its range
-- Does the evidence support the hypothesis that the strongest emission line is not Lyα?
-""" + tail
-
-        response = await self.call_llm_with_context(prompt, parse_json=False, description="Step 4: Supplementary Step (Suppose the strongest emission line is not Lyα)")
-        state['rule_analysis'].append(response)
-
-#     # --------------------------
-#     # Run
-#     # --------------------------
     async def run(self, state: SpectroState):
+        """Execute the full rule-based analysis pipeline"""
         try:
             await self.describe_spectrum_picture(state)
-            logger.info("✅ Described the spectrum picture")
+            
+            plot_cleaned_features(state)
+            
             await self.preliminary_classification(state)
-            logger.info("✅ Preliminary classification")
-            await self.step_1(state)
-            await self.step_2(state)
-            await self.step_3(state)
-            await self.step_4(state)
-            logger.info('✅ Done rule-based analysis')
+            print(state['preliminary_classification'])
+
+            if state['preliminary_classification']['type'] == "QSO":
+                await self._QSO(state)
             return state
         except Exception as e:
             import traceback
@@ -567,19 +888,13 @@ Continue the analysis:
             print(f"Error message: {str(e)}")
             print("Full traceback:")
             traceback.print_exc()
-            raise 
-        
+            raise  # Re-raise so the caller can handle it if needed          
 
-
-
-# # ---------------------------------------------------------
-# # 3. Revision Supervisor — 负责交叉审核与评估
-# # ---------------------------------------------------------
+# ---------------------------------------------------------
+# 3. Revision Supervisor — Responsible for cross-review and evaluation
+# ---------------------------------------------------------
 class SpectralAnalysisAuditor(BaseAgent):
-    """
-    Analysis Auditor: 
-    audit and auditor the outputs of other analysis agents
-    """
+    """Review Analyst: Reviews and corrects outputs from other analysis agents"""
 
     def __init__(self, mcp_manager: MCPManager):
         super().__init__(
@@ -587,87 +902,155 @@ class SpectralAnalysisAuditor(BaseAgent):
             mcp_manager=mcp_manager
         )
 
-    def _common_prompt_header_QSO(self, state: SpectroState) -> str:
-        peak_json = json.dumps(state['peaks'][:10], ensure_ascii=False)
-        trough_json = json.dumps(state['troughs'], ensure_ascii=False)
-        rule_analysis = "\n\n".join(str(item) for item in state['rule_analysis'])
-        return f"""
-You are a meticulous **Astronomical Spectrum Report Analysis Auditor**.
+    def _common_prompt_header(self, state: SpectroState) -> str:
+        try:
+            peaks_info = [
+                {
+                    "wavelength": pe.get('wavelength'),
+                    "flux": pe.get('mean_flux'),
+                    "width": pe.get('width_mean'),
+                    "prominence": pe.get('max_prominence'),
+                    "seen_in_scales_of_sigma": pe.get('seen_in_scales_of_sigma'),
+                    "describe": pe.get('describe')
+                }
+                for pe in state.get('cleaned_peaks', [])[:15]
+            ]
+            peak_json = json.dumps(peaks_info, ensure_ascii=False)
+            trough_info = [
+                {
+                    "wavelength": tr.get('wavelength'),
+                    "flux": tr.get('mean_flux'),
+                    "width": tr.get('width_mean'),
+                    "seen_in_scales_of_sigma": tr.get('seen_in_scales_of_sigma'), 
+                }
+                for tr in state.get('cleaned_troughs', [])[:15]
+            ]
+            trough_json = json.dumps(trough_info, ensure_ascii=False)
+            a = state["pixel_to_value"]["x"]["a"]
+            rms = state["pixel_to_value"]["x"]["rms"]
+            tolerance = getenv_int("TOL_PIXELS", 10)
+            rule_analysis = "\n\n".join(str(item) for item in state['rule_analysis_QSO'])
+            prompt_1 = f"""
+You are a rigorous [Astronomical Spectral Report Review Analyst].
 
-**Task Objectives:**
+Objective:
+- Review spectral analysis reports or hypotheses produced by other analysts
+- Identify logical flaws, computational errors, inconsistencies, or incorrect inferences
+- Propose corrections or suggest additional analytical directions
 
-- audit the spectral analysis reports or conclusions from other analysts.
-- Identify logical flaws, computational errors, inconsistencies, or incorrect inferences.
-- Provide correction suggestions or additional analysis directions.
+Working Principles:
+- Maintain objectivity and critical thinking
+- Do not restate the original analysis; only point out issues and provide improvement suggestions
+- If the original report is sound, explicitly confirm its validity
+- Calculations involving redshift and observed spectral wavelengths must use the tools `calculate_redshift` and `predict_obs_wavelength`. Manual calculations are not allowed.
 
-**Working Principles:**
+Output Requirements:
+- Use explanatory language
+- Clearly list review comments (e.g., "Conclusion premature", "Spectral line interpretation correct")
+- Attach improvement suggestions for each identified issue
+- Conclude with an overall assessment (reliable / partially credible / unreliable)
 
-- Maintain objectivity and critical thinking.
-- Do not repeat the original analysis; only point out issues and suggest improvements.
-- If the original report is reasonable, explicitly confirm its validity.
-- Any calculations involving redshift or observed wavelengths must use the tools **calculate_redshift** and **predict_obs_wavelength**. Self-calculation is not allowed.
-
-**Output Requirements:**
-
-- Provide descriptive text.
-- Concisely list audit comments (e.g., “Conclusion premature,” “Line interpretation correct”).
-- For each issue identified, give a corresponding improvement suggestion.
-- Provide an overall evaluation: Reliable / Partially Reliable / Unreliable.
-
-**Known Data:**
-The original spectrum and Gaussian-smoothed curves with sigma=2, sigma=4, and sigma=16 were used. Peaks and troughs were identified using SciPy functions. The peak/trough discussion is based on the following data:
-
+Background:
+Peak and trough detection was performed using scipy functions on the original spectrum combined with Gaussian-smoothed curves at sigma=2, sigma=4, and sigma=16.
+Discussions about peaks and troughs should be based on the following data:
 - Representative top 10 emission lines:
-  {peak_json}
+{peak_json}
 - Potential absorption lines:
-  {trough_json}
+{trough_json}
 
-**Other Analyst’s Spectral Report:**
+The spectral analysis report provided by other analysts is:
 
 {rule_analysis}
 
-The report retains 3 decimal places in redshift calculations.
+This report retains three decimal places in redshift calculations.
+
+The wavelength range of this spectrum spans from {state['spectrum']['new_wavelength'][0]} Å to {state['spectrum']['new_wavelength'][-1]} Å.
 """
+            band_name = state['band_name']
+            band_wavelength = state['band_wavelength']
+            if band_name: 
+                overlap_regions = find_overlap_regions(band_name, band_wavelength)
+                wws = np.max([wp.get('width_mean') for wp in state.get('wiped_peaks', [])[:5]])
+                for key in overlap_regions:
+                    range = overlap_regions[key]
+                    overlap_regions[key] = [range[0]-wws, range[1]+wws] # Broaden the overlap regions to ensure the LLM won't miss them
+                overlap_regions_json = json.dumps(overlap_regions, ensure_ascii=False)
+                wiped = [
+                    {
+                        "wavelength": wp.get('wavelength'),
+                        "flux": wp.get('mean_flux'),
+                        "width": wp.get('width_mean'),
+                        # "seen_in_scales_of_sigma": wp.get('seen_in_scales_of_sigma')
+                    }
+                    for wp in state.get('wiped_peaks', [])[:5]
+                ]
+                wiped_json = json.dumps(wiped, ensure_ascii=False)
+                advanced = f"""If any peaks reported fall near the following intervals:\n    {overlap_regions_json}\nthey may have been mistakenly removed as noise. These removed peaks are:\n      {wiped_json}\nPlease carefully evaluate their potential identification as C IV or C III]."""
+            else:
+                advanced = ""
+            prompt_2 = f"""
+
+I expect the spectral analysis report to align as closely as possible with canonical emission lines such as Lyα, C IV, C III], and Mg II. However, it is acceptable if some lines are missing due to signal truncation at spectral edges or low signal-to-noise ratio (SNR).
+
+Moreover, under poor SNR conditions, line-detection algorithms may be affected, so moderate deviations in line width from expected values are permissible.
+
+If the Lyα line should fall within the spectral range but is not listed in the report, significantly downgrade the report's credibility.
+
+If Lyα is reported, verify its flux relative to other lines (e.g., C IV, C III]). If Lyα flux is markedly lower than those of other lines, note this and reduce the report’s credibility.
+
+Due to astrophysical outflow effects, the redshift derived from the lowest-ionization-state emission line should be adopted as the best estimate for the object's redshift.
+
+Use the tool `QSO_rms` to compute the redshift uncertainty ±Δz:
+    - Input parameters:
+        wavelength_rest: List[float],  # Rest-frame wavelengths of the lowest-ionization emission lines (Lyα is prone to broadening and should be avoided here; prefer other lines)
+        a: float = {a},           
+        tolerance: int = {tolerance},     
+        rms_lambda = {rms}: float    
+"""
+            return prompt_1 + advanced + prompt_2
+        except Exception as e:
+            print(f"Error in _common_prompt_header: {e}")
+            return ""
 
     async def auditing(self, state: SpectroState):
-        header = self._common_prompt_header_QSO(state)
+        try:
+            system_prompt = self._common_prompt_header(state)
 
-        if state['count'] == 0:
-            body = f"""
-Please audit this analysis report.
+            if state['count'] == 0:
+                body = f"""
+Please review this analysis report.
 """
-        elif state['count']:     
-            auditing_history = state['auditing_history'][-1]
-            auditing_history_json = json.dumps(auditing_history, ensure_ascii=False)
-            response_history = state['refine_history'][-1]
-            response_history_json = json.dumps(response_history, ensure_ascii=False)
+            elif state['count']: 
+                auditing_history = state['auditing_history_QSO'][-1] 
+                auditing_history_json = json.dumps(auditing_history, ensure_ascii=False)
+                response_history = state['refine_history_QSO'][-1]
+                response_history_json = json.dumps(response_history, ensure_ascii=False)
 
-            body = f"""
-Your latest concerns regarding this analysis report are:
+                body = f"""
+Your most recent critique of this analysis report was:
 {auditing_history_json}
 
-The other analyst’s responses are:
+The other analyst's response was:
 {response_history_json}
 
-Please reply to the other analyst’s responses and continue the audit.
+Please respond to the analyst's reply and continue your review.
 """
-        prompt = header + body
-        response = await self.call_llm_with_context(prompt, parse_json=False, description="Auditing")
-        state['auditing_history'].append(response)
+            user_prompt = body
+            response = await self.call_llm_with_context(system_prompt, user_prompt, parse_json=False, description="Report Review")
+            state['auditing_history_QSO'].append(response)
+        except Exception as e:
+            print(f"Error in auditing: {e}")
 
     async def run(self, state: SpectroState) -> SpectroState:
-        await self.auditing(state)
+        if state['preliminary_classification']['type'] == "QSO":
+            await self.auditing(state)
         return state
 
-
-
-# # ---------------------------------------------------------
-# # 4. Refine Analyst — 自由回应审查并改进
-# # ---------------------------------------------------------
+# ---------------------------------------------------------
+# 4. Reflective Analyst — Freely responds to reviews and refines analysis
+# ---------------------------------------------------------
 class SpectralRefinementAssistant(BaseAgent):
-    """Refinement Assistant: 
-    Respond to the audit and improve the analysis.
-    """
+    """Refiner: Responds to reviews and improves the analysis"""
 
     def __init__(self, mcp_manager: MCPManager):
         super().__init__(
@@ -675,66 +1058,141 @@ class SpectralRefinementAssistant(BaseAgent):
             mcp_manager=mcp_manager
         )
 
-    def _common_prompt_header_QSO(self, state) -> str:
-        peak_json = json.dumps(state['peaks'][:10], ensure_ascii=False)
-        trough_json = json.dumps(state['troughs'], ensure_ascii=False)
-        rule_analysis = "\n\n".join(str(item) for item in state['rule_analysis'])
-        return f"""
-You are a reflective **astronomical spectrum analyst**.
+    def _common_prompt_header(self, state) -> str:
+        try:
+            peaks_info = [
+                {
+                    "wavelength": pe.get('wavelength'),
+                    "flux": pe.get('mean_flux'),
+                    "width": pe.get('width_mean'),
+                    "prominence": pe.get('max_prominence'),
+                    "seen_in_global_scales_of_sigma": pe.get('max_global_sigma_seen', None),
+                    "describe": pe.get('describe')
+                }
+                for pe in state.get('cleaned_peaks', [])[:15]
+            ]
+            peak_json = json.dumps(peaks_info, ensure_ascii=False)
 
-**Task objectives:**
+            trough_info = [
+                {
+                    "wavelength": tr.get('wavelength'),
+                    "flux": tr.get('mean_flux'),
+                    "width": tr.get('width_mean'),
+                    "seen_in_scales_of_sigma": tr.get('seen_in_scales_of_sigma')
+                }
+                for tr in state.get('cleaned_troughs', [])[:15]
+            ]
+            trough_json = json.dumps(trough_info, ensure_ascii=False)
+            rule_analysis = "\n\n".join(str(item) for item in state['rule_analysis_QSO'])
+            a = state["pixel_to_value"]["x"]["a"]
+            rms = state["pixel_to_value"]["x"]["rms"]
+            tolerance = getenv_int("TOL_PIXELS", 10)
+            prompt_1 = f"""
+You are a reflective [Astronomical Spectral Analyst].
 
-- Read and understand other analysts’ spectral analysis reports.
-- Read and comprehend feedback provided by the auditor.
-- Refine your own or others’ prior analysis.
-- Provide new explanations or revise conclusions.
+Objective:
+- Read and understand another analyst's spectral report
+- Read and understand feedback provided by the auditor
+- Improve your own or others' prior analysis
+- Propose new interpretations or revised conclusions
 
-**Working principles:**
+Working Principles:
+- Thoughtfully address each piece of feedback and explicitly state how you have improved the analysis
+- If you believe the original conclusion is correct, provide strong justification
+- Deliver a more rigorous and comprehensive final analysis
+- Calculations involving redshift and observed spectral wavelengths must use the tools `calculate_redshift` and `predict_obs_wavelength`. Manual calculations are not allowed.
 
-- Carefully address each feedback point, explaining improvements one by one.
-- If you consider the original conclusion correct, provide sufficient justification.
-- Produce a final, more rigorous and complete analysis.
-- All calculations of redshift and observed spectral wavelengths must use the tools `calculate_redshift` and `predict_obs_wavelength`. Manual calculations are not allowed.
+Output Requirements:
+- Use explanatory language
+- List received feedback and your corresponding responses
+- Provide a refined summary of the spectral analysis
+- Explain what was modified and its scientific rationale
 
-**Output requirements:**
+Background:
+Peak and trough detection was performed using scipy functions on the original spectrum combined with Gaussian-smoothed curves at sigma=2, sigma=4, and sigma=16.
+Discussions about peaks and troughs should be based on the following data:
+- Representative top 10 emission lines:
+{peak_json}
+- Potential absorption lines:
+{trough_json}
 
-- Provide descriptive language.
-- List the received feedback and your corresponding responses.
-- Provide an improved spectral analysis summary.
-- Explain the modifications made and their scientific rationale.
+The spectral analysis report provided by other analysts is:
 
-**Given:**
+{rule_analysis}
 
-- Original spectra and Gaussian-smoothed curves with sigma = 2, 4, 16 have been processed using `scipy` for peak/trough detection.
-- Discussion of peaks/troughs is based on the following data:
+This report retains three decimal places in redshift calculations.
 
-  - Representative top 10 emission lines:
-    {peak_json}
-  - Possible absorption lines:
-    {trough_json}
-- Other analysts’ spectral analysis report:
-  {rule_analysis}
-
-This report retained three decimal places for redshift calculations.
+The wavelength range of this spectrum spans from {state['spectrum']['new_wavelength'][0]} Å to {state['spectrum']['new_wavelength'][-1]} Å.
 """
+            band_name = state['band_name']
+            band_wavelength = state['band_wavelength']
+            if band_name: 
+                overlap_regions = find_overlap_regions(band_name, band_wavelength)
+                wws = np.max([wp.get('width_mean') for wp in state.get('wiped_peaks', [])[:5]])
+                for key in overlap_regions:
+                    range = overlap_regions[key]
+                    overlap_regions[key] = [range[0]-wws, range[1]+wws] # Broaden the overlap regions to ensure the LLM won't miss them
+                overlap_regions_json = json.dumps(overlap_regions, ensure_ascii=False)
+                wiped = [
+                    {
+                        "wavelength": wp.get('wavelength'),
+                        "flux": wp.get('mean_flux'),
+                        "width": wp.get('width_mean'),
+                        # "seen_in_scales_of_sigma": wp.get('seen_in_scales_of_sigma')
+                    }
+                    for wp in state.get('wiped_peaks', [])[:5]
+                ]
+                wiped_json = json.dumps(wiped, ensure_ascii=False)
+                advanced = f"""If any peaks reported fall near the following intervals:\n    {overlap_regions_json}\nthey may have been mistakenly removed as noise. These removed peaks are:\n      {wiped_json}\nPlease carefully evaluate their potential identification as C IV or C III]."""
+            else:
+                advanced = ""
+
+            prompt_2 = f"""
+
+I expect the spectral analysis report to align as closely as possible with canonical emission lines such as Lyα, C IV, C III], and Mg II. However, it is acceptable if some lines are missing due to signal truncation at spectral edges or low signal-to-noise ratio (SNR).
+
+Moreover, under poor SNR conditions, line-detection algorithms may be affected, so moderate deviations in line width from expected values are permissible.
+
+If the Lyα line should fall within the spectral range but is not listed in the report, significantly downgrade the report's credibility.
+
+If Lyα is reported, verify its flux relative to other lines (e.g., C IV, C III]). If Lyα flux is markedly lower than those of other lines, note this and reduce the report’s credibility.
+
+Due to astrophysical outflow effects, the redshift derived from the lowest-ionization-state emission line should be adopted as the best estimate for the object's redshift (Lyα is prone to broadening and should be avoided here; prefer other lines).
+
+Use the tool `QSO_rms` to compute the redshift uncertainty ±Δz:
+    - Input parameters:
+        wavelength_rest: List[float],  # Rest-frame wavelengths of the lowest-ionization emission lines
+        a: float = {a},           
+        tolerance: int = {tolerance},     
+        rms_lambda = {rms}: float 
+"""
+            return prompt_1 + advanced + prompt_2
+        except Exception as e:
+            logging.error(f"Error in _common_prompt_header: {e}")
+            raise e
 
     async def refine(self, state: SpectroState):
-        header = self._common_prompt_header_QSO(state)
-        auditing = state['auditing_history'][-1]
-        auditing_json = json.dumps(auditing, ensure_ascii=False)
-        body = f"""
-The latest recommendations from the auditing analyst responsible for verifying the report are:
-{auditing_json}
+        try:
+            system_prompt = self._common_prompt_header(state)
+            auditing_history = state['auditing_history_QSO'][-1]
+            auditing_history_json = json.dumps(auditing_history, ensure_ascii=False)
+            body = f"""
+The latest feedback from the reviewing auditor is:
+{auditing_history_json}
 
-Please respond to these recommendations.
+Please respond to this feedback.
 """
-        prompt = header + body
-        response = await self.call_llm_with_context(prompt, parse_json=False, description="回应审查")
-        state['refine_history'].append(response)
+            user_prompt = body
+            response = await self.call_llm_with_context(system_prompt, user_prompt, parse_json=False, description="Responding to Review")
+            state['refine_history_QSO'].append(response)
+        except Exception as e:
+            logging.error(f"Error in refine: {e}")
+            raise e
 
     async def run(self, state: SpectroState) -> SpectroState:
         try:
-            await self.refine(state)
+            if state['preliminary_classification']['type'] == "QSO":
+                await self.refine(state)
             return state
         except Exception as e:
             import traceback
@@ -743,18 +1201,14 @@ Please respond to these recommendations.
             print(f"Error message: {str(e)}")
             print("Full traceback:")
             traceback.print_exc()
-            # 可选：返回当前状态或抛出异常
-            raise  # 如果你希望调用者也能捕获该异常
-
+            # Optional: return current state or re-raise the exception
+            raise  # Re-raise if you want the caller to also handle the exception
 
 # ---------------------------------------------------------
-# 🧩 5. Host Integrator — 汇总与总结多方观点
+# 🧩 5. Host Integrator — Synthesizes and summarizes multi-agent perspectives
 # ---------------------------------------------------------
 class SpectralSynthesisHost(BaseAgent):
-    """
-    Synthesis Host: 
-    Integrates analyses and conclusions from multiple agents
-    """
+    """Synthesis Host: Integrates analyses and conclusions from multiple agents"""
 
     def __init__(self, mcp_manager: MCPManager):
         super().__init__(
@@ -764,131 +1218,168 @@ class SpectralSynthesisHost(BaseAgent):
 
     def get_system_prompt(self) -> str:
         return f"""
-You are a coordinating **Astronomical Spectral Analysis Host**.
+You are a coordinating [Astronomical Spectral Analysis Host].
 
-**Task Objectives:**
+Objective:
+- Consolidate outputs from the visual analyst, rule-based analyst, auditor, and refinement assistant
+- Synthesize conclusions from diverse perspectives into a final spectral interpretation
+- Clearly highlight points of agreement and disagreement among agents
 
-- Summarize all outputs from the Visual Analyst, Rule Analyst, Auditor, and Re-Analyzer.
-- Integrate conclusions from different perspectives to form the final spectral interpretation.
-- Clearly highlight points of agreement and disagreement among the agents.
+Working Principles:
+- Do not invoke any tools
+- Do not blindly follow any single analysis
+- Maintain overall scientific rigor and logical consistency
+- The final output must be traceable (indicate which agent’s input supports each conclusion)
 
-**Working Principles:**
-
-- No need to call any tools.
-- Do not blindly follow any single analysis.
-- Maintain overall scientific accuracy and logical consistency.
-- The final output must be traceable (indicate which agent provided the underlying evidence).
-
-**Output Requirements:**
-
-- Provide explanatory text.
-- Keep numerical data to 3 decimal places.
-- Only output the analysis content; no need to declare the source of each section.
-- Provide the final integrated conclusion and confidence rating (high/medium/low).
-- Explicitly indicate if uncertainty remains.
-- Follow the specified format; do not include any extraneous content.
+Output Requirements:
+- Use explanatory prose
+- Retain three decimal places for numerical values
+- Output only the analytical content—do not label the source of each segment
+- Provide a final synthesized conclusion with a credibility rating (High / Medium / Low)
+- Explicitly state any remaining uncertainties
+- Follow the specified output format strictly. Do not include extraneous content.
 """
 
-
-    async def summary(self, state) -> str:
+    async def summary(self, state):
         try:
             preliminary_classification_json = json.dumps(state['preliminary_classification'], ensure_ascii=False)
             visual_interpretation_json = json.dumps(state['visual_interpretation'], ensure_ascii=False)
-            rule_analysis = "\n\n".join(str(item) for item in state['rule_analysis'])
-            rule_analysis_json = json.dumps(rule_analysis, ensure_ascii=False)
-            auditing = "\n\n".join(str(item) for item in state['auditing_history'])
-            auditing_json = json.dumps(auditing, ensure_ascii=False)
-            refine = "\n\n".join(str(item) for item in state['refine_history'])
-            refine_json = json.dumps(refine, ensure_ascii=False)
         except Exception as e:
             print("❌ An error occurred during spectral analysis:")
             print(f"Error type: {type(e).__name__}")
             print(f"Error message: {str(e)}")
             raise
 
-        header = self.get_system_prompt()
-
-        prompt = f"""
+        prompt_1 = f"""
 
 Visual description of the spectrum:
 {visual_interpretation_json}
 
-preliminary classification of the spectrum type: 
+Preliminary classification:
 {preliminary_classification_json}
+"""
+        system_prompt = self.get_system_prompt() + prompt_1
 
-Rule Analyst's perspective:
-{rule_analysis_json}
+        if state['preliminary_classification']['type'] == "QSO":
+            rule_analysis_QSO = "\n\n".join(str(item) for item in state['rule_analysis_QSO'])
+            rule_analysis_QSO_json = json.dumps(rule_analysis_QSO, ensure_ascii=False)
+            auditing_QSO = "\n\n".join(str(item) for item in state['auditing_history_QSO'])
+            auditing_QSO_json = json.dumps(auditing_QSO, ensure_ascii=False)
+            refine_QSO = "\n\n".join(str(item) for item in state['refine_history_QSO'])
+            refine_QSO_json = json.dumps(refine_QSO, ensure_ascii=False)
+            prompt_2 = f"""
+
+Rule-based analyst's perspective:
+{rule_analysis_QSO_json}
 
 Auditor's perspective:
-{auditing_json}
+{auditing_QSO_json}
 
-Refining Analyst's perspective:
-{refine_json}
-
-**Output format:**
-
-- **Visual characteristics of the spectrum**
-- **Analysis report** (integrate the perspectives of the Rule Analyst, Auditor, and Refining Analyst, structured step by step)
-
-  - Step 1
-  - Step 2
-  - Step 3
-  - Step 4
-- **Conclusion**
-
-  - Object type and redshift (z ± Δz)
-  - Verified spectral lines (output as Line Name - λ_rest - λ_obs)
-  - Signal-to-noise ratio of the spectrum
-  - Confidence rating of the analysis report (if ≥2 lines verified: “high”; if 1 line verified: “medium”; otherwise: “low”)
-  - Whether manual intervention is needed
+Refinement assistant's perspective:
+{refine_QSO_json}
 """
-        prompt = header + prompt
-        response = await self.call_llm_with_context(prompt, parse_json=False, description="总结")
+            prompt_3 = f"""
+
+Output format as follows:
+
+- Visual characteristics of the spectrum
+- Analysis report (synthesize all viewpoints from the rule-based analyst, auditor, and refinement assistant; structure output step-by-step)
+    - Step 1
+    - Step 2
+    - Step 3
+    - Step 4
+- Conclusion
+    - Object type (Galaxy or QSO)
+    - If the object is a QSO, provide redshift z ± Δz
+    - Identified spectral lines (format: Line Name - λ_rest - λ_obs - redshift)
+    - Signal-to-noise ratio (SNR) of the spectrum
+    - Credibility score (0–4):
+        - Score 3: ≥2 major emission lines identified (e.g., Lyα, C IV, C III], Mg II)
+        - Score 2: 1 major line identified with supporting weaker features
+        - Score 1: 1 major line identified but no corroborating features
+        - Score 0: Extremely low SNR; inference highly uncertain
+    - Whether human intervention is required:
+        - Required if credibility ≤ 2
+        - Required if SNR is low and Lyα is absent
+        - Otherwise, decide autonomously
+"""
+            user_prompt = prompt_2 + prompt_3
+        else:
+            user_prompt = f"""
+Output format as follows:
+
+- Visual characteristics of the spectrum
+- Conclusion
+    - Object type (Galaxy or QSO)
+    - If the object is a QSO, provide redshift z ± Δz
+    - Identified spectral lines (format: Line Name - λ_rest - λ_obs - redshift)
+    - Signal-to-noise ratio (SNR) of the spectrum
+    - Credibility score (0–4):
+        - Score 2 if classified as Galaxy; otherwise 0
+    - Whether human intervention is required:
+        - Always required if type is Galaxy
+"""
+        response = await self.call_llm_with_context(system_prompt, user_prompt, parse_json=False, description="Summary")
         state['summary'] = response
 
     async def in_brief(self, state):
         summary_json = json.dumps(state['summary'], ensure_ascii=False)
         prompt_type = f"""
-You are an Astronomy Spectrum Analysis Host responsible for coordinating the final synthesis.
+You are a coordinating [Astronomical Spectral Analysis Host].
 
-You have already produced a summary of an astronomical spectrum:
+You have already produced a summary for an astronomical spectrum:
 {summary_json}
 
-- Please output the **object type** from the **Conclusion** section (Choose between these 3 words: star, galaxy, QSO).
+- Please output only the **object type** from the **Conclusion** section (choose one of these three terms: Star, Galaxy, QSO)
 
-- Output format: str  
-- Do not output any other information.
+- Output format: str
+- Do not output any other information
 """
-        response_type = await self.call_llm_with_context(prompt_type, parse_json=False, description="Summary")
+        response_type = await self.call_llm_with_context('', prompt_type, parse_json=False, description="Summary")
         state['in_brief']['type'] = response_type
 
         prompt_redshift = f"""
-You are an Astronomy Spectrum Analysis Host responsible for coordinating the final synthesis.
+You are a coordinating [Astronomical Spectral Analysis Host].
 
-You have already produced a summary of an astronomical spectrum:
+You have already produced a summary for an astronomical spectrum:
 {summary_json}
 
-Please output the **redshift z** from the **Conclusion** section (no ± Δz).
+Please extract only the **redshift z** from the **Conclusion** section (do not include ± Δz)
 
-- Output format: float  
-- Do not output any other information.
+- Output format: float or None
+- Do not output any other information
 """
-        response_redshift = await self.call_llm_with_context(prompt_redshift, parse_json=False, description="Summary")
+        response_redshift = await self.call_llm_with_context('', prompt_redshift, parse_json=False, description="Summary")
         state['in_brief']['redshift'] = response_redshift
 
         prompt_rms = f"""
-You are an Astronomy Spectrum Analysis Host responsible for coordinating the final synthesis.
+You are a coordinating [Astronomical Spectral Analysis Host].
 
-You have already produced a summary of an astronomical spectrum:
+You have already produced a summary for an astronomical spectrum:
 {summary_json}
 
-Please output the **redshift uncertainty Δz** from the **Conclusion** section (do not output z).
+Please extract only the **redshift uncertainty Δz** from the **Conclusion** section (do not include z)
 
-- Output format: float  
-- Do not output any other information.
+- Output format: float or None
+- Do not output any other information
 """
-        response_rms = await self.call_llm_with_context(prompt_rms, parse_json=False, description="Summary")
+        response_rms = await self.call_llm_with_context('', prompt_rms, parse_json=False, description="Summary")
         state['in_brief']['rms'] = response_rms
+
+        prompt_human = f"""
+You are a coordinating [Astronomical Spectral Analysis Host].
+
+You have already produced a summary for an astronomical spectrum:
+{summary_json}
+
+Please indicate whether **human intervention is required**, based on the **Conclusion** section.
+
+- Output only “Yes” or “No”
+- Output format: str
+- Do not output any other information
+"""
+        response_human = await self.call_llm_with_context('', prompt_human, parse_json=False, description="Summary")
+        state['in_brief']['human'] = response_human
 
     async def run(self, state: SpectroState) -> SpectroState:
         try:
@@ -902,3 +1393,5 @@ Please output the **redshift uncertainty Δz** from the **Conclusion** section (
             print(f"Error message: {str(e)}")
             print("Full traceback:")
             traceback.print_exc()
+            # Optional: return current state or re-raise exception
+            raise

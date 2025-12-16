@@ -23,175 +23,6 @@ from .utils import (
 # ---------------------------------------------------------
 # 1. Visual Assistant — 负责图像理解与坐标阅读
 # ---------------------------------------------------------
-
-# class SpectralVisualInterpreter(BaseAgent):
-#     """
-#     SpectralVisualInterpreter
-
-#     从科学光谱图中自动提取坐标轴刻度、边框、像素映射、峰/谷等信息
-#     """
-
-#     def __init__(self, mcp_manager: MCPManager):
-#         super().__init__(
-#             agent_name='Spectral Visual Interpreter',
-#             mcp_manager=mcp_manager
-#         )
-
-#     # --------------------------
-#     # Step 1.1: 检测坐标轴刻度
-#     # --------------------------
-#     async def detect_axis_ticks(self, state: SpectroState):
-#         """
-#         调用视觉 LLM 检测坐标轴刻度，如果无图像或非光谱图报错
-#         """
-#         class NoImageError(Exception): pass
-#         class NotSpectralImageError(Exception): pass
-
-#         if not state['image_path'] or not os.path.exists(state['image_path']):
-#             print(state['image_path'])
-#             raise NoImageError("❌ 未输入图像或图像路径不存在")
-
-#         system_prompt = state['prompt'][f'{self.agent_name}']['detect_axis_ticks']['system_prompt']
-#         user_prompt = state['prompt'][f'{self.agent_name}']['detect_axis_ticks']['user_prompt']
-
-#         axis_info = await self.call_llm_with_context(
-#             system_prompt=system_prompt,
-#             user_prompt=user_prompt,
-#             image_path=state['image_path'],
-#             parse_json=True,
-#             description="坐标轴信息"
-#         )
-#         if axis_info == "非光谱图":
-#             raise NotSpectralImageError(f"❌ 图像不是光谱图，LLM 输出: {axis_info}")
-#         # print(axis_info)
-#         state["axis_info"] = axis_info
-
-#     # --------------------------
-#     # Step 1.2~1.3: 合并视觉+OCR刻度
-#     # --------------------------
-#     async def combine_axis_mapping(self, state: SpectroState):
-#         """结合视觉结果与 OCR 结果生成像素-数值映射"""
-#         axis_info_json = json.dumps(state['axis_info'], ensure_ascii=False)
-#         ocr_json = json.dumps(state['OCR_detected_ticks'], ensure_ascii=False)
-
-#         system_prompt = state['prompt'][f'{self.agent_name}']['combine_axis_mapping']['system_prompt']
-#         user_prompt = state['prompt'][f'{self.agent_name}']['combine_axis_mapping']['user_prompt'].format(
-#             axis_info_json=axis_info_json,
-#             ocr_json=ocr_json
-#         )
-#         tick_pixel_raw = await self.call_llm_with_context(
-#             system_prompt=system_prompt,
-#             user_prompt=user_prompt,
-#             image_path=None,
-#             parse_json=True,
-#             description="刻度-像素映射"
-#         )
-#         state["tick_pixel_raw"] = tick_pixel_raw
-
-#     # --------------------------
-#     # Step 1.4: 校验与修正
-#     # --------------------------
-#     async def revise_axis_mapping(self, state: SpectroState):
-#         """检查并修正刻度值与像素位置匹配关系"""
-#         axis_mapping_json = json.dumps(state['tick_pixel_raw'], ensure_ascii=False)
-
-#         system_prompt = state['prompt'][f'{self.agent_name}']['revise_axis_mapping']['system_prompt']
-#         user_prompt = state['prompt'][f'{self.agent_name}']['revise_axis_mapping']['user_prompt'].format(
-#             axis_mapping_json=axis_mapping_json
-#         )
-
-#         tick_pixel_revised = await self.call_llm_with_context(
-#             system_prompt=system_prompt,
-#             user_prompt=user_prompt,
-#             image_path=None,
-#             parse_json=True,
-#             description="修正后的刻度映射"
-#         )
-#         state["tick_pixel_raw"] = tick_pixel_revised
-#         # print(tick_pixel_revised)
-
-#     # --------------------------
-#     # Step 1.1~1.11: 主流程
-#     # --------------------------
-#     async def run(self, state: SpectroState, plot: bool = True):
-#         """执行完整视觉分析流程"""
-#         try:
-#             # Step 1.1: 视觉 LLM 提取坐标轴
-#             await self.detect_axis_ticks(state)
-
-#             # Step 1.2: OCR 提取刻度
-#             state["OCR_detected_ticks"] = _detect_axis_ticks(state['image_path'])
-#             # for i in state["OCR_detected_ticks"]:
-#             #     print(i)
-
-#             # Step 1.3: 合并
-#             await self.combine_axis_mapping(state)
-#             # for i in state["tick_pixel_raw"]:
-#             #     print(i)
-
-#             # Step 1.4: 修正
-#             await self.revise_axis_mapping(state)
-#             # for i in state["tick_pixel_raw"]:
-#             #     print(i)
-
-#             # Step 1.5: 边框检测与裁剪
-#             state["chart_border"] = _detect_chart_border(state['image_path'])
-#             _crop_img(state['image_path'], state["chart_border"], state['crop_path'])
-
-#             # Step 1.6: 重映射像素
-#             state["tick_pixel_remap"] = _remap_to_cropped_canvas(state['tick_pixel_raw'], state["chart_border"])
-
-#             # Step 1.7: 拟合像素-数值
-#             state["pixel_to_value"] = _pixel_tickvalue_fitting(state['tick_pixel_remap'])
-
-#             # Step 1.8: 提取曲线 & 灰度化
-#             curve_points, curve_gray_values = _process_and_extract_curve_points(state['crop_path'])
-#             state["curve_points"] = curve_points
-#             state["curve_gray_values"] = curve_gray_values
-
-#             # Step 1.9: 光谱还原
-#             state["spectrum"] = _convert_to_spectrum(state['curve_points'], state['curve_gray_values'], state['pixel_to_value'])
-#             # print(state["spectrum"]['new_wavelength'])
-#             # print(state["spectrum"]['weighted_flux'])
-#             # Step 1.10: 检测峰值/谷值
-#             sigma_list, tol_pixels, prom_peaks, prom_troughs, weight_original, plot_peaks, plot_troughs = _load_feature_params()
-#             state['sigma_list'] = sigma_list
-#             try:
-#                 spec = state["spectrum"]
-#                 wavelengths = np.array(spec["new_wavelength"])
-#                 flux = np.array(spec["weighted_flux"])
-#                 state["peaks"] = _find_features_multiscale(
-#                     wavelengths, flux,
-#                     state, feature="peak", sigma_list=sigma_list,
-#                     prom=prom_peaks, tol_pixels=tol_pixels, weight_original=weight_original,
-#                     use_continuum_for_trough=True
-#                 )
-#                 state["troughs"] = _find_features_multiscale(
-#                     wavelengths, flux,
-#                     state, feature="trough", sigma_list=sigma_list,
-#                     prom=prom_troughs, tol_pixels=tol_pixels, weight_original=weight_original,
-#                     use_continuum_for_trough=True,
-#                     min_depth=0.08
-#                 )
-#             except Exception as e:
-#                 print(f"❌ find features multiscale terminated with error: {e}")
-#                 raise
-
-#             # Step 1.11: 可选绘图
-#             if plot:
-#                 try:
-#                     state["spectrum_fig"] = _plot_spectrum(state)
-#                     # state["features_fig"] = _plot_features(state, sigma_list, [plot_peaks, plot_troughs])
-#                 except Exception as e:
-#                     print(f"❌ plot spectrum or features terminated with error: {e}")
-#                     raise
-
-#             return state
-
-#         except Exception as e:
-#             print(f"❌ run pipeline terminated with error: {e}")
-#             raise
-
 class SpectralVisualInterpreter(BaseAgent):
     """
     SpectralVisualInterpreter
@@ -282,7 +113,6 @@ class SpectralVisualInterpreter(BaseAgent):
     # --------------------------
     # Step 1.5 图像裁剪
     # --------------------------
-
     async def check_border(self, state):
         system_prompt = """
 你是一个专业的科学图表分析助手，专注于处理天文学领域的 matplotlib 光谱图。你具备识别图像边缘是否残留坐标轴边框或装饰性直线的能力，并能基于视觉内容做出精准判断。
@@ -324,7 +154,6 @@ class SpectralVisualInterpreter(BaseAgent):
             return response
         except:
             logging.error(f"LLM 输出格式错误: {response}")
-
 
     async def peak_trough_detection(self, state: SpectroState):
         try:
@@ -489,7 +318,6 @@ class SpectralVisualInterpreter(BaseAgent):
                             state['margin'][k] = state['margin'][k] + 2
                 print(f"box_new: {box_new}")
                 print(f"margin: {state['margin']}")
-
             # Step 1.6: 重映射像素
             state["tick_pixel_remap"] = _remap_to_cropped_canvas(state['tick_pixel_raw'], state["chart_border"])
             # Step 1.7: 拟合像素-数值
@@ -509,16 +337,10 @@ class SpectralVisualInterpreter(BaseAgent):
             if plot:
                 try:
                     state["spectrum_fig"] = _plot_spectrum(state)
-                    # fig = plt.figure(figsize=(10, 3))
-                    # plt.plot(state['continuum']['wavelength'], state['continuum']['flux'], color='orange', label='Continuum')
-                    # plt.savefig(os.path.join(state['output_dir'], f'{state["image_name"]}_continuum.png'))
-                    # state["features_fig"] = _plot_features(state, sigma_list, [plot_peaks, plot_troughs])
-                    # plot_cleaned_features(state)
                 except Exception as e:
                     print(f"❌ plot spectrum or features terminated with error: {e}")
                     raise
             return state
-
         except Exception as e:
             print(f"❌ run pipeline terminated with error: {e}")
             raise
@@ -545,9 +367,9 @@ class SpectralRuleAnalyst(BaseAgent):
 
             if not band_name or not band_wavelength:
                 return {
-    "filter_noise": 'false',
-    "filter_noise_wavelength": None
-}
+                    "filter_noise": 'false',
+                    "filter_noise_wavelength": None
+                }
             else:
                 # 找出重叠区域
                 overlap_regions = find_overlap_regions(band_name, band_wavelength)
@@ -602,24 +424,17 @@ Flux 误差：{delta_t_json}
             else:
                 filter_noise_wl = filter_nosie.get('filter_noise_wavelength', [])
                 filter_noise_wl = np.array(filter_noise_wl)
-                # filter_noise_wl_json = json.dumps(filter_noise_wl, ensure_ascii=False)
                 wavelength = np.array(state['spectrum']['new_wavelength'])
-                # flux = np.array(state['spectrum']['weighted_flux'])
-                # delta_f = np.array(state['spectrum']['delta_flux'])
                 peaks = state['merged_peaks']
-                # continuum = np.array(state['continuum']['flux'])
                 cleaned_peaks = []
                 wiped_peaks = []
                 for p in peaks:
                     wl = p['wavelength']
                     width = p['width_mean']
-                    # index = p['rep_index']
-                    # width_in_km_s = p['width_in_km_s']
 
                     distance = abs(wl - filter_noise_wl)
                     # 如果在distance中至少有一个值小于 width，则认为该峰在噪声区域内
                     if np.any(distance <= width):
-                    # if np.any(distance <= width/4):
                         is_artifact = True
                     else:
                         is_artifact = False
@@ -689,23 +504,8 @@ Flux 误差：{delta_t_json}
             )
             return '\n'.join([response_1, response_2, response_3])
 
-        # async def _get_ROI(state):
-        #     _visual_json = json.dumps(state['visual_interpretation'][1], ensure_ascii=False)
-        #     system_prompt = function_prompt['_get_ROI']['system_prompt']
-        #     user_prompt = function_prompt['_get_ROI']['user_prompt'].format(_visual_json=_visual_json)
-
-        #     response_2 = await self.call_llm_with_context(
-        #         system_prompt=system_prompt,
-        #         user_prompt=user_prompt,
-        #         parse_json=True,
-        #         description="视觉光谱定性描述"
-        #     )
-        #     return response_2
-
         async def _integrate(state):
-            # filter_noise_json = json.dumps(state['visual_interpretation'][0], ensure_ascii=False)
             visual_json       = json.dumps(state['visual_interpretation'][1], ensure_ascii=False)
-            # roi_json          = json.dumps(state['visual_interpretation'][2], ensure_ascii=False)
 
             system_prompt = function_prompt['_integrate']['system_prompt']
             ham = f"""
@@ -725,8 +525,6 @@ Flux 误差：{delta_t_json}
         await _cleaning(state)
         result_visual = await _visual(state)
         state['visual_interpretation'].append(result_visual)
-        # result_ROI = await _get_ROI(state)
-        # state['visual_interpretation'].append(result_ROI)
         result_integrate = await _integrate(state)
         state['visual_interpretation'] = result_integrate
 
@@ -1223,6 +1021,8 @@ class SpectralAnalysisAuditor(BaseAgent):
 
 如果 Lyα 谱线应该在光谱范围内，但却未被报告列出，请显著降低该报告的可信度。
 
+如果 Lyα 谱线被报告列出，请检查 Lyα 谱线与其他谱线的流量大小。如果 Lyα 流量显著低于其他谱线（如 C IV、C III]），请指出并降低该报告的可信度。
+
 由于天文学上外流效应的影响，应使用最低电离态的发射线的红移作为光谱红移的最佳结果。
 
 使用工具 QSO_rms 计算红移误差 ± Δz
@@ -1380,11 +1180,13 @@ class SpectralRefinementAssistant(BaseAgent):
 
 如果 Lyα 谱线应该在光谱范围内，但却未被报告列出，请显著降低该报告的可信度。
 
-由于天文学上外流效应的影响，应使用最低电离态的发射线的红移作为光谱红移的最佳结果。
+如果 Lyα 谱线被报告列出，请检查 Lyα 谱线与其他谱线的流量大小。如果 Lyα 流量显著低于其他谱线（如 C IV、C III]），请指出并降低该报告的可信度。
+
+由于天文学上外流效应的影响，应使用最低电离态的发射线的红移作为光谱红移的最佳结果（Lyα易受展宽影响，不适用于此处，尽量选择Lyα外的谱线）。
 
 使用工具 QSO_rms 计算红移误差 ± Δz
     - 工具的输入为
-        wavelength_rest: List[float], # 最低电离态的发射线的静止系波长（Lyα易受展宽影响，不适用于此处，尽量选择Lyα外的谱线）
+        wavelength_rest: List[float], # 最低电离态的发射线的静止系波长
         a: float = {a},           
         tolerance: int = {tolerence},     
         rms_lambda = {rms}: float 
@@ -1393,7 +1195,7 @@ class SpectralRefinementAssistant(BaseAgent):
         except Exception as e:
             logging.error(f"Error in _common_prompt_header: {e}")
             raise e
-            
+
 
     async def refine(self, state: SpectroState):
         try:

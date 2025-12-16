@@ -947,7 +947,7 @@ def _plot_spectrum(state):
     axs[0].set_xlabel('wavelength')
     axs[0].legend()  # 设置字号为12
 
-    axs[1].plot(wavelength, effective_snr, c='orange', label=r'$\frac{\bar F}{F_\mathrm{top}-F_\mathrm{bottom}}$')
+    axs[1].plot(wavelength, effective_snr, c='orange', label=r'$SNR=\frac{{\bar F}_i}{\sigma_{i,j}}$')
     axs[1].set_ylabel('Effective SNR')
     axs[1].set_xlabel('wavelength')
     axs[1].legend(fontsize=15)  # 设置字号为12
@@ -1023,7 +1023,7 @@ def _plot_features(state, sigma_list=[2,4,16], feature_number=[10,15]):
         plt.axvline(state['troughs'][i]['wavelength'], linestyle=':', c='red', alpha=0.5)
 
     plt.plot([], [], linestyle='-', c='red', alpha=0.5, label='peaks')
-    plt.plot([], [], linestyle=':', c='blue', alpha=0.5, label='troughs')  # 注意：图例颜色与实际线条颜色的一致性
+    plt.plot([], [], linestyle=':', c='blue', alpha=0.5, label='troughs')
     plt.ylabel('flux')
     plt.xlabel('wavelength')
     plt.legend()
@@ -1032,7 +1032,7 @@ def _plot_features(state, sigma_list=[2,4,16], feature_number=[10,15]):
 
     # savefig_unique(fig, os.path.join(state['output_dir'], f'{state['image_name']}_features.png'))
     fig.savefig(os.path.join(state['output_dir'], f'{state['image_name']}_features.png'), bbox_inches='tight')
-    return fig  # 建议返回 fig 对象
+    return fig
 
 def _ROI_features_finding(state):
     spec = state["spectrum"]
@@ -1071,13 +1071,13 @@ def _ROI_features_finding(state):
 
         pe_info = {
             'roi_range': range,
-            'peaks': pe,          # list of dict: [{'wavelength':..., 'flux':..., ...}]
+            'peaks': pe, 
             'n_peaks': len(pe)
         }
 
         tr_info = {
             'roi_range': range,
-            'troughs': tr,        # ← 关键：改名！
+            'troughs': tr, 
             'n_troughs': len(tr)
         }
 
