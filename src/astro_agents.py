@@ -502,7 +502,11 @@ Flux 误差：{delta_t_json}
                 parse_json=True,
                 description="视觉光谱定性描述"
             )
-            return '\n'.join([response_1, response_2, response_3])
+
+            response_1_json = json.dumps(response_1, ensure_ascii=False)
+            response_2_json = json.dumps(response_2, ensure_ascii=False)
+            response_3_json = json.dumps(response_3, ensure_ascii=False)
+            return '\n'.join([response_1_json, response_2_json, response_3_json])
 
         async def _integrate(state):
             visual_json       = json.dumps(state['visual_interpretation'][1], ensure_ascii=False)
@@ -893,9 +897,8 @@ Step 4: 补充步骤（假设 Step 1 所选择的谱线并非 Lyα）
         """执行规则分析完整流程"""
         try:
             await self.describe_spectrum_picture(state)
-            
+
             plot_cleaned_features(state)
-            
             await self.preliminary_classification(state)
             print(state['preliminary_classification'])
 

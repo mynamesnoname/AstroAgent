@@ -490,7 +490,10 @@ Flux error: {delta_t_json}
                 parse_json=True,
                 description="Visual qualitative description — quality"
             )
-            return '\n'.join([response_1, response_2, response_3])
+            response_1_json = json.dumps(response_1, ensure_ascii=False)
+            response_2_json = json.dumps(response_2, ensure_ascii=False)
+            response_3_json = json.dumps(response_3, ensure_ascii=False)
+            return '\n'.join([response_1_json, response_2_json, response_3_json])
 
         async def _integrate(state):
             visual_json = json.dumps(state['visual_interpretation'][1], ensure_ascii=False)
