@@ -222,14 +222,32 @@ class WorkflowOrchestrator:
         spec_extract_path = os.path.join(output_dir, f'{image_name}_spec_extract.png')
         continuum_path = os.path.join(output_dir, f'{image_name}_continuum.png')
 
-        BAND_NAME = os.getenv('BAND_NAME', None)
-        if BAND_NAME is not None:
-            BAND_NAME = BAND_NAME.split(',')
-        print(f"🔍 分析设置 - 波段名称: {BAND_NAME}")
-        # BAND_WAVELENGTH=3600-5800,5760-7620,7520-9824
-        BAND_WAVELENGTH = os.getenv('BAND_WAVELENGTH', None)
-        if BAND_WAVELENGTH is not None:
-            BAND_WAVELENGTH = [list(map(float, band.split('-'))) for band in BAND_WAVELENGTH.split(',')]
+        # BAND_NAME = os.getenv('BAND_NAME', None)
+        # if BAND_NAME is not None:
+        #     BAND_NAME = BAND_NAME.split(',')
+        # print(f"🔍 分析设置 - 波段名称: {BAND_NAME}")
+        # # BAND_WAVELENGTH=3600-5800,5760-7620,7520-9824
+        # BAND_WAVELENGTH = os.getenv('BAND_WAVELENGTH', None)
+        # print(f"🔍 分析设置 - 波段波长: {BAND_WAVELENGTH}")
+        # if BAND_WAVELENGTH is not None:
+        #     BAND_WAVELENGTH = [list(map(float, band.split('-'))) for band in BAND_WAVELENGTH.split(',')]
+        # print(f"🔍 分析设置 - 波段名称: {BAND_NAME}, 波段波长: {BAND_WAVELENGTH}")
+        BAND_NAME = os.getenv('BAND_NAME', '').strip()
+        BAND_NAME = BAND_NAME.split(',') if BAND_NAME else None
+        # print(f"🔍 分析设置 - 波段名称: {BAND_NAME}")
+        BAND_WAVELENGTH = os.getenv('BAND_WAVELENGTH', '').strip()
+        # print(f"🔍 分析设置 - 波段波长: {BAND_WAVELENGTH}")
+        if BAND_WAVELENGTH:
+            try:
+                BAND_WAVELENGTH = [
+                    [float(x) for x in band.strip().split('-')]
+                    for band in BAND_WAVELENGTH.split(',') if band.strip()
+                ]
+            except (ValueError, TypeError) as e:
+                print(f"⚠️ 波段波长格式错误: {e}")
+                BAND_WAVELENGTH = None
+        else:
+            BAND_WAVELENGTH = None
         print(f"🔍 分析设置 - 波段名称: {BAND_NAME}, 波段波长: {BAND_WAVELENGTH}")
 
         prompts_path = os.getenv('PROMPTS_PATH')
