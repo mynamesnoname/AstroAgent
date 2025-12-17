@@ -258,11 +258,21 @@ class SpectralVisualInterpreter(BaseAgent):
             spec = state["spectrum"]
             wavelengths = np.array(spec["new_wavelength"])
             flux = np.array(spec["weighted_flux"])
-            # mask = (wavelengths>4000) & (wavelengths<10000)
-            # if mask.any():  # 使用 .any() 而不是直接使用 mask
-            #     wavelengths = wavelengths[mask]
-            #     flux = flux[mask]
-            # # 使用高斯滤波进行简单的continuum拟合
+
+            band_name = state['band_name']
+            band_wavelength = state['band_wavelength']
+            print('cut continuum')
+            if band_name:
+                overlap_regions = find_overlap_regions(band_name, band_wavelength)
+                # 初始化 mask 为全 False
+                mask = np.zeros_like(wavelengths, dtype=bool)
+                for key in overlap_regions:
+                    low, high = overlap_regions[key]
+                    region_mask = (wavelengths >= low) & (wavelengths <= high)
+                    mask = mask | region_mask  # 或者用 mask |= region_mask
+                wavelengths = wavelengths[~mask]
+                flux = flux[~mask]
+
             sigma_contunuum = getenv_int('CONTINUUM_SMOOTHING_SIGMA', None)
             print(f'CONTINUUM_SMOOTHING_SIGMA: {sigma_contunuum}')
             if sigma_contunuum == None:
@@ -643,7 +653,7 @@ Flux 误差：{delta_t_json}
             # 筛选条件1：优先使用全局平滑尺度的信噪比
             for peak in peaks_info:
                 # 检查谱线宽度是否足够（>=2000 km/s）
-                if peak['width_in_km_s'] >= 2000:
+                if peak['width_in_km_s'] is not None and peak['width_in_km_s'] >= 2000:
                     # 检查全局平滑尺度的信噪比条件
                     if (peak['seen_in_max_global_smoothing_scale_sigma'] is not None and 
                         peak['seen_in_max_global_smoothing_scale_sigma'] > 2):
@@ -652,12 +662,11 @@ Flux 误差：{delta_t_json}
             # 筛选条件2：如果条件1没有找到候选，使用局部平滑尺度的信噪比
             if len(Lyalpha_candidate) == 0:
                 for peak in peaks_info:
-                    if peak['wavelength'] < mid_wavelength:
-                        if peak['width_in_km_s'] >= 2000:
-                            # 检查局部平滑尺度的信噪比条件
-                            if (peak['seen_in_max_local_smoothing_scale_sigma'] is not None and 
-                                peak['seen_in_max_local_smoothing_scale_sigma'] > 2):
-                                Lyalpha_candidate.append(peak['wavelength'])
+                    if peak['width_in_km_s'] is not None and peak['width_in_km_s'] >= 2000:
+                        # 检查局部平滑尺度的信噪比条件
+                        if (peak['seen_in_max_local_smoothing_scale_sigma'] is not None and 
+                            peak['seen_in_max_local_smoothing_scale_sigma'] > 2):
+                            Lyalpha_candidate.append(peak['wavelength'])
 
             # 将候选线转换为JSON格式并打印
             Lyalpha_candidate_json = json.dumps(Lyalpha_candidate, ensure_ascii=False)

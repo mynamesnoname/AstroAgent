@@ -44,9 +44,9 @@ class BaseAgent(ABC):
                 
                 # --- 调用 ---
                 if image_path:
-                    response = await self.agent['vis'].ainvoke({'messages': messages}, config={"recursion_limit": 75})
+                    response = await self.agent['vis'].ainvoke({'messages': messages}, config={"recursion_limit": 125})
                 else:
-                    response = await self.agent['text'].ainvoke({'messages': messages}, config={"recursion_limit": 75})
+                    response = await self.agent['text'].ainvoke({'messages': messages}, config={"recursion_limit": 125})
 
                 raw_content = response['messages'][-1].content
 
