@@ -11,13 +11,11 @@ from .base_agent import BaseAgent
 from .mcp_manager import MCPManager
 
 from .utils import (
-    _detect_axis_ticks, _detect_chart_border, _crop_img,
-    _remap_to_cropped_canvas, _pixel_tickvalue_fitting,
-    _process_and_extract_curve_points, _convert_to_spectrum,
-    _find_features_multiscale, _plot_spectrum, _plot_features,
-    parse_list, getenv_float, getenv_int, _load_feature_params, 
-    _ROI_features_finding, merge_features, plot_cleaned_features, 
-    safe_to_bool, find_overlap_regions
+    _detect_chart_border, _crop_img, _remap_to_cropped_canvas, 
+    _pixel_tickvalue_fitting, _process_and_extract_curve_points, _convert_to_spectrum,
+    _find_features_multiscale, _plot_spectrum, getenv_int, 
+    _load_feature_params, merge_features, plot_cleaned_features, 
+    safe_to_bool, find_overlap_regions, _detect_axis_ticks_tesseract
 )
 
 # ---------------------------------------------------------
@@ -108,7 +106,7 @@ class SpectralVisualInterpreter(BaseAgent):
             description="修正后的刻度映射"
         )
         state["tick_pixel_raw"] = tick_pixel_revised
-        # print(tick_pixel_revised)
+        print(tick_pixel_revised)
 
     # --------------------------
     # Step 1.5 图像裁剪
@@ -296,8 +294,12 @@ class SpectralVisualInterpreter(BaseAgent):
             # Step 1.1: 视觉 LLM 提取坐标轴
             await self.detect_axis_ticks(state)
             # Step 1.2: OCR 提取刻度
-            state["OCR_detected_ticks"] = _detect_axis_ticks(state['image_path'])
-            print(state["OCR_detected_ticks"])
+            state['OCR_detected_ticks'] = _detect_axis_ticks_tesseract(state['image_path'])
+            # print(state["OCR_detected_ticks"])
+
+            # await self.ocr_llm(state)
+            # for i in state["OCR_detected_ticks"]:
+            #     print(i)
             # Step 1.3: 合并
             await self.combine_axis_mapping(state)
             # Step 1.4: 修正

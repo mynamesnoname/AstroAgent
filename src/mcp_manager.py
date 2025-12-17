@@ -15,7 +15,7 @@ class MCPManager:
     def __init__(self, config_file: str):
         load_dotenv()
         self.config = self._load_config(config_file)
-        self.llm, self.vis_llm = self._init_llm()
+        self.llm, self.vis_llm, self.OCR_llm = self._init_llm()
         self.client: Optional[MultiServerMCPClient] = None
         print("✅ MCP管理器初始化完成")
 
@@ -62,7 +62,8 @@ class MCPManager:
 
         llm = _build_llm("LLM", "qwen3-max-2025-09-23")
         vis_llm = _build_llm("VIS_LLM", "qwen-vl-max-2025-08-13")
-        return llm, vis_llm
+        OCR_llm = _build_llm("OCR_LLM", "qwen-vl-ocr-2025-11-20")
+        return llm, vis_llm, OCR_llm
 
     async def initialize(self):
         """初始化 MCP 客户端并构建 agents"""
@@ -84,7 +85,8 @@ class MCPManager:
             tools = await self.client.get_tools()
         text_agent = create_agent(self.llm, tools)
         vis_agent = create_agent(self.vis_llm, tools)
-        agents = {"text": text_agent, "vis": vis_agent}
+        ocr_agent = create_agent(self.OCR_llm, tools)
+        agents = {"text": text_agent, "vis": vis_agent, "OCR": ocr_agent}
         return agents
 
     async def close(self):

@@ -1,6 +1,7 @@
 import cv2
 import os
 import pytesseract
+# from paddleocr import PaddleOCR
 import json
 import base64
 import numpy as np
@@ -112,7 +113,7 @@ def _load_feature_params():
 
     return sigma_list, tol_pixels, prom_peaks, prom_troughs, weight_original, plot_peaks, plot_troughs
 
-def _detect_axis_ticks(image_path, config=None):
+def _detect_axis_ticks_tesseract(image_path, config=None):
     if config is None:
         # config = r'--oem 3 --psm 5 -c tessedit_char_whitelist=0123456789.-eE+ '
         config = r'--oem 3 --psm 6 -c tessedit_char_whitelist=0123456789.-eE+ '
@@ -147,6 +148,34 @@ def _detect_axis_ticks(image_path, config=None):
                 pass
 
     return tick_values
+
+# def _detect_axis_ticks_paddle(state):
+#     ocr = PaddleOCR(
+#         use_doc_orientation_classify=False, 
+#         use_doc_unwarping=False, 
+#         use_textline_orientation=False
+#         )
+#     result = ocr.predict(state['image_path'])
+#     for res in result:
+#         # res.print()
+#         res.save_to_img(state['output_dir'])
+#         res.save_to_json(state['output_dir'])
+#     data = []
+#     for i in range(len(result[-1]['rec_texts'])):
+#         pos = result[-1]['rec_polys'][i]
+#         center = [
+#             int((pos[0][0] + pos[2][0]) / 2),
+#             int((pos[0][1] + pos[2][1]) / 2),
+#         ]
+#         width = int((pos[1][0] - pos[0][0] + pos[3][0] - pos[2][0]) / 2)
+#         height = int((pos[0][1] - pos[1][1] + pos[2][1] - pos[3][1]) / 2)
+#         info = {
+#             'value': result[-1]['rec_texts'][i],
+#             'position': center,
+#             'bounding-box-scale': [width, height]
+#         }
+#         data.append(info)
+#     return data
 
 def _detect_chart_border(
         image_path: str, 

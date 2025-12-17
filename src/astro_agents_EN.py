@@ -11,13 +11,11 @@ from .base_agent import BaseAgent
 from .mcp_manager import MCPManager
 
 from .utils import (
-    _detect_axis_ticks, _detect_chart_border, _crop_img,
-    _remap_to_cropped_canvas, _pixel_tickvalue_fitting,
-    _process_and_extract_curve_points, _convert_to_spectrum,
-    _find_features_multiscale, _plot_spectrum, _plot_features,
-    parse_list, getenv_float, getenv_int, _load_feature_params, 
-    _ROI_features_finding, merge_features, plot_cleaned_features, 
-    safe_to_bool, find_overlap_regions
+    _detect_chart_border, _crop_img, _remap_to_cropped_canvas, 
+    _pixel_tickvalue_fitting, _process_and_extract_curve_points, _convert_to_spectrum,
+    _find_features_multiscale, _plot_spectrum, getenv_int, 
+    _load_feature_params, merge_features, plot_cleaned_features, 
+    safe_to_bool, find_overlap_regions, _detect_axis_ticks_tesseract
 )
 
 # ---------------------------------------------------------
@@ -289,7 +287,7 @@ Do not output any additional content.
             # Step 1.1: Use vision LLM to extract axis info
             await self.detect_axis_ticks(state)
             # Step 1.2: Extract ticks via OCR
-            state["OCR_detected_ticks"] = _detect_axis_ticks(state['image_path'])
+            state['OCR_detected_ticks'] = _detect_axis_ticks_tesseract(state['image_path'])
             print(state["OCR_detected_ticks"])
             # Step 1.3: Merge results
             await self.combine_axis_mapping(state)

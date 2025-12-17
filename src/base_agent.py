@@ -27,7 +27,7 @@ class BaseAgent(ABC):
             self.agent = await self.mcp_manager.create_agent_with_tools(self.agent_name)
             print(f"智能体 {self.agent_name} 实例创建完成")
 
-    async def call_llm_with_context(self, system_prompt, user_prompt, image_path=None, parse_json=True, description="LLM输出"):
+    async def call_llm_with_context(self, system_prompt, user_prompt, image_path=None, parse_json=True, description="LLM输出", OCR=False):
         """
         调用 LLM 并可选直接解析 JSON。
         增强版：自动处理 RateLimitError 和 insufficient_quota。
@@ -44,7 +44,10 @@ class BaseAgent(ABC):
                 
                 # --- 调用 ---
                 if image_path:
-                    response = await self.agent['vis'].ainvoke({'messages': messages}, config={"recursion_limit": 125})
+                    if OCR:
+                        response = await self.agent['OCR'].ainvoke({'messages': messages}, config={"recursion_limit": 125})
+                    else:
+                        response = await self.agent['vis'].ainvoke({'messages': messages}, config={"recursion_limit": 125})
                 else:
                     response = await self.agent['text'].ainvoke({'messages': messages}, config={"recursion_limit": 125})
 
