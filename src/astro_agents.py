@@ -554,17 +554,36 @@ Flux 误差：{delta_t_json}
         """初步分类：根据光谱形态初步判断天体类型"""
 
         continuum_interpretation_json = json.dumps(state['visual_interpretation']['continuum_description'], ensure_ascii=False)
-        line_interpretation_json = json.dumps(state['visual_interpretation']['lines_description'], ensure_ascii=False)
+        # line_interpretation_json = json.dumps(state['visual_interpretation']['lines_description'], ensure_ascii=False)
+        
+        # CSST version
+#         system_prompt = """
+# 你是一位经验丰富的天文学光谱分析助手。
 
+# 你的任务是根据光谱的定性描述和特征数据，猜测天体可能属于的类别。
+
+# 如果连续谱呈现蓝端较高，红端较低的趋势（即高→低），则该天体为 QSO；
+# 如果连续谱呈现蓝端较低，中段较高，红端下降的趋势（即低→高→低），则该天体为 QSO ；
+
+# 如果连续谱呈现蓝端较低，红端较高的趋势（即低→高），则该天体为 Galaxy ；
+
+# 比较两种光源的概率，给出你的选择。
+
+# 输出天体类别，格式为 json，格式如下：
+# {
+#     'type': str,  # 天体类别，可能的取值为 "Galaxy", "QSO"
+# }
+
+# 仅输出唯一选项。不要输出其他信息。
+# """
+        # DESI version
         system_prompt = """
 你是一位经验丰富的天文学光谱分析助手。
 
 你的任务是根据光谱的定性描述和特征数据，猜测天体可能属于的类别。
 
-如果连续谱呈现蓝端较高，红端较低的趋势（即高→低），则该天体为 QSO；
-如果连续谱呈现蓝端较低，中段较高，红端下降的趋势（即低→高→低），则该天体为 QSO ；
-
-如果连续谱呈现蓝端较低，红端较高的趋势（即低→高），则该天体为 Galaxy ；
+如果连续谱呈现蓝端较高，红端较低的趋势，则该天体为 QSO；
+如果连续谱呈现蓝端较低，红端较高的趋势，则该天体为 Galaxy；
 
 比较两种光源的概率，给出你的选择。
 
@@ -655,7 +674,8 @@ Flux 误差：{delta_t_json}
             # 筛选条件1：优先使用全局平滑尺度的信噪比
             for peak in peaks_info:
                 # 检查谱线宽度是否足够（>=2000 km/s）
-                if peak['width_in_km_s'] is not None and peak['width_in_km_s'] >= 2000:
+                # if peak['width_in_km_s'] is not None and peak['width_in_km_s'] >= 2000: # CSST
+                if peak['width_in_km_s'] is not None and peak['width_in_km_s'] >= 2000 and peak['wavelength'] < mid_wavelength: #DESI
                     # 检查全局平滑尺度的信噪比条件
                     if (peak['seen_in_max_global_smoothing_scale_sigma'] is not None and 
                         peak['seen_in_max_global_smoothing_scale_sigma'] > 2):
@@ -664,11 +684,14 @@ Flux 误差：{delta_t_json}
             # 筛选条件2：如果条件1没有找到候选，使用局部平滑尺度的信噪比
             if len(Lyalpha_candidate) == 0:
                 for peak in peaks_info:
-                    if peak['width_in_km_s'] is not None and peak['width_in_km_s'] >= 2000:
+                    # if peak['width_in_km_s'] is not None and peak['width_in_km_s'] >= 2000: # CSST
+                    if peak['width_in_km_s'] is not None and peak['width_in_km_s'] >= 2000 and peak['wavelength'] < mid_wavelength: #DESI
                         # 检查局部平滑尺度的信噪比条件
                         if (peak['seen_in_max_local_smoothing_scale_sigma'] is not None and 
                             peak['seen_in_max_local_smoothing_scale_sigma'] > 2):
                             Lyalpha_candidate.append(peak['wavelength'])
+            
+            state['Lyalpha_candidate'] = Lyalpha_candidate
 
             # 将候选线转换为JSON格式并打印
             Lyalpha_candidate_json = json.dumps(Lyalpha_candidate, ensure_ascii=False)
