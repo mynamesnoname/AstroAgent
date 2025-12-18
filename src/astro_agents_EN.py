@@ -542,16 +542,35 @@ Flux error: {delta_t_json}
         """Preliminary classification: roughly classify the astronomical object based on spectral morphology."""
 
         continuum_interpretation_json = json.dumps(state['visual_interpretation']['continuum_description'], ensure_ascii=False)
-        line_interpretation_json = json.dumps(state['visual_interpretation']['lines_description'], ensure_ascii=False)
+        # line_interpretation_json = json.dumps(state['visual_interpretation']['lines_description'], ensure_ascii=False)
+        
+        # CSST version
+#         system_prompt = """
+# You are an experienced astronomical spectral analysis assistant.
 
+# Your task is to guess the likely class of the astronomical object based on qualitative descriptions and spectral features.
+
+# - If the continuum shows a trend of being higher in the blue end and lower in the red end (i.e., high → low), the object is a QSO.
+# - If the continuum shows a trend of being lower in the blue end, peaking in the middle, and dropping again toward the red end (i.e., low → high → low), the object is also a QSO.
+# - If the continuum shows a trend of being lower in the blue end and higher in the red end (i.e., low → high), the object is a Galaxy.
+
+# Compare the likelihoods of these two possibilities and provide your choice.
+
+# Output the object type in JSON format as follows:
+# {
+#     "type": str  # Possible values: "Galaxy", "QSO"
+# }
+
+# Output only one option. Do not include any other information.
+# """
+        # DESI version
         system_prompt = """
 You are an experienced astronomical spectral analysis assistant.
 
 Your task is to guess the likely class of the astronomical object based on qualitative descriptions and spectral features.
 
-- If the continuum shows a trend of being higher in the blue end and lower in the red end (i.e., high → low), the object is a QSO.
-- If the continuum shows a trend of being lower in the blue end, peaking in the middle, and dropping again toward the red end (i.e., low → high → low), the object is also a QSO.
-- If the continuum shows a trend of being lower in the blue end and higher in the red end (i.e., low → high), the object is a Galaxy.
+- If the continuum shows a trend of being higher in the blue end and lower in the red end, the object is a QSO.
+- If the continuum shows a trend of being lower in the blue end and higher in the red end, the object is a Galaxy.
 
 Compare the likelihoods of these two possibilities and provide your choice.
 
@@ -640,7 +659,8 @@ Do not output anything else.
             # Selection criterion 1: prioritize global smoothing scale SNR
             for peak in peaks_info:
                 # Check if line width is sufficiently broad (>=2000 km/s)
-                if peak['width_in_km_s'] is not None and peak['width_in_km_s'] >= 2000:
+                # if peak['width_in_km_s'] is not None and peak['width_in_km_s'] >= 2000: # CSST
+                if peak['width_in_km_s'] is not None and peak['width_in_km_s'] >= 2000 and peak['wavelength'] < mid_wavelength: #DESI
                     # Check global smoothing scale SNR condition
                     if (peak['seen_in_max_global_smoothing_scale_sigma'] is not None and 
                         peak['seen_in_max_global_smoothing_scale_sigma'] > 2):
@@ -649,7 +669,8 @@ Do not output anything else.
             # Selection criterion 2: if no candidates found above, use local smoothing scale SNR
             if len(Lyalpha_candidate) == 0:
                 for peak in peaks_info:
-                    if peak['width_in_km_s'] is not None and peak['width_in_km_s'] >= 2000:
+                    # if peak['width_in_km_s'] is not None and peak['width_in_km_s'] >= 2000: # CSST
+                    if peak['width_in_km_s'] is not None and peak['width_in_km_s'] >= 2000 and peak['wavelength'] < mid_wavelength: #DESI
                         # Check local smoothing scale SNR condition
                         if (peak['seen_in_max_local_smoothing_scale_sigma'] is not None and 
                             peak['seen_in_max_local_smoothing_scale_sigma'] > 2):
