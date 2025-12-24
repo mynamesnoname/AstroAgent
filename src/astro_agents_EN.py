@@ -61,62 +61,69 @@ class SpectralVisualInterpreter(BaseAgent):
         )
         if axis_info == "Non-spectral image":
             raise NotSpectralImageError(f"❌ The input image is not a spectral plot. LLM output: {axis_info}")
-        # print(axis_info)
-        state["axis_info"] = axis_info
+        return axis_info
 
     # --------------------------
     # Steps 1.2–1.3: Merge visual + OCR ticks
     # --------------------------
     async def combine_axis_mapping(self, state: SpectroState):
         """Combine vision-based results and OCR results to generate a pixel-to-value mapping."""
-        axis_info_json = json.dumps(state['axis_info'], ensure_ascii=False)
-        ocr_json = json.dumps(state['OCR_detected_ticks'], ensure_ascii=False)
+        try:
+            axis_info_json = json.dumps(state['axis_info'], ensure_ascii=False)
+            ocr_json = json.dumps(state['OCR_detected_ticks'], ensure_ascii=False)
 
-        system_prompt = state['prompt'][f'{self.agent_name}']['combine_axis_mapping']['system_prompt']
-        user_prompt = state['prompt'][f'{self.agent_name}']['combine_axis_mapping']['user_prompt'].format(
-            axis_info_json=axis_info_json,
-            ocr_json=ocr_json
-        )
-        tick_pixel_raw = await self.call_llm_with_context(
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            image_path=None,
-            parse_json=True,
-            description="Tick-to-pixel mapping"
-        )
-        state["tick_pixel_raw"] = tick_pixel_raw
-        print(tick_pixel_raw)
+            system_prompt = state['prompt'][f'{self.agent_name}']['combine_axis_mapping']['system_prompt']
+            user_prompt = state['prompt'][f'{self.agent_name}']['combine_axis_mapping']['user_prompt'].format(
+                axis_info_json=axis_info_json,
+                ocr_json=ocr_json
+            )
+            tick_pixel_raw = await self.call_llm_with_context(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                image_path=None,
+                parse_json=True,
+                description="Tick-to-pixel mapping"
+            )
+            return tick_pixel_raw
+            # print(tick_pixel_raw)
+        except Exception as e:
+            logging.error(f"Error in combine_axis_mapping: {e}")
+            raise e
 
     # --------------------------
     # Step 1.4: Validation and correction
     # --------------------------
     async def revise_axis_mapping(self, state: SpectroState):
         """Verify and correct the correspondence between tick values and pixel positions."""
-        axis_mapping_json = json.dumps(state['tick_pixel_raw'], ensure_ascii=False)
+        try:
+            axis_mapping_json = json.dumps(state['tick_pixel_raw'], ensure_ascii=False)
 
-        system_prompt = state['prompt'][f'{self.agent_name}']['revise_axis_mapping']['system_prompt']
-        user_prompt = state['prompt'][f'{self.agent_name}']['revise_axis_mapping']['user_prompt'].format(
-            axis_mapping_json=axis_mapping_json
-        )
+            system_prompt = state['prompt'][f'{self.agent_name}']['revise_axis_mapping']['system_prompt']
+            user_prompt = state['prompt'][f'{self.agent_name}']['revise_axis_mapping']['user_prompt'].format(
+                axis_mapping_json=axis_mapping_json
+            )
 
-        tick_pixel_revised = await self.call_llm_with_context(
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            image_path=None,
-            parse_json=True,
-            description="Revised tick mapping"
-        )
-        state["tick_pixel_raw"] = tick_pixel_revised
-        # print(tick_pixel_revised)
+            tick_pixel_revised = await self.call_llm_with_context(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                image_path=None,
+                parse_json=True,
+                description="Revised tick mapping"
+            )
+            return tick_pixel_revised
+        except Exception as e:
+            logging.error(f"Error in revise_axis_mapping: {e}")
+            raise e
 
     # --------------------------
     # Step 1.5: Image cropping
     # --------------------------
     async def check_border(self, state):
-        system_prompt = """
+        try:
+            system_prompt = """
 You are a professional scientific chart analysis assistant specialized in processing matplotlib-style spectral plots in astronomy. You can accurately identify whether residual axis borders or decorative lines remain along the image edges and make precise judgments based on visual content.
 """
-        user_prompt = """
+            user_prompt = """
 You will receive two images:
 - One is the original spectral image, which may include plot borders.
 - The other is a preprocessed matplotlib astronomical spectral plot after OCR and OpenCV operations, where an attempt has already been made to crop out the original chart's borders and external regions.
@@ -138,25 +145,24 @@ Output your result strictly in the following JSON format, containing only four k
 
 Do not output any additional content.
 """
-        response = await self.call_llm_with_context(
-            system_prompt,
-            user_prompt,
-            image_path=[state['image_path'], state['crop_path']],
-            parse_json=True,
-            description='Border cropping check'
-        )
-        try:
+            response = await self.call_llm_with_context(
+                system_prompt,
+                user_prompt,
+                image_path=[state['image_path'], state['crop_path']],
+                parse_json=True,
+                description='Border cropping check'
+            )
             response['top'] = safe_to_bool(response['top'])
             response['right'] = safe_to_bool(response['right'])
             response['bottom'] = safe_to_bool(response['bottom'])
             response['left'] = safe_to_bool(response['left'])
             return response
         except:
-            logging.error(f"LLM output format error: {response}")
+            logging.error(f"Error in check_border: {response}")
 
     async def peak_trough_detection(self, state: SpectroState):
         try:
-            sigma_list, tol_pixels, prom_peaks, prom_troughs, weight_original, _, _ = _load_feature_params()
+            sigma_list, tol_pixels, prom_peaks, prom_troughs, _, _ = _load_feature_params()
             state['sigma_list'] = sigma_list
 
             spec = state["spectrum"]
@@ -166,13 +172,13 @@ Do not output any additional content.
             state["peaks"] = _find_features_multiscale(
                 wavelengths, flux,
                 state, feature="peak", sigma_list=sigma_list,
-                prom=prom_peaks, tol_pixels=tol_pixels, weight_original=weight_original,
+                prom=prom_peaks, tol_pixels=tol_pixels,
                 use_continuum_for_trough=True
             )
             state["troughs"] = _find_features_multiscale(
                 wavelengths, flux,
                 state, feature="trough", sigma_list=sigma_list,
-                prom=prom_troughs, tol_pixels=tol_pixels, weight_original=weight_original,
+                prom=prom_troughs, tol_pixels=tol_pixels, 
                 use_continuum_for_trough=True,
                 min_depth=0.08
             )
@@ -194,13 +200,13 @@ Do not output any additional content.
                 roi_peaks = _find_features_multiscale(
                     roi_wavelengths, roi_flux,
                     state, feature="peak", sigma_list=sigma_list,
-                    prom=prom_peaks, tol_pixels=tol_pixels, weight_original=weight_original,
+                    prom=prom_peaks, tol_pixels=tol_pixels,
                     use_continuum_for_trough=True
                 )
                 roi_troughs = _find_features_multiscale(
                     roi_wavelengths, roi_flux,
                     state, feature="trough", sigma_list=sigma_list,
-                    prom=prom_troughs, tol_pixels=tol_pixels, weight_original=weight_original,
+                    prom=prom_troughs, tol_pixels=tol_pixels,
                     use_continuum_for_trough=True,
                     min_depth=0.08
                 )
@@ -218,13 +224,13 @@ Do not output any additional content.
                 roi_peaks = _find_features_multiscale(
                     roi_wavelengths, roi_flux,
                     state, feature="peak", sigma_list=sigma_list,
-                    prom=prom_peaks, tol_pixels=tol_pixels, weight_original=weight_original,
+                    prom=prom_peaks, tol_pixels=tol_pixels,
                     use_continuum_for_trough=True
                 )
                 roi_troughs = _find_features_multiscale(
                     roi_wavelengths, roi_flux,
                     state, feature="trough", sigma_list=sigma_list,
-                    prom=prom_troughs, tol_pixels=tol_pixels, weight_original=weight_original,
+                    prom=prom_troughs, tol_pixels=tol_pixels,
                     use_continuum_for_trough=True,
                     min_depth=0.08
                 )
@@ -241,7 +247,7 @@ Do not output any additional content.
                 tol_pixels=tol_pixels
             )
         except Exception as e:
-            print(f"❌ peak_trough_detection: {e}")
+            print(f"Error in peak_trough_detection: {e}")
         return state
 
     async def continuum_fitting(self, state: SpectroState):
@@ -276,7 +282,7 @@ Do not output any additional content.
                 'flux': continuum_flux.tolist()
             }
         except Exception as e:
-            print(f"❌ continuum_fitting: {e}")
+            print(f"Error in continuum_fitting: {e}")
         return state
 
     # --------------------------
@@ -286,15 +292,19 @@ Do not output any additional content.
         """Execute the full visual analysis pipeline."""
         try:
             # Step 1.1: Use vision LLM to extract axis info
-            await self.detect_axis_ticks(state)
+            state["axis_info"] = await self.detect_axis_ticks(state)
             # Step 1.2: Extract ticks via OCR
-            # state['OCR_detected_ticks'] = _detect_axis_ticks_tesseract(state['image_path'])
-            state['OCR_detected_ticks'] = _detect_axis_ticks_paddle(state)
-            print(state["OCR_detected_ticks"])
+            OCR = os.getenv('OCR', 'paddle')
+            print(f"OCR: {OCR}")
+            if OCR == 'paddle':
+                state['OCR_detected_ticks'] = _detect_axis_ticks_paddle(state)
+            else:
+                state['OCR_detected_ticks'] = _detect_axis_ticks_tesseract(state)
+            # print(state["OCR_detected_ticks"])
             # Step 1.3: Merge results
-            await self.combine_axis_mapping(state)
+            state["tick_pixel_raw"] = await self.combine_axis_mapping(state)
             # Step 1.4: Revise mapping
-            await self.revise_axis_mapping(state)
+            state["tick_pixel_raw"] = await self.revise_axis_mapping(state)
             # Step 1.5: Border detection and cropping
             state['margin'] = {
                 'top': 20,
@@ -345,7 +355,7 @@ Do not output any additional content.
                     raise
             return state
         except Exception as e:
-            print(f"❌ Pipeline execution failed with error: {e}")
+            print(f"Error in spectral visual interpreter: {e}")
             raise
 
 # ---------------------------------------------------------
@@ -485,9 +495,8 @@ Below is a PNG image of an astronomical spectrum. Based on the image content, qu
 
 Please answer the following questions in order:
 
-1. Signal-to-Noise Ratio (SNR) impression: Overall, is the noise level high, medium, or low? Are there obvious random fluctuations or "spikes"? Or does the curve appear smooth?
-2. Signal significance: Are there clear absorption or emission features (i.e., noticeable dips, peaks, or undulations)? Or does the spectrum resemble an almost flat line—suggesting features are "compressed" or "drowned out"?
-3. Dynamic range: Is the intensity (y-axis) sufficiently expanded to resolve details? Or is it overly compressed, causing all features to cluster together and become difficult to distinguish?
+1. Signal significance: Are there clear absorption or emission features (i.e., noticeable dips, peaks, or undulations)? Or does the spectrum resemble an almost flat line—suggesting features are "compressed" or "drowned out"?
+2. Dynamic range: Is the intensity (y-axis) sufficiently expanded to resolve details? Or is it overly compressed, causing most features to cluster together and become difficult to distinguish, only high noises dominate the spectrum?
 """
             response_0 = await self.call_llm_with_context(
                 system_prompt=system_prompt,
@@ -543,7 +552,7 @@ Determine whether this spectrum is suitable for further quantitative analysis. P
             )
             response_1_json = json.dumps(response_1, ensure_ascii=False)
             response_3_json = json.dumps(response_2, ensure_ascii=False)
-            response_4_json = json.dumps(response_3, ensure_ascii=False)
+            response_4_json = json.dumps(response_4, ensure_ascii=False)
             return '\n'.join([response_0_json, response_1_json, response_2_json, response_3_json, response_4_json])
 
         async def _integrate(state):
@@ -1150,17 +1159,19 @@ Use the tool `QSO_rms` to compute the redshift uncertainty ±Δz:
 Please review this analysis report.
 """
             elif state['count']: 
-                auditing_history = state['auditing_history_QSO'][-1] 
-                auditing_history_json = json.dumps(auditing_history, ensure_ascii=False)
-                response_history = state['refine_history_QSO'][-1]
-                response_history_json = json.dumps(response_history, ensure_ascii=False)
+                debate_history_json=''
+                for i in range(len(state['auditing_history_QSO'])):
+                    auditing_history = state['auditing_history_QSO'][i] 
+                    response_history = state['refine_history_QSO'][i]
+
+                    auditing_history_json = json.dumps(auditing_history, ensure_ascii=False)
+                    response_history_json = json.dumps(response_history, ensure_ascii=False)
+
+                    debate_history_json += f"Discussion round {i+1}\n you: \n{auditing_history_json}\n\n" + f"Refinement Analyst: \n{response_history_json}\n\n"
 
                 body = f"""
-Your most recent critique of this analysis report was:
-{auditing_history_json}
-
-The other analyst's response was:
-{response_history_json}
+The debate history of you and refinement analyst is listed as follows:
+{debate_history_json}
 
 Please respond to the analyst's reply and continue your review.
 """
@@ -1317,7 +1328,26 @@ Use the tool `QSO_rms` to compute the redshift uncertainty ±Δz:
             system_prompt = self._common_prompt_header(state)
             auditing_history = state['auditing_history_QSO'][-1]
             auditing_history_json = json.dumps(auditing_history, ensure_ascii=False)
-            body = f"""
+            if len(state['auditing_history_QSO']) == 1:
+                ddd = ''
+            elif len(state['auditing_history_QSO']) > 1:
+                debate_history_json = ""
+                for i in range(len(state['refine_history_QSO'])):
+                    auditing_history = state['auditing_history_QSO'][i] 
+                    response_history = state['refine_history_QSO'][i]
+
+                    auditing_history_json = json.dumps(auditing_history, ensure_ascii=False)
+                    response_history_json = json.dumps(response_history, ensure_ascii=False)
+
+                    debate_history_json += f"Debate round {i+1}: \nAuditor:\n{auditing_history_json}\n\n" + f"You: \n{response_history_json}\n\n"
+
+                    ddd = f"""
+Your debate history with the auditor is:
+{debate_history_json}
+
+"""
+
+            body = f"""{ddd}
 The latest feedback from the reviewing auditor is:
 {auditing_history_json}
 

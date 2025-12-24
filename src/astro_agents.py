@@ -156,7 +156,7 @@ class SpectralVisualInterpreter(BaseAgent):
 
     async def peak_trough_detection(self, state: SpectroState):
         try:
-            sigma_list, tol_pixels, prom_peaks, prom_troughs, weight_original, _, _ = _load_feature_params()
+            sigma_list, tol_pixels, prom_peaks, prom_troughs, _, _ = _load_feature_params()
             state['sigma_list'] = sigma_list
 
             spec = state["spectrum"]
@@ -166,13 +166,13 @@ class SpectralVisualInterpreter(BaseAgent):
             state["peaks"] = _find_features_multiscale(
                 wavelengths, flux,
                 state, feature="peak", sigma_list=sigma_list,
-                prom=prom_peaks, tol_pixels=tol_pixels, weight_original=weight_original,
+                prom=prom_peaks, tol_pixels=tol_pixels,
                 use_continuum_for_trough=True
             )
             state["troughs"] = _find_features_multiscale(
                 wavelengths, flux,
                 state, feature="trough", sigma_list=sigma_list,
-                prom=prom_troughs, tol_pixels=tol_pixels, weight_original=weight_original,
+                prom=prom_troughs, tol_pixels=tol_pixels, 
                 use_continuum_for_trough=True,
                 min_depth=0.08
             )
@@ -197,13 +197,13 @@ class SpectralVisualInterpreter(BaseAgent):
                 roi_peaks = _find_features_multiscale(
                     roi_wavelengths, roi_flux,
                     state, feature="peak", sigma_list=sigma_list,
-                    prom=prom_peaks, tol_pixels=tol_pixels, weight_original=weight_original,
+                    prom=prom_peaks, tol_pixels=tol_pixels,
                     use_continuum_for_trough=True
                 )
                 roi_troughs = _find_features_multiscale(
                     roi_wavelengths, roi_flux,
                     state, feature="trough", sigma_list=sigma_list,
-                    prom=prom_troughs, tol_pixels=tol_pixels, weight_original=weight_original,
+                    prom=prom_troughs, tol_pixels=tol_pixels, 
                     use_continuum_for_trough=True,
                     min_depth=0.08
                 )
@@ -225,13 +225,13 @@ class SpectralVisualInterpreter(BaseAgent):
                 roi_peaks = _find_features_multiscale(
                     roi_wavelengths, roi_flux,
                     state, feature="peak", sigma_list=sigma_list,
-                    prom=prom_peaks, tol_pixels=tol_pixels, weight_original=weight_original,
+                    prom=prom_peaks, tol_pixels=tol_pixels,
                     use_continuum_for_trough=True
                 )
                 roi_troughs = _find_features_multiscale(
                     roi_wavelengths, roi_flux,
                     state, feature="trough", sigma_list=sigma_list,
-                    prom=prom_troughs, tol_pixels=tol_pixels, weight_original=weight_original,
+                    prom=prom_troughs, tol_pixels=tol_pixels,
                     use_continuum_for_trough=True,
                     min_depth=0.08
                 )
@@ -295,9 +295,13 @@ class SpectralVisualInterpreter(BaseAgent):
             # Step 1.1: 视觉 LLM 提取坐标轴
             await self.detect_axis_ticks(state)
             # Step 1.2: OCR 提取刻度
-            # state['OCR_detected_ticks'] = _detect_axis_ticks_tesseract(state['image_path'])
-            state['OCR_detected_ticks'] = _detect_axis_ticks_paddle(state)
-            # print(state["OCR_detected_ticks"])
+            OCR = os.getenv('OCR', 'paddle')
+            print(f"OCR: {OCR}")
+            if OCR == 'paddle':
+                state['OCR_detected_ticks'] = _detect_axis_ticks_paddle(state)
+            else:
+                state['OCR_detected_ticks'] = _detect_axis_ticks_tesseract(state)
+            print(state["OCR_detected_ticks"])
 
             # await self.ocr_llm(state)
             # for i in state["OCR_detected_ticks"]:
@@ -496,9 +500,8 @@ Flux 误差：{delta_t_json}
 
 请依次回答以下问题：
 
-1. 信噪比（SNR）印象：整体来看，光谱的噪声水平是高、中还是低？是否存在明显的随机波动或“毛刺”？还是曲线平滑？
-2. 信号显著性：光谱中是否存在明显的吸收线或发射线（即明显的起伏、凹陷或尖峰）？还是整个光谱看起来像一条几乎无变化的直线（被“压缩”或“淹没”）？
-3. 动态范围：光谱的纵轴（强度）是否有足够的展开？还是被过度压缩，导致所有特征都挤在一起难以分辨？
+1. 信号显著性：光谱中是否存在明显的吸收线或发射线（即明显的起伏、凹陷或尖峰）？还是整个光谱看起来像一条几乎无变化的直线（被“压缩”或“淹没”）？
+2. 动态范围：光谱的纵轴（强度）是否有足够的展开？还是被过度压缩，导致大部分特征都挤在一起难以分辨，仅有1个或多个夸张的噪声主导整个光谱？
 """
             response_0 = await self.call_llm_with_context(
                 system_prompt=system_prompt,
@@ -1171,17 +1174,19 @@ class SpectralAnalysisAuditor(BaseAgent):
 请对这份分析报告进行检查。
 """
             elif state['count']: 
-                auditing_history = state['auditing_history_QSO'][-1] 
-                auditing_history_json = json.dumps(auditing_history, ensure_ascii=False)
-                response_history = state['refine_history_QSO'][-1]
-                response_history_json = json.dumps(response_history, ensure_ascii=False)
+                debate_history_json=''
+                for i in range(len(state['auditing_history_QSO'])):
+                    auditing_history = state['auditing_history_QSO'][i] 
+                    response_history = state['refine_history_QSO'][i]
+
+                    auditing_history_json = json.dumps(auditing_history, ensure_ascii=False)
+                    response_history_json = json.dumps(response_history, ensure_ascii=False)
+
+                    debate_history_json += f"第{i+1}轮审查：\n{auditing_history_json}\n\n" + f"第{i+1}轮回应：\n{response_history_json}\n\n"
 
                 body = f"""
-你对这份分析报告的最新质疑为
-{auditing_history_json}
-
-其他分析师的回答为
-{response_history_json}
+你和改进分析师对于这篇报告的辩论为
+{debate_history_json}
 
 请回应其他分析师的回答，并继续进行审查。
 """
@@ -1339,7 +1344,26 @@ class SpectralRefinementAssistant(BaseAgent):
             system_prompt = self._common_prompt_header(state)
             auditing_history = state['auditing_history_QSO'][-1]
             auditing_history_json = json.dumps(auditing_history, ensure_ascii=False)
-            body = f"""
+            if len(state['auditing_history_QSO']) == 1:
+                ddd = ''
+            elif len(state['auditing_history_QSO']) > 1:
+                debate_history_json = ''
+                for i in range(len(state['auditing_history_QSO'])):
+                    auditing_history = state['auditing_history_QSO'][i] 
+                    response_history = state['refine_history_QSO'][i]
+
+                    auditing_history_json = json.dumps(auditing_history, ensure_ascii=False)
+                    response_history_json = json.dumps(response_history, ensure_ascii=False)
+
+                    debate_history_json += f"第{i+1}轮审查：\n{auditing_history_json}\n\n" + f"第{i+1}轮回应：\n{response_history_json}\n\n"
+
+                    ddd = f"""
+你和改进分析师对于这篇报告的辩论为
+{debate_history_json}
+
+"""
+
+            body = f"""{ddd}
 负责核验报告的审查分析师给出的最新建议为
 {auditing_history_json}
 
