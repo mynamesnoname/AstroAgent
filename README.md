@@ -9,8 +9,8 @@ An LLM-powered agent for human-like analysis of one-dimensional astronomical spe
 ## Overview
 
 This project use large language models (LLMs) to perform human-like astrophysical inference on 1D spectra, specifically:
-- **Source classification** (Only support star, galaxy, QSO)
-- **Redshift estimation**
+- **Source classification** [Only support galaxy (LRG and ELG, output as galaxy), QSO]
+- **Redshift estimation** for QSOs
 
 The system mimics the cognitive workflow of a human astronomer:
 1. **Visual interpretation** of the spectrum plot (axes, units, features)
@@ -27,15 +27,72 @@ The pipeline is currently configured to use the following Qwen models via API:
 ---
 
 ## Dependencies & Installation
+### 1. OCR Engine
 
-### 1. Python Dependencies
-Install the required Python packages:
+This project supports two OCR (Optical Character Recognition) backends: PaddleOCR and Tesseract OCR.
+By default, PaddleOCR is used because it generally offers higher accuracy—especially for chart axis labels—but requires a more involved installation process.
+
+In src/utils, we provide two OCR wrapper functions:
+```python
+_detect_axis_ticks_paddle(state)
+```
+Uses PaddleOCR.
+```python
+_detect_axis_ticks_tesseract(state)
+```
+Uses Tesseract OCR.
+
+You can select your preferred OCR engine by setting the appropriate option in your .env file.
+
+#### 1.1 Installing PaddleOCR
+
+PaddleOCR depends on PaddlePaddle, which must be installed first.
+
+##### 1. Install PaddlePaddle
+For CPU-only support, run:
+
 ```bash
-pip install -r requirements.txt
+pip install paddlepaddle==3.2.0 -i https://www.paddlepaddle.org.cn/packages/stable/cpu/
 ```
 
-### 2. System Dependencies
-This project relies on **Tesseract OCR** for text detection in spectrum plots. Install it based on your OS:
+For GPU support or detailed instructions (including system-specific guidance), refer to the [official PaddlePaddle installation page](https://www.paddlepaddle.org.cn/).
+
+##### 2. Install PaddleOCR
+```bash
+pip install "paddleocr[all]"
+```
+##### 3. Compatibility Fix for LangChain (you can do it after installing the Python dependencies)
+The current version of PaddleOCR uses legacy imports from older versions of LangChain (langchain.docstore.document, etc.), while this project relies on the newer
+* `langchain-core`
+* `langchain-text-splitter`
+
+To resolve this conflict, you’ll need to manually patch the PaddleOCR source code after installing the Python dependencies (see Section 2).
+
+Open the following file in your editor (adjust the path to match your Conda environment):
+```bash
+nano ~/Apps/anaconda3/envs/your_env_name/lib/python3.12/site-packages/paddlex/inference/pipelines/components/retriever/base.py
+```
+Replace these lines:
+```python
+from langchain.docstore.document import Document
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+```
+with:
+```python
+from langchain_core.documents import Document
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+```
+💡 Tip: You can locate your environment path using 
+```bash
+which python
+```
+or 
+```bash
+conda info --envs.
+```
+#### 1.2 Installing Tesseract OCR
+
+Install it based on your OS:
 
 - **Ubuntu/Debian**:
   ```bash
@@ -54,6 +111,12 @@ This project relies on **Tesseract OCR** for text detection in spectrum plots. I
 > ```bash
 > tesseract --version
 > ```
+
+### 2. Python Dependencies
+Install the required Python packages:
+```bash
+pip install -r requirements.txt
+```
 
 ### 3. Environment Setup
 Copy the example configuration and fill in your settings:
@@ -79,7 +142,7 @@ python main.py
 Results will be saved to the output directory specified in `.env`.
 
 ### 2. Try the Notebook (Optional)
-For interactive exploration and debugging, see `debug2.ipynb`. After setting up your environment variables, you can run this notebook to step through the analysis pipeline.
+For interactive exploration and debugging, see `debug.ipynb`. After setting up your environment variables, you can run this notebook to step through the analysis pipeline.
 
 ---
 
@@ -88,26 +151,41 @@ A basic test set is offered in ./data/test_set
 
 ---
 
-## Output Files
+## Output Files Description
 
-For an input image named `{your_image_name}.png`, the program generates the following outputs in the configured output directory:
+For an input image `{your_image_name}.png`, the program will generate:
 
-- `{your_image_name}_cropped.png`  
-  Cleaned spectrum image with titles, axes, and borders removed.
+* `{your_image_name}_spec_extract.png`
+  Reconstructed spectrum based on OpenCV.
 
-- `{your_image_name}_reconstructed.png`  
-  Reconstructed spectrum after OpenCV-based preprocessing.
+* `{your_image_name}_features.png`
+  Visualization of detected spectral peaks and troughs.
 
-- `{your_image_name}_features.png`  
-  Visualization of detected peaks and troughs.
+* `{your_image_name}_continuum.png`
+  Fitted continuum spectrum.
 
-- `{your_image_name}_rule_analysis.md`  
-  Intermediate rule-based analysis from the spectral analyst agent.
+* `{your_image_name}_rule_analysis.md`
+  Intermediate rule-based analysis report.
 
-- `{your_image_name}_summary.md`  
-  Final synthesized report including source type, redshift estimate, and confidence assessment.
+* `{your_image_name}_summary.md`
+  Final comprehensive report (object type, redshift, confidence level).
 
-- 注：`{your_image_name}_ROI.png` 暂不对外展示。后续会取消该输出。
+And by-products:
+
+* `{your_image_name}_cropped.png`
+  Clean spectrum image with titles, axes, and borders removed.
+
+* `{your_image_name}_ocr_res_img.png`
+  OCR result visualization image (output only by Paddle version).
+
+* `{your_image_name}_res.json`
+  OCR result text (output only by Paddle version).
+
+* `{your_image_name}_spectrum.png`
+  Extracted spectrum and SNR plot.
+
+* `{your_image_name}_visual_interpretation.txt`
+  Intermediate product of visual analysis.
 
 ---
 
@@ -119,75 +197,10 @@ For an input image named `{your_image_name}.png`, the program generates the foll
 - **MCP Integration**: Built on the Model Context Protocol (MCP) for standardized tool interaction.
 
 ---
-
-## Requirements
-
-```txt
-astropy==7.1.1
-langchain==1.0.5
-langchain-community==0.3.29
-langchain-core==1.0.4
-langchain-mcp-adapters==0.1.11
-langchain-openai==1.0.2
-langgraph==1.0.3
-matplotlib==3.10.6
-mcp==1.19.0
-numpy==2.3.4
-openai==2.8.0
-opencv-python==4.12.0.88
-pandas==2.3.2
-pydantic==2.11.7
-pytesseract==0.3.13
-python-dotenv==1.1.1
-scipy==1.16.3
-```
----
-
 ## License
 
 This project is for research and educational purposes. 
 
 ---
-
-## 10.29 更新
-- 新增 main.py
-  - 使用方式：
-    - 配置 .env 文件。示例为 .env_example
-    - 而后运行
-      ```bash
-      python main.py
-      ```
-
-- 使用 langgraph 对 流程进行了改写。旧的 astro_agents 程序在 src/_astro_agents_old.py 中
-- 新增 src/workflow_orchestrator.py，用来管理 agent 的运行流程
-
-## 10.24 更新
-- 使用环境变量作为参数的输入方式
-- 环境变量的配置在 .env 文件中。.env 文件的配置示例在 .env_example 文件里。
-- 接受这些输入参数的位置：
-  - debug.ipynb 的初始化阶段，接受
-    - input_dir = os.getenv('INPUT_DIR')
-    - output_dir = os.getenv('OUTPUT_DIR')
-    - SINGLE_RUN = os.getenv('SINGLE_RUN').lower()=='true'
-    - image_name = os.getenv('IMAGE_NAME')
-    - IMAGE_NAME_HEADER、START、END这三个参数是批量处理所使用的参数，暂未实装
-  - src/mcp_manager._init_llm() 接受两种 LLM 的参数。llm_type='LLM' 或 'VIS_LLM'.
-    - api_key = self._get_env_or_raise(f"{llm_type}_API_KEY")
-    - base_url = self._get_env_or_raise(f"{llm_type}_BASE_URL").rstrip()
-    - model = os.getenv(f"{llm_type}_MODEL", default_model)
-    - temp_str = os.getenv(f"{llm_type}_TEMPERATURE", "0.1")
-    - temperature = float(temp_str) if temp_str else 0.1
-    - max_tokens_str = os.getenv(f"{llm_type}_MAX_TOKENS")
-  - src/astro_agent.SpectralVisualInterpreter.run() 接受
-    - SIGMA_LIST
-    - TOL_PIXELS
-    - WEIGHT_ORIGINAL
-    - PROM_THRESHOLD_PEAKS
-    - PROM_THRESHOLD_TROUGHS
-    - 以及 
-      - p_ = os.getenv('PLOT_PEAKS_NUMBER')
-      - t_ = os.getenv('PLOT_TROUGHS_NUMBER')
-
-- 下一步计划：
-  - [x] 将 debug.ipynb 中目前的运行流程封装到 src.workflow_orchestrator
-  - [x] 最终的 main.py 中可能只包括 debug.ipynb 中的初始化阶段 + 对 workflow_orchestrator 函数的调用。
+Update 
+- 2025.12.24: remove environment variables `WEIGHT_ORIGINAL`

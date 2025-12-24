@@ -107,18 +107,18 @@ def _load_feature_params():
     tol_pixels = getenv_int("TOL_PIXELS", 10)
     prom_peaks = getenv_float("PROM_THRESHOLD_PEAKS", 0.01)
     prom_troughs = getenv_float("PROM_THRESHOLD_TROUGHS", 0.05)
-    weight_original = getenv_float("WEIGHT_ORIGINAL", 0.5)
+    # weight_original = getenv_float("WEIGHT_ORIGINAL", 0.5)
     plot_peaks = getenv_int("PLOT_PEAKS_NUMBER", 10)
     plot_troughs = getenv_int("PLOT_TROUGHS_NUMBER", 15)
 
-    return sigma_list, tol_pixels, prom_peaks, prom_troughs, weight_original, plot_peaks, plot_troughs
+    return sigma_list, tol_pixels, prom_peaks, prom_troughs, plot_peaks, plot_troughs
 
-def _detect_axis_ticks_tesseract(image_path, config=None):
+def _detect_axis_ticks_tesseract(state, config=None):
     if config is None:
         # config = r'--oem 3 --psm 5 -c tessedit_char_whitelist=0123456789.-eE+ '
         config = r'--oem 3 --psm 6 -c tessedit_char_whitelist=0123456789.-eE+ '
         # config = r'--oem 3 --psm 11 -c tessedit_char_whitelist=0123456789.-eE+ '
-
+    image_path = state['image_path']
     img = cv2.imread(image_path)
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     blurred = cv2.GaussianBlur(gray, (3, 3), 0)
@@ -616,8 +616,8 @@ def _detect_features_on_flux(
     return flux_smooth, peaks_info
     
 def _merge_peaks_across_sigmas(
-    feature, wavelengths, peaks_by_sigma,
-    tol_pixels=5, weight_original=2.0
+    feature, wavelengths, flux, peaks_by_sigma,
+    tol_pixels=5
 ):
     """
     合并不同 scale 的峰/谷。
@@ -669,21 +669,23 @@ def _merge_peaks_across_sigmas(
             sigma_reps.append(dict(best, sigma=s))
 
         # === Step 3: 对代表点进行加权平均 ===
-        weighted_sum, weight_total = 0.0, 0.0
+        # weighted_sum, weight_total = 0.0, 0.0
         max_sigma, min_sigma = 0.0, np.inf
         fff = -np.inf
         for rep in sigma_reps:
+            id = rep["index"]
             if rep['flux'] > fff:
                 fff = rep['flux']
-                rep_idx = rep["index"]
-        #     sigma = rep["sigma"]
-        #     idx = rep["index"]
-        #     max_sigma = max(max_sigma, sigma)
-        #     min_sigma = min(min_sigma, sigma)
-        #     w = weight_original if sigma == 0 else 1.0 / np.sqrt(sigma)
-        #     weighted_sum += idx * w
-        #     weight_total += w
-        # rep_idx = int(np.round(weighted_sum / weight_total))
+                rep_idx = id
+            
+            sigma = rep["sigma"]
+            idx = rep["index"]
+            max_sigma = max(max_sigma, sigma)
+            min_sigma = min(min_sigma, sigma)
+            # w = 0.5 if sigma == 0 else 1.0 / np.sqrt(sigma)
+            # weighted_sum += idx * w
+            # weight_total += w
+        # rep_idx_ = int(np.round(weighted_sum / weight_total))
         wlen = float(wavelengths[rep_idx]) if rep_idx < len(wavelengths) else None
 
         # === Step 4: 统计特征信息 ===
@@ -744,7 +746,7 @@ def _find_features_multiscale(
     wavelengths, flux, 
     state,
     feature="peak", sigma_list=None,
-    prom=0.01, tol_pixels=10, weight_original=1.0,
+    prom=0.01, tol_pixels=10,
     use_continuum_for_trough=True,
     min_depth=0.1  # ✅ 新增：按 depth 过滤阈值
 ):
@@ -796,8 +798,8 @@ def _find_features_multiscale(
             })
 
         return _merge_peaks_across_sigmas(
-            feature, wavelengths, peaks_by_sigma,
-            tol_pixels=tol_pixels, weight_original=weight_original
+            feature, wavelengths, flux, peaks_by_sigma,
+            tol_pixels=tol_pixels
         )
 
     except Exception as e:
@@ -931,7 +933,7 @@ def _ROI_features_finding(state):
 
     ROI_peaks = []
     ROI_troughs = []
-    sigma_list, tol_pixels, prom_peaks, prom_troughs, weight_original, _, _ = _load_feature_params()
+    sigma_list, tol_pixels, prom_peaks, prom_troughs, _, _ = _load_feature_params()
     state['sigma_list'] = sigma_list
     for roi in state['visual_interpretation']['roi']:
         range = roi['wave_range']
@@ -945,14 +947,14 @@ def _ROI_features_finding(state):
         pe = _find_features_multiscale(
             wave_cut, flux_cut,
             state, feature="peak", sigma_list=sigma_list,
-            prom=prom_peaks, tol_pixels=tol_pixels, weight_original=weight_original,
+            prom=prom_peaks, tol_pixels=tol_pixels,
             use_continuum_for_trough=True
         )
         # print(pe)
         tr = _find_features_multiscale(
             wave_cut, flux_cut,
             state, feature="trough", sigma_list=sigma_list,
-            prom=prom_troughs, tol_pixels=tol_pixels, weight_original=weight_original,
+            prom=prom_troughs, tol_pixels=tol_pixels,
             use_continuum_for_trough=True,
             min_depth=0.08
         )
@@ -1166,7 +1168,7 @@ def _process_feature_type(wavelength, flux, global_list, roi_list, tol_pixels, f
         logging.error(f"Error in _process_feature_type: {e}")
 
 def plot_cleaned_features(state):
-    sigma_list, _, _, _, _, plot_peaks, plot_troughs = _load_feature_params()
+    sigma_list, _, _, _, plot_peaks, plot_troughs = _load_feature_params()
     fig = plt.figure(figsize=(10,3))
     spec = state["spectrum"]
     wavelengths = np.array(spec["new_wavelength"])

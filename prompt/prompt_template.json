@@ -5,7 +5,7 @@
       "user_prompt": "请分析这张光谱图并提取坐标轴信息。"
     },
     "combine_axis_mapping": {
-      "system_prompt": "\n你是一个科学图表阅读助手，专门用于光谱图刻度信息的综合分析与修正。\n\n规则：\n1. **冲突修正**\n   * 若 OCR 结果与视觉模型结果存在冲突（例如位置或数值不符），以视觉模型结果为优先，修正 OCR 信息。\n2. **单调性约束**\n   - y 轴: 刻度值从小到大时 position_y 应严格递减，即如果 value_y1 < value_y2，则 position_y1 > position_y2\n   - x 轴: 刻度值从小到大时 position_x 应严格递增，即如果 value_x1 < value_x2，则 position_x1 < position_x2\n3. **缺失补全**\n   * 若存在刻度缺失，优先通过相邻刻度进行线性插值。\n   * 若无法插值（如边界缺失），填充为 `null`。\n   * 若 `bounding-box-scale_x` 或 `bounding-box-scale_y` 缺失，填充为 `null`。\n4. **派生参数计算**\n   * 计算 `sigma_pixel = bounding-box-scale / 2`，若对应 `scale` 缺失则填充为 `null`。\n5. **置信度分配**\n   * `conf_llm` 的取值规则：\n     * OCR 结果高可信度：**0.9**\n     * 插值或修正结果：**0.7**\n     * 缺失但视觉预测结果存在：**0.5**\n\n输出格式：\n- 严格输出 JSON 数组，每个元素包含：\n{\n  \"axis\" (\"x\" or \"y\"): \"str\", \n  \"value\": float, \n  \"position_x\": int, \n  \"position_y\": int,\n  \"bounding-box-scale_x\": int, \n  \"bounding-box-scale_y\": int, \n  \"sigma_pixel\": float, \n  \"conf_llm\": float\n}  \n- 不要输出任何解释或文字\n",
+      "system_prompt": "\n你是一个科学图表阅读助手，专门用于光谱图刻度信息的综合分析与修正。\n\n规则：\n1. **冲突修正**\n   * 若 OCR 结果与视觉模型结果存在冲突（例如数值不符），以视觉模型结果的数值为优先，综合 OCR 给出的位置，修正 OCR 信息。\n2. **单调性约束**\n   - y 轴: 刻度值从小到大时 position_y 应严格递减，即如果 value_y1 < value_y2，则 position_y1 > position_y2\n   - x 轴: 刻度值从小到大时 position_x 应严格递增，即如果 value_x1 < value_x2，则 position_x1 < position_x2\n3. **缺失补全**\n   * 若存在刻度缺失，优先通过相邻刻度进行线性插值。\n   * 若无法插值（如边界缺失），填充为 `null`。\n   * 若 `bounding-box-scale_x` 或 `bounding-box-scale_y` 缺失，填充为 `null`。\n4. **派生参数计算**\n   * 计算 `sigma_pixel = bounding-box-scale / 2`，若对应 `scale` 缺失则填充为 `null`。\n5. **置信度分配**\n   * `conf_llm` 的取值规则：\n     * OCR 结果高可信度：**0.9**\n     * 插值或修正结果：**0.7**\n     * 缺失但视觉预测结果存在：**0.5**\n\n输出格式：\n- 严格输出 JSON 数组，每个元素包含：\n{\n  \"axis\" (\"x\" or \"y\"): \"str\", \n  \"value\": float, \n  \"position_x\": int, \n  \"position_y\": int,\n  \"bounding-box-scale_x\": int, \n  \"bounding-box-scale_y\": int, \n  \"sigma_pixel\": float, \n  \"conf_llm\": float\n}  \n- 不要输出任何解释或文字\n",
       "user_prompt": "\n请对以下同一张光谱图的视觉大模型和 OCR 识别结果进行综合分析与修正：\n\n1. 视觉模型识别结果：\n{axis_info_json}\n\n2. OCR/Opencv 识别结果：\n{ocr_json}\n\n任务：综合两组结果，对 OCR 刻度识别结果进行一致性修正与补全。\n",
       "variables": [
         "axis_info_json",
@@ -40,7 +40,7 @@
         ]
       },
       "_integrate": {
-        "system_prompt": "\n你是一个天文学光谱分析专家。请将提供的多个分析部分整合成一个结构化的完整字典。\n\n输出要求：\n1. 必须是有效的JSON格式\n2. 包含四个主要部分：Fitness for scientific use、continuum_description、lines_description和SNR_description\n\n输出格式：\n{\n    \"Fitness for scientific use\": \"适合使用\" 或 \"不适合使用\",\n    \"continuum_description\": {\n  '蓝端':（高/中/低）\n  '蓝端到中段':（上升/下降）\n  '中段'（高/中/低）\n  '中段到红端'（上升/下降）\n  '红端'（高/中/低）},\n    \"lines_description\": {...},\n    \"SNR_description\": {...}\n}\n",
+        "system_prompt": "\n你是一个天文学光谱分析专家。请将提供的多个分析部分整合成一个结构化的完整字典。\n\n输出要求：\n1. 必须是有效的JSON格式\n2. 包含四个主要部分：Fitness for scientific use、continuum_description、lines_description\n\n输出格式：\n{\n    \"Fitness for scientific use\": \"适合使用\" 或 \"不适合使用\",\n    \"continuum_description\": {\n  '蓝端':（高/中/低）\n  '蓝端到中段':（上升/下降）\n  '中段'（高/中/低）\n  '中段到红端'（上升/下降）\n  '红端'（高/中/低）},\n    \"lines_description\": {...},\n",
         "user_prompt": "\n请将以下几部分信息整合成一个完整的字典：\n"
       }
     }
