@@ -15,7 +15,8 @@ from .utils import (
     _pixel_tickvalue_fitting, _process_and_extract_curve_points, _convert_to_spectrum,
     _find_features_multiscale, _plot_spectrum, getenv_int, 
     _load_feature_params, merge_features, plot_cleaned_features, 
-    safe_to_bool, find_overlap_regions, _detect_axis_ticks_tesseract
+    safe_to_bool, find_overlap_regions, _detect_axis_ticks_tesseract,
+    _detect_axis_ticks_paddle
 )
 
 # ---------------------------------------------------------
@@ -287,7 +288,8 @@ Do not output any additional content.
             # Step 1.1: Use vision LLM to extract axis info
             await self.detect_axis_ticks(state)
             # Step 1.2: Extract ticks via OCR
-            state['OCR_detected_ticks'] = _detect_axis_ticks_tesseract(state['image_path'])
+            # state['OCR_detected_ticks'] = _detect_axis_ticks_tesseract(state['image_path'])
+            state['OCR_detected_ticks'] = _detect_axis_ticks_paddle(state)
             print(state["OCR_detected_ticks"])
             # Step 1.3: Merge results
             await self.combine_axis_mapping(state)
@@ -477,6 +479,24 @@ Flux error: {delta_t_json}
 
         async def _visual(state):
             system_prompt = function_prompt['_visual']['system_prompt']
+
+            user_prompt_0 = """
+Below is a PNG image of an astronomical spectrum. Based on the image content, qualitatively assess the spectrum’s quality to determine whether it is suitable for subsequent scientific analysis (e.g., redshift measurement, spectral line identification).
+
+Please answer the following questions in order:
+
+1. Signal-to-Noise Ratio (SNR) impression: Overall, is the noise level high, medium, or low? Are there obvious random fluctuations or "spikes"? Or does the curve appear smooth?
+2. Signal significance: Are there clear absorption or emission features (i.e., noticeable dips, peaks, or undulations)? Or does the spectrum resemble an almost flat line—suggesting features are "compressed" or "drowned out"?
+3. Dynamic range: Is the intensity (y-axis) sufficiently expanded to resolve details? Or is it overly compressed, causing all features to cluster together and become difficult to distinguish?
+"""
+            response_0 = await self.call_llm_with_context(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt_0,
+                image_path=state['image_path'],
+                parse_json=True,
+                description="Visual qualitative description — ori"
+            )
+
             user_prompt_1 = function_prompt['_visual']['user_prompt_continuum']
             response_1 = await self.call_llm_with_context(
                 system_prompt=system_prompt,
@@ -495,18 +515,36 @@ Flux error: {delta_t_json}
                 description="Visual qualitative description — lines"
             )
 
-            user_prompt_3 = function_prompt['_visual']['user_prompt_quality']
+            response_0_json = json.dumps(response_0, ensure_ascii=False)
+            response_2_json = json.dumps(response_2, ensure_ascii=False)
+            user_prompt_3 = f"""
+Based on the qualitative descriptions of the spectral signal:
+
+{response_0_json}
+
+{response_2_json}
+
+Determine whether this spectrum is suitable for further quantitative analysis. Please provide a verdict of either "Suitable for use" or "Not suitable for use", along with a brief justification.
+"""
             response_3 = await self.call_llm_with_context(
                 system_prompt=system_prompt,
                 user_prompt=user_prompt_3,
+                parse_json=True,
+                description="Visual qualitative description"
+            )
+
+            user_prompt_4 = function_prompt['_visual']['user_prompt_quality']
+            response_4 = await self.call_llm_with_context(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt_4,
                 image_path=state['spec_extract_path'],
                 parse_json=True,
                 description="Visual qualitative description — quality"
             )
             response_1_json = json.dumps(response_1, ensure_ascii=False)
-            response_2_json = json.dumps(response_2, ensure_ascii=False)
-            response_3_json = json.dumps(response_3, ensure_ascii=False)
-            return '\n'.join([response_1_json, response_2_json, response_3_json])
+            response_3_json = json.dumps(response_2, ensure_ascii=False)
+            response_4_json = json.dumps(response_3, ensure_ascii=False)
+            return '\n'.join([response_0_json, response_1_json, response_2_json, response_3_json, response_4_json])
 
         async def _integrate(state):
             visual_json = json.dumps(state['visual_interpretation'][1], ensure_ascii=False)
@@ -542,29 +580,30 @@ Flux error: {delta_t_json}
         """Preliminary classification: roughly classify the astronomical object based on spectral morphology."""
 
         continuum_interpretation_json = json.dumps(state['visual_interpretation']['continuum_description'], ensure_ascii=False)
-        # line_interpretation_json = json.dumps(state['visual_interpretation']['lines_description'], ensure_ascii=False)
-        
-        # CSST version
-#         system_prompt = """
-# You are an experienced astronomical spectral analysis assistant.
+        dataset = os.getenv("DATA_SET", "")
+        if dataset == 'CSST':
+            # CSST version
+            system_prompt = """
+You are an experienced astronomical spectral analysis assistant.
 
-# Your task is to guess the likely class of the astronomical object based on qualitative descriptions and spectral features.
+Your task is to guess the likely class of the astronomical object based on qualitative descriptions and spectral features.
 
-# - If the continuum shows a trend of being higher in the blue end and lower in the red end (i.e., high → low), the object is a QSO.
-# - If the continuum shows a trend of being lower in the blue end, peaking in the middle, and dropping again toward the red end (i.e., low → high → low), the object is also a QSO.
-# - If the continuum shows a trend of being lower in the blue end and higher in the red end (i.e., low → high), the object is a Galaxy.
+- If the continuum shows a trend of being higher in the blue end and lower in the red end (i.e., falling), the object is a QSO.
+- If the continuum shows a trend of being lower in the blue end, peaking in the middle, and dropping again toward the red end (i.e., rising → falling), the object is also a QSO.
+- If the continuum shows a trend of being lower in the blue end and higher in the red end (i.e., rising), the object is a Galaxy.
 
-# Compare the likelihoods of these two possibilities and provide your choice.
+Compare the likelihoods of these two possibilities and provide your choice.
 
-# Output the object type in JSON format as follows:
-# {
-#     "type": str  # Possible values: "Galaxy", "QSO"
-# }
+Output the object type in JSON format as follows:
+{
+    "type": str  # Possible values: "Galaxy", "QSO"
+}
 
-# Output only one option. Do not include any other information.
-# """
-        # DESI version
-        system_prompt = """
+Output only one option. Do not include any other information.
+"""
+        else:
+            # DESI version
+            system_prompt = """
 You are an experienced astronomical spectral analysis assistant.
 
 Your task is to guess the likely class of the astronomical object based on qualitative descriptions and spectral features.
@@ -587,7 +626,7 @@ Please analyze the following spectral data:
 A previous assistant has already provided a qualitative description of the overall spectral shape:
 {continuum_interpretation_json}
 
-Based on this description and the image, guess which class this spectrum likely belongs to.
+Based on this description, guess which class this spectrum likely belongs to.
 """ + """
 Output in JSON format as follows:
 {
@@ -650,32 +689,62 @@ Do not output anything else.
 
             # Initialize Lyα candidate list
             Lyalpha_candidate = []
-
-            # Get spectral wavelength range
-            wl_left = state['spectrum']['new_wavelength'][0]
-            wl_right = state['spectrum']['new_wavelength'][-1]
+            # 获取光谱波长范围
+            wavelengths = state['spectrum']['new_wavelength']
+            wl_left = wavelengths[0]
+            wl_right = wavelengths[-1]
             mid_wavelength = (wl_left + wl_right) / 2
+            dataset = os.getenv("DATA_SET", "")
+            is_csst = dataset == 'CSST'
+            def check_csst_candidate(peak):
+                """检查CSST候选线条件"""
+                if peak['width_in_km_s'] is None or peak['width_in_km_s'] < 2000:
+                    return False
+                # 优先检查全局平滑尺度的信噪比
+                if (peak['seen_in_max_global_smoothing_scale_sigma'] is not None and 
+                    peak['seen_in_max_global_smoothing_scale_sigma'] > 2):
+                    return True
+                return False
+            def check_desi_candidate(peak):
+                """检查DESI候选线条件"""
+                if (peak['width_in_km_s'] is None or 
+                    peak['width_in_km_s'] < 2000 or 
+                    peak['wavelength'] >= mid_wavelength):
+                    return False
+                # 检查全局平滑尺度的信噪比
+                if (peak['seen_in_max_global_smoothing_scale_sigma'] is not None and 
+                    peak['seen_in_max_global_smoothing_scale_sigma'] > 2):
+                    return True
+                return False
+            def check_local_snr_candidate(peak):
+                """检查局部平滑尺度的信噪比条件（用于备选）"""
+                if peak['width_in_km_s'] is None or peak['width_in_km_s'] < 2000:
+                    return False
+                # 对于DESI，需要额外检查波长条件
+                if not is_csst and peak['wavelength'] >= mid_wavelength:
+                    return False
+                # 检查局部平滑尺度的信噪比
+                if (peak['seen_in_max_local_smoothing_scale_sigma'] is not None and 
+                    peak['seen_in_max_local_smoothing_scale_sigma'] > 2):
+                    return True
+                return False
 
-            # Selection criterion 1: prioritize global smoothing scale SNR
+            # 第一轮筛选：使用主条件（全局平滑尺度）
             for peak in peaks_info:
-                # Check if line width is sufficiently broad (>=2000 km/s)
-                # if peak['width_in_km_s'] is not None and peak['width_in_km_s'] >= 2000: # CSST
-                if peak['width_in_km_s'] is not None and peak['width_in_km_s'] >= 2000 and peak['wavelength'] < mid_wavelength: #DESI
-                    # Check global smoothing scale SNR condition
-                    if (peak['seen_in_max_global_smoothing_scale_sigma'] is not None and 
-                        peak['seen_in_max_global_smoothing_scale_sigma'] > 2):
+                if is_csst:
+                    if check_csst_candidate(peak):
+                        Lyalpha_candidate.append(peak['wavelength'])
+                else:
+                    if check_desi_candidate(peak):
                         Lyalpha_candidate.append(peak['wavelength'])
 
-            # Selection criterion 2: if no candidates found above, use local smoothing scale SNR
-            if len(Lyalpha_candidate) == 0:
+            # 第二轮筛选：如果第一轮没有找到候选，使用备选条件（局部平滑尺度）
+            if not Lyalpha_candidate:
                 for peak in peaks_info:
-                    # if peak['width_in_km_s'] is not None and peak['width_in_km_s'] >= 2000: # CSST
-                    if peak['width_in_km_s'] is not None and peak['width_in_km_s'] >= 2000 and peak['wavelength'] < mid_wavelength: #DESI
-                        # Check local smoothing scale SNR condition
-                        if (peak['seen_in_max_local_smoothing_scale_sigma'] is not None and 
-                            peak['seen_in_max_local_smoothing_scale_sigma'] > 2):
-                            Lyalpha_candidate.append(peak['wavelength'])
+                    if check_local_snr_candidate(peak):
+                        Lyalpha_candidate.append(peak['wavelength'])
 
+            state['Lyalpha_candidate'] = Lyalpha_candidate
             # Convert candidate list to JSON and print
             Lyalpha_candidate_json = json.dumps(Lyalpha_candidate, ensure_ascii=False)
             print(f"Lyalpha_candidate: {Lyalpha_candidate}")
@@ -810,7 +879,19 @@ Assume this spectrum contains a Lyα emission line (λ_rest = 1216 Å):
                 band_wavelength = state['band_wavelength']
                 if band_name: 
                     overlap_regions = find_overlap_regions(band_name, band_wavelength)
-                    wws = np.max([wp.get('width_mean') for wp in state.get('wiped_peaks', [])[:5]])
+                    # 修复方案1：添加空列表检查
+                    wiped_peaks = state.get('wiped_peaks', [])
+                    if wiped_peaks:
+                        # 只取前5个元素，但确保列表不为空
+                        width_means = [wp.get('width_mean') for wp in wiped_peaks[:5] if wp.get('width_mean') is not None]
+                        if width_means:
+                            wws = np.max(width_means)
+                        else:
+                            # 处理没有有效width_mean的情况
+                            wws = 0  # 或使用默认值，或者抛出更具体的异常
+                    else:
+                        # 处理wiped_peaks为空的情况
+                        wws = 0  # 或使用默认值
                     print(f"wws: {wws}")
                     for key in overlap_regions:
                         range_val = overlap_regions[key]
@@ -1006,7 +1087,19 @@ The wavelength range of this spectrum spans from {state['spectrum']['new_wavelen
             band_wavelength = state['band_wavelength']
             if band_name: 
                 overlap_regions = find_overlap_regions(band_name, band_wavelength)
-                wws = np.max([wp.get('width_mean') for wp in state.get('wiped_peaks', [])[:5]])
+                # 修复方案1：添加空列表检查
+                wiped_peaks = state.get('wiped_peaks', [])
+                if wiped_peaks:
+                    # 只取前5个元素，但确保列表不为空
+                    width_means = [wp.get('width_mean') for wp in wiped_peaks[:5] if wp.get('width_mean') is not None]
+                    if width_means:
+                        wws = np.max(width_means)
+                    else:
+                        # 处理没有有效width_mean的情况
+                        wws = 0  # 或使用默认值，或者抛出更具体的异常
+                else:
+                    # 处理wiped_peaks为空的情况
+                    wws = 0  # 或使用默认值
                 for key in overlap_regions:
                     range = overlap_regions[key]
                     overlap_regions[key] = [range[0]-wws, range[1]+wws] # Broaden the overlap regions to ensure the LLM won't miss them
@@ -1164,7 +1257,19 @@ The wavelength range of this spectrum spans from {state['spectrum']['new_wavelen
             band_wavelength = state['band_wavelength']
             if band_name: 
                 overlap_regions = find_overlap_regions(band_name, band_wavelength)
-                wws = np.max([wp.get('width_mean') for wp in state.get('wiped_peaks', [])[:5]])
+                # 修复方案1：添加空列表检查
+                wiped_peaks = state.get('wiped_peaks', [])
+                if wiped_peaks:
+                    # 只取前5个元素，但确保列表不为空
+                    width_means = [wp.get('width_mean') for wp in wiped_peaks[:5] if wp.get('width_mean') is not None]
+                    if width_means:
+                        wws = np.max(width_means)
+                    else:
+                        # 处理没有有效width_mean的情况
+                        wws = 0  # 或使用默认值，或者抛出更具体的异常
+                else:
+                    # 处理wiped_peaks为空的情况
+                    wws = 0  # 或使用默认值
                 for key in overlap_regions:
                     range = overlap_regions[key]
                     overlap_regions[key] = [range[0]-wws, range[1]+wws] # Broaden the overlap regions to ensure the LLM won't miss them
@@ -1319,6 +1424,7 @@ Refinement assistant's perspective:
 Output format as follows:
 
 - Visual characteristics of the spectrum
+- If the the spectrum is suitable for quantitative use
 - Analysis report (synthesize all viewpoints from the rule-based analyst, auditor, and refinement assistant; structure output step-by-step)
     - Step 1
     - Step 2
@@ -1330,10 +1436,12 @@ Output format as follows:
     - Identified spectral lines (format: Line Name - λ_rest - λ_obs - redshift)
     - Signal-to-noise ratio (SNR) of the spectrum
     - Credibility score (0–4):
-        - Score 3: ≥2 major emission lines identified (e.g., Lyα, C IV, C III], Mg II)
-        - Score 2: 1 major line identified with supporting weaker features
-        - Score 1: 1 major line identified but no corroborating features
-        - Score 0: Extremely low SNR; inference highly uncertain
+        If the spectrum is not suitable for quantitative use, must set:
+            - Score 0
+        If the spectrum is suitable for quantitative use:
+            - Score 3: ≥2 major emission lines identified (e.g., Lyα, C IV, C III], Mg II)
+            - Score 2: 1 major line identified with supporting weaker features
+            - Score 1: 1 major line identified but no corroborating features
     - Whether human intervention is required:
         - Required if credibility ≤ 2
         - Required if SNR is low and Lyα is absent
@@ -1345,13 +1453,14 @@ Output format as follows:
 Output format as follows:
 
 - Visual characteristics of the spectrum
+- If the the spectrum is suitable for quantitative use
 - Conclusion
     - Object type (Galaxy or QSO)
     - If the object is a QSO, provide redshift z ± Δz
     - Identified spectral lines (format: Line Name - λ_rest - λ_obs - redshift)
     - Signal-to-noise ratio (SNR) of the spectrum
     - Credibility score (0–4):
-        - Score 2 if classified as Galaxy; otherwise 0
+        - Score 2 if the visual description of the spectrum indicates it is suitable for quantitative use and the spectra is classified as galaxy; otherwise 0
     - Whether human intervention is required:
         - Always required if type is Galaxy
 """

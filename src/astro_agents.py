@@ -15,7 +15,8 @@ from .utils import (
     _pixel_tickvalue_fitting, _process_and_extract_curve_points, _convert_to_spectrum,
     _find_features_multiscale, _plot_spectrum, getenv_int, 
     _load_feature_params, merge_features, plot_cleaned_features, 
-    safe_to_bool, find_overlap_regions, _detect_axis_ticks_tesseract
+    safe_to_bool, find_overlap_regions, _detect_axis_ticks_tesseract,
+    _detect_axis_ticks_paddle
 )
 
 # ---------------------------------------------------------
@@ -294,7 +295,8 @@ class SpectralVisualInterpreter(BaseAgent):
             # Step 1.1: 视觉 LLM 提取坐标轴
             await self.detect_axis_ticks(state)
             # Step 1.2: OCR 提取刻度
-            state['OCR_detected_ticks'] = _detect_axis_ticks_tesseract(state['image_path'])
+            # state['OCR_detected_ticks'] = _detect_axis_ticks_tesseract(state['image_path'])
+            state['OCR_detected_ticks'] = _detect_axis_ticks_paddle(state)
             # print(state["OCR_detected_ticks"])
 
             # await self.ocr_llm(state)
@@ -488,6 +490,24 @@ Flux 误差：{delta_t_json}
 
         async def _visual(state):
             system_prompt = function_prompt['_visual']['system_prompt']
+
+            user_prompt_0 = """
+以下是一张天文光谱的 PNG 图像，请根据图像内容，从定性角度评估该光谱的质量，以判断其是否适合用于后续的科学分析（如红移测量、谱线识别等）。
+
+请依次回答以下问题：
+
+1. 信噪比（SNR）印象：整体来看，光谱的噪声水平是高、中还是低？是否存在明显的随机波动或“毛刺”？还是曲线平滑？
+2. 信号显著性：光谱中是否存在明显的吸收线或发射线（即明显的起伏、凹陷或尖峰）？还是整个光谱看起来像一条几乎无变化的直线（被“压缩”或“淹没”）？
+3. 动态范围：光谱的纵轴（强度）是否有足够的展开？还是被过度压缩，导致所有特征都挤在一起难以分辨？
+"""
+            response_0 = await self.call_llm_with_context(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt_0,
+                image_path=state['image_path'],
+                parse_json=True,
+                description="Visual qualitative description — ori"
+            )
+
             user_prompt_1 = function_prompt['_visual']['user_prompt_continuum']
             response_1 = await self.call_llm_with_context(
                 system_prompt=system_prompt,
@@ -506,19 +526,37 @@ Flux 误差：{delta_t_json}
                 description="视觉光谱定性描述"
             )
 
-            user_prompt_3 = function_prompt['_visual']['user_prompt_quality']
+            response_0_json = json.dumps(response_0, ensure_ascii=False)
+            response_2_json = json.dumps(response_2, ensure_ascii=False)
+            user_prompt_3 = f"""
+请根据对光谱信号的定性描述：
+
+{response_0_json}
+
+{response_2_json}
+
+判断该光谱是否适合用于进一步的定量分析？请给出“适合使用”或“不适合使用”的判断，并简要说明理由。
+"""
             response_3 = await self.call_llm_with_context(
                 system_prompt=system_prompt,
                 user_prompt=user_prompt_3,
+                parse_json=True,
+                description="视觉光谱定性描述"
+            )
+
+            user_prompt_4 = function_prompt['_visual']['user_prompt_quality']
+            response_4 = await self.call_llm_with_context(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt_4,
                 image_path=state['spec_extract_path'],
                 parse_json=True,
                 description="视觉光谱定性描述"
             )
 
             response_1_json = json.dumps(response_1, ensure_ascii=False)
-            response_2_json = json.dumps(response_2, ensure_ascii=False)
             response_3_json = json.dumps(response_3, ensure_ascii=False)
-            return '\n'.join([response_1_json, response_2_json, response_3_json])
+            response_4_json = json.dumps(response_4, ensure_ascii=False)
+            return '\n'.join([response_0_json, response_1_json, response_2_json, response_3_json, response_4_json])
 
         async def _integrate(state):
             visual_json       = json.dumps(state['visual_interpretation'][1], ensure_ascii=False)
@@ -554,30 +592,31 @@ Flux 误差：{delta_t_json}
         """初步分类：根据光谱形态初步判断天体类型"""
 
         continuum_interpretation_json = json.dumps(state['visual_interpretation']['continuum_description'], ensure_ascii=False)
-        # line_interpretation_json = json.dumps(state['visual_interpretation']['lines_description'], ensure_ascii=False)
-        
-        # CSST version
-#         system_prompt = """
-# 你是一位经验丰富的天文学光谱分析助手。
+        dataset = os.getenv("DATA_SET", "")
+        if dataset == 'CSST':
+            # CSST version
+            system_prompt = """
+你是一位经验丰富的天文学光谱分析助手。
 
-# 你的任务是根据光谱的定性描述和特征数据，猜测天体可能属于的类别。
+你的任务是根据光谱的定性描述和特征数据，猜测天体可能属于的类别。
 
-# 如果连续谱呈现蓝端较高，红端较低的趋势（即高→低），则该天体为 QSO；
-# 如果连续谱呈现蓝端较低，中段较高，红端下降的趋势（即低→高→低），则该天体为 QSO ；
+如果连续谱呈现蓝端较高，红端较低的趋势（即下降），则该天体为 QSO；
+如果连续谱呈现蓝端较低，中段较高，红端下降的趋势（即上升→下降），则该天体为 QSO ；
 
-# 如果连续谱呈现蓝端较低，红端较高的趋势（即低→高），则该天体为 Galaxy ；
+如果连续谱呈现蓝端较低，红端较高的趋势（即上升），则该天体为 Galaxy ；
 
-# 比较两种光源的概率，给出你的选择。
+比较两种光源的概率，给出你的选择。
 
-# 输出天体类别，格式为 json，格式如下：
-# {
-#     'type': str,  # 天体类别，可能的取值为 "Galaxy", "QSO"
-# }
+输出天体类别，格式为 json，格式如下：
+{
+    'type': str,  # 天体类别，可能的取值为 "Galaxy", "QSO"
+}
 
-# 仅输出唯一选项。不要输出其他信息。
-# """
-        # DESI version
-        system_prompt = """
+仅输出唯一选项。不要输出其他信息。
+"""
+        else:
+            # DESI version
+            system_prompt = """
 你是一位经验丰富的天文学光谱分析助手。
 
 你的任务是根据光谱的定性描述和特征数据，猜测天体可能属于的类别。
@@ -600,16 +639,13 @@ Flux 误差：{delta_t_json}
 前一位天文学助手已经定性地描述了光谱的整体形态：
 {continuum_interpretation_json}
 
-请根据描述和图像，猜测该光谱可能属于哪一类天体。
+请根据描述，猜测该光谱可能属于哪一类天体。
 """+"""
 输出为 json，格式如下：
 {
     'type': str,  # 天体类别，可能的取值为 "Galaxy", "QSO"
 }
 """
-#         user_prompt = f"""
-# 请根据图像，猜测该光谱可能属于哪一类天体。
-# """
         response = await self.call_llm_with_context(
             system_prompt = system_prompt,
             user_prompt = user_prompt,
@@ -665,34 +701,62 @@ Flux 误差：{delta_t_json}
 
             # 初始化Lyα候选线列表
             Lyalpha_candidate = []
-
             # 获取光谱波长范围
-            wl_left = state['spectrum']['new_wavelength'][0]
-            wl_right = state['spectrum']['new_wavelength'][-1]
+            wavelengths = state['spectrum']['new_wavelength']
+            wl_left = wavelengths[0]
+            wl_right = wavelengths[-1]
             mid_wavelength = (wl_left + wl_right) / 2
+            dataset = os.getenv("DATA_SET", "")
+            is_csst = dataset == 'CSST'
+            def check_csst_candidate(peak):
+                """检查CSST候选线条件"""
+                if peak['width_in_km_s'] is None or peak['width_in_km_s'] < 2000:
+                    return False
+                # 优先检查全局平滑尺度的信噪比
+                if (peak['seen_in_max_global_smoothing_scale_sigma'] is not None and 
+                    peak['seen_in_max_global_smoothing_scale_sigma'] > 2):
+                    return True
+                return False
+            def check_desi_candidate(peak):
+                """检查DESI候选线条件"""
+                if (peak['width_in_km_s'] is None or 
+                    peak['width_in_km_s'] < 2000 or 
+                    peak['wavelength'] >= mid_wavelength):
+                    return False
+                # 检查全局平滑尺度的信噪比
+                if (peak['seen_in_max_global_smoothing_scale_sigma'] is not None and 
+                    peak['seen_in_max_global_smoothing_scale_sigma'] > 2):
+                    return True
+                return False
+            def check_local_snr_candidate(peak):
+                """检查局部平滑尺度的信噪比条件（用于备选）"""
+                if peak['width_in_km_s'] is None or peak['width_in_km_s'] < 2000:
+                    return False
+                # 对于DESI，需要额外检查波长条件
+                if not is_csst and peak['wavelength'] >= mid_wavelength:
+                    return False
+                # 检查局部平滑尺度的信噪比
+                if (peak['seen_in_max_local_smoothing_scale_sigma'] is not None and 
+                    peak['seen_in_max_local_smoothing_scale_sigma'] > 2):
+                    return True
+                return False
 
-            # 筛选条件1：优先使用全局平滑尺度的信噪比
+            # 第一轮筛选：使用主条件（全局平滑尺度）
             for peak in peaks_info:
-                # 检查谱线宽度是否足够（>=2000 km/s）
-                # if peak['width_in_km_s'] is not None and peak['width_in_km_s'] >= 2000: # CSST
-                if peak['width_in_km_s'] is not None and peak['width_in_km_s'] >= 2000 and peak['wavelength'] < mid_wavelength: #DESI
-                    # 检查全局平滑尺度的信噪比条件
-                    if (peak['seen_in_max_global_smoothing_scale_sigma'] is not None and 
-                        peak['seen_in_max_global_smoothing_scale_sigma'] > 2):
+                if is_csst:
+                    if check_csst_candidate(peak):
+                        Lyalpha_candidate.append(peak['wavelength'])
+                else:
+                    if check_desi_candidate(peak):
                         Lyalpha_candidate.append(peak['wavelength'])
 
-            # 筛选条件2：如果条件1没有找到候选，使用局部平滑尺度的信噪比
-            if len(Lyalpha_candidate) == 0:
+            # 第二轮筛选：如果第一轮没有找到候选，使用备选条件（局部平滑尺度）
+            if not Lyalpha_candidate:
                 for peak in peaks_info:
-                    # if peak['width_in_km_s'] is not None and peak['width_in_km_s'] >= 2000: # CSST
-                    if peak['width_in_km_s'] is not None and peak['width_in_km_s'] >= 2000 and peak['wavelength'] < mid_wavelength: #DESI
-                        # 检查局部平滑尺度的信噪比条件
-                        if (peak['seen_in_max_local_smoothing_scale_sigma'] is not None and 
-                            peak['seen_in_max_local_smoothing_scale_sigma'] > 2):
-                            Lyalpha_candidate.append(peak['wavelength'])
-            
-            state['Lyalpha_candidate'] = Lyalpha_candidate
+                    if check_local_snr_candidate(peak):
+                        Lyalpha_candidate.append(peak['wavelength'])
 
+            state['Lyalpha_candidate'] = Lyalpha_candidate
             # 将候选线转换为JSON格式并打印
             Lyalpha_candidate_json = json.dumps(Lyalpha_candidate, ensure_ascii=False)
             print(f"Lyalpha_candidate: {Lyalpha_candidate}")
@@ -829,7 +893,19 @@ Step 1: Lyα 谱线检测
                 band_wavelength = state['band_wavelength']
                 if band_name: 
                     overlap_regions = find_overlap_regions(band_name, band_wavelength)
-                    wws = np.max([wp.get('width_mean') for wp in state.get('wiped_peaks', [])[:5]])
+                    # 修复方案1：添加空列表检查
+                    wiped_peaks = state.get('wiped_peaks', [])
+                    if wiped_peaks:
+                        # 只取前5个元素，但确保列表不为空
+                        width_means = [wp.get('width_mean') for wp in wiped_peaks[:5] if wp.get('width_mean') is not None]
+                        if width_means:
+                            wws = np.max(width_means)
+                        else:
+                            # 处理没有有效width_mean的情况
+                            wws = 0  # 或使用默认值，或者抛出更具体的异常
+                    else:
+                        # 处理wiped_peaks为空的情况
+                        wws = 0  # 或使用默认值
                     print(f"wws: {wws}")
                     for key in overlap_regions:
                         range = overlap_regions[key]
@@ -1032,7 +1108,19 @@ class SpectralAnalysisAuditor(BaseAgent):
             band_wavelength = state['band_wavelength']
             if band_name: 
                 overlap_regions = find_overlap_regions(band_name, band_wavelength)
-                wws = np.max([wp.get('width_mean') for wp in state.get('wiped_peaks', [])[:5]])
+                # 修复方案1：添加空列表检查
+                wiped_peaks = state.get('wiped_peaks', [])
+                if wiped_peaks:
+                    # 只取前5个元素，但确保列表不为空
+                    width_means = [wp.get('width_mean') for wp in wiped_peaks[:5] if wp.get('width_mean') is not None]
+                    if width_means:
+                        wws = np.max(width_means)
+                    else:
+                        # 处理没有有效width_mean的情况
+                        wws = 0  # 或使用默认值，或者抛出更具体的异常
+                else:
+                    # 处理wiped_peaks为空的情况
+                    wws = 0  # 或使用默认值
                 for key in overlap_regions:
                     range = overlap_regions[key]
                     overlap_regions[key] = [range[0]-wws, range[1]+wws] # Broaden the overlap regions to make sure LLM won't miss them
@@ -1190,7 +1278,19 @@ class SpectralRefinementAssistant(BaseAgent):
             band_wavelength = state['band_wavelength']
             if band_name: 
                 overlap_regions = find_overlap_regions(band_name, band_wavelength)
-                wws = np.max([wp.get('width_mean') for wp in state.get('wiped_peaks', [])[:5]])
+                # 修复方案1：添加空列表检查
+                wiped_peaks = state.get('wiped_peaks', [])
+                if wiped_peaks:
+                    # 只取前5个元素，但确保列表不为空
+                    width_means = [wp.get('width_mean') for wp in wiped_peaks[:5] if wp.get('width_mean') is not None]
+                    if width_means:
+                        wws = np.max(width_means)
+                    else:
+                        # 处理没有有效width_mean的情况
+                        wws = 0  # 或使用默认值，或者抛出更具体的异常
+                else:
+                    # 处理wiped_peaks为空的情况
+                    wws = 0  # 或使用默认值
                 for key in overlap_regions:
                     range = overlap_regions[key]
                     overlap_regions[key] = [range[0]-wws, range[1]+wws] # Broaden the overlap regions to make sure LLM won't miss them
@@ -1348,6 +1448,7 @@ class SpectralSynthesisHost(BaseAgent):
 输出格式如下：
 
 - 光谱的视觉特点
+- 是否适合定量分析使用
 - 分析报告（综合规则分析师、审查分析师和完善分析师的所有观点，逐个 Step 进行结构化输出）
     - Step 1
     - Step 2
@@ -1359,10 +1460,11 @@ class SpectralSynthesisHost(BaseAgent):
     - 认证出的谱线（输出 谱线名 - λ_rest - λ_obs - 红移）
     - 光谱的信噪比如何
     - 分析报告的可信度评分（0-4）
-        如果能认证出 2 条以上的主要谱线（指 Lyα, C IV, C III, Mg II），则可信度为 3；
-        能认证出 1 条主要谱线，且有其他较弱的特征，则可信度为 2；
-        能认证出 1 条主要谱线，但没有其他特征辅助判断，则可信度为 1；
-        光谱信噪比极低，含义进行推断，则可信度为 0.
+        如果对光谱的视觉描述认为不适合定量分析使用，则可信度为 0.
+        如果对光谱的视觉描述认为适合定量分析使用，那么：
+            如果能认证出 2 条以上的主要谱线（指 Lyα, C IV, C III, Mg II），则可信度为 3；
+            能认证出 1 条主要谱线，且有其他较弱的特征，则可信度为 2；
+            能认证出 1 条主要谱线，但没有其他特征辅助判断，则可信度为 1；
     - 是否需要人工介入判断（可信度为 0-2 时必须引入人工判断。信噪比较低且无 Lyα 时必须引入人工判断。其余情况自行决策。）
 """
             user_prompt = prompt_2 + prompt_3
@@ -1371,13 +1473,14 @@ class SpectralSynthesisHost(BaseAgent):
 输出格式如下：
 
 - 光谱的视觉特点
+- 是否适合定量分析使用
 - 结论
     - 该天体的天体类型（Galaxy 还是 QSO）
     - 如果天体是QSO，输出红移 z ± Δz
     - 认证出的谱线（输出 谱线名 - λ_rest - λ_obs - 红移）
     - 光谱的信噪比如何
     - 分析报告的可信度评分（0-4）
-        如果认证为 Galaxy，则可信度为 2；否则为 0。
+        如果对光谱的视觉描述认为适合科学使用，且分析认证出类型为 Galaxy，则可信度为 2；否则为 0。
     - 是否需要人工介入判断（如果类型为Galaxy，则必须要求人工介入判断）
 """
         response = await self.call_llm_with_context(system_prompt, user_prompt, parse_json=False, description="总结")

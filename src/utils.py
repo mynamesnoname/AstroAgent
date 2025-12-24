@@ -1,7 +1,7 @@
 import cv2
 import os
 import pytesseract
-# from paddleocr import PaddleOCR
+from paddleocr import PaddleOCR
 import json
 import base64
 import numpy as np
@@ -149,33 +149,33 @@ def _detect_axis_ticks_tesseract(image_path, config=None):
 
     return tick_values
 
-# def _detect_axis_ticks_paddle(state):
-#     ocr = PaddleOCR(
-#         use_doc_orientation_classify=False, 
-#         use_doc_unwarping=False, 
-#         use_textline_orientation=False
-#         )
-#     result = ocr.predict(state['image_path'])
-#     for res in result:
-#         # res.print()
-#         res.save_to_img(state['output_dir'])
-#         res.save_to_json(state['output_dir'])
-#     data = []
-#     for i in range(len(result[-1]['rec_texts'])):
-#         pos = result[-1]['rec_polys'][i]
-#         center = [
-#             int((pos[0][0] + pos[2][0]) / 2),
-#             int((pos[0][1] + pos[2][1]) / 2),
-#         ]
-#         width = int((pos[1][0] - pos[0][0] + pos[3][0] - pos[2][0]) / 2)
-#         height = int((pos[0][1] - pos[1][1] + pos[2][1] - pos[3][1]) / 2)
-#         info = {
-#             'value': result[-1]['rec_texts'][i],
-#             'position': center,
-#             'bounding-box-scale': [width, height]
-#         }
-#         data.append(info)
-#     return data
+def _detect_axis_ticks_paddle(state):
+    ocr = PaddleOCR(
+        use_doc_orientation_classify=False, 
+        use_doc_unwarping=False, 
+        use_textline_orientation=False
+        )
+    result = ocr.predict(state['image_path'])
+    for res in result:
+        # res.print()
+        res.save_to_img(state['output_dir'])
+        res.save_to_json(state['output_dir'])
+    data = []
+    for i in range(len(result[-1]['rec_texts'])):
+        pos = result[-1]['rec_polys'][i]
+        center = [
+            int((pos[0][0] + pos[2][0]) / 2),
+            int((pos[0][1] + pos[2][1]) / 2),
+        ]
+        width = int((pos[1][0] - pos[0][0] + pos[2][0] - pos[3][0]) / 2)
+        height = int((pos[3][1] - pos[0][1] + pos[2][1] - pos[1][1]) / 2)
+        info = {
+            'value': result[-1]['rec_texts'][i],
+            'position': center,
+            'bounding-box-scale': [width, height]
+        }
+        data.append(info)
+    return data
 
 def _detect_chart_border(
         image_path: str, 
@@ -614,147 +614,6 @@ def _detect_features_on_flux(
         peaks_info.append(info)
 
     return flux_smooth, peaks_info
-
-# def _detect_features_on_flux(
-#     feature, flux, x_axis_slope, sigma, prominence=None, height=None,
-#     wavelengths=None, continuum=None
-# ):
-#     """
-#     平滑后检测峰/谷，返回平滑光谱和峰信息。
-#     """
-#     # === Step 0: 输入验证 ===
-#     if flux is None:
-#         print(f"❌ ERROR: flux is None for sigma={sigma}")
-#         return np.array([]), []
-    
-#     if wavelengths is not None and len(wavelengths) != len(flux):
-#         print(f"❌ ERROR: wavelengths and flux length mismatch: {len(wavelengths)} != {len(flux)}")
-#         return np.array([]), []
-    
-#     # DEBUG: 添加调用栈信息
-#     import traceback
-#     # print(f"=== Called _detect_features_on_flux (sigma={sigma}) ===")
-#     # print(f"flux type: {type(flux)}, shape: {flux.shape if hasattr(flux, 'shape') else 'N/A'}")
-#     # print(f"wavelengths type: {type(wavelengths)}, shape: {wavelengths.shape if wavelengths is not None and hasattr(wavelengths, 'shape') else 'N/A'}")
-    
-#     # === Step 1: 数据准备 ===
-#     try:
-#         if feature == "trough":
-#             if continuum is not None:
-#                 # 确保 continuum 不是全零
-#                 if np.all(continuum == 0):
-#                     flux_proc = -flux.copy()
-#                 else:
-#                     flux_proc = flux / continuum
-#                     flux_proc = 1.0 - flux_proc  # 变成"吸收强度"，越大越深
-#             else:
-#                 flux_proc = -flux.copy()
-#         else:
-#             flux_proc = flux - continuum if continuum is not None else flux.copy()
-        
-#         # 确保 flux_proc 是有效的 numpy 数组
-#         flux_proc = np.array(flux_proc, dtype=np.float64)
-        
-#         # 检查是否包含 NaN 或 Inf
-#         if np.any(np.isnan(flux_proc)) or np.any(np.isinf(flux_proc)):
-#             print(f"⚠️ WARNING: flux_proc contains NaN or Inf values for sigma={sigma}")
-#             flux_proc = np.nan_to_num(flux_proc, nan=0.0, posinf=0.0, neginf=0.0)
-        
-#         # 打印长度信息（如果需要调试）
-#         # print(f"sigma={sigma}: flux_proc length = {len(flux_proc)}")
-        
-#         l_data = len(flux_proc)
-        
-#         # === 镜像延拓 ===
-#         # 使用安全的延拓方式
-#         if l_data > 0:
-#             # 取适当的延拓长度（不超过数据长度）
-#             pad_len = min(l_data, 50)  # 限制延拓长度
-            
-#             # 左延拓
-#             left_pad = flux_proc[pad_len:0:-1] if pad_len > 0 else np.array([])
-            
-#             # 右延拓
-#             right_pad = flux_proc[-2:-pad_len-2:-1] if pad_len > 0 and l_data > 2 else np.array([])
-            
-#             # 拼接
-#             flux_proc = np.concatenate([left_pad, flux_proc, right_pad])
-#         else:
-#             # 如果数据为空，直接返回
-#             return np.array([]), []
-        
-#         # === Step 2: 平滑 ===
-#         if sigma > 0 and len(flux_proc) > 0:
-#             flux_smooth = gaussian_filter1d(flux_proc, sigma=sigma)
-#         else:
-#             flux_smooth = flux_proc
-        
-#         # === Step 3: 峰检测 ===
-#         if len(flux_smooth) == 0:
-#             return np.array([]), []
-        
-#         # 确保 prominence 是正数
-#         if prominence is not None and prominence <= 0:
-#             prominence = None
-        
-#         peaks, props = find_peaks(flux_smooth, height=height, prominence=prominence)
-        
-#         if len(peaks) == 0:
-#             # 返回原始数据段的平滑结果
-#             if l_data > 0 and len(flux_smooth) >= 2 * l_data:
-#                 return flux_smooth[l_data:2*l_data], []
-#             else:
-#                 return flux_smooth, []
-        
-#         # 计算峰宽
-#         widths_res = peak_widths(flux_smooth, peaks, rel_height=0.5)
-        
-#         peaks_info = []
-#         for i, p in enumerate(peaks):
-#             # 检查是否在中间段（原始数据）
-#             if l_data <= p < 2 * l_data:
-#                 orig_idx = p - l_data
-                
-#                 # 确保索引有效
-#                 if 0 <= orig_idx < l_data:
-#                     width_pix = widths_res[0][i]
-                    
-#                     # 获取波长值
-#                     wlen = None
-#                     if wavelengths is not None and orig_idx < len(wavelengths):
-#                         wlen = float(wavelengths[orig_idx])
-                    
-#                     info = {
-#                         "index": int(orig_idx),
-#                         "wavelength": wlen,
-#                         "flux": float(flux[orig_idx]),
-#                         "prominence": float(props.get("prominences", [0])[i]) if "prominences" in props else None,
-#                         "width_wavelength": float(x_axis_slope * width_pix) if x_axis_slope is not None else None,
-#                         "width_pixels": float(width_pix),
-#                     }
-                    
-#                     # 对于 trough
-#                     if feature == "trough":
-#                         depth = float(flux_smooth[p])
-#                         ew_pix = depth * width_pix
-#                         info.update({
-#                             "depth": depth,
-#                             "equivalent_width_pixels": ew_pix,
-#                         })
-                    
-#                     peaks_info.append(info)
-        
-#         # 返回中间段（原始数据）的平滑结果
-#         if l_data > 0 and len(flux_smooth) >= 2 * l_data:
-#             return flux_smooth[l_data:2*l_data], peaks_info
-#         else:
-#             return flux_smooth, peaks_info
-            
-#     except Exception as e:
-#         print(f"❌ ERROR in _detect_features_on_flux (sigma={sigma}): {e}")
-#         import traceback
-#         traceback.print_exc()
-#         return np.array([]), []
     
 def _merge_peaks_across_sigmas(
     feature, wavelengths, peaks_by_sigma,
@@ -814,17 +673,17 @@ def _merge_peaks_across_sigmas(
         max_sigma, min_sigma = 0.0, np.inf
         fff = -np.inf
         for rep in sigma_reps:
-            # if rep['flux'] > fff:
-            #     fff = rep['flux']
-            # rep_idx = rep["index"]
-            sigma = rep["sigma"]
-            idx = rep["index"]
-            max_sigma = max(max_sigma, sigma)
-            min_sigma = min(min_sigma, sigma)
-            w = weight_original if sigma == 0 else 1.0 / np.sqrt(sigma)
-            weighted_sum += idx * w
-            weight_total += w
-        rep_idx = int(np.round(weighted_sum / weight_total))
+            if rep['flux'] > fff:
+                fff = rep['flux']
+                rep_idx = rep["index"]
+        #     sigma = rep["sigma"]
+        #     idx = rep["index"]
+        #     max_sigma = max(max_sigma, sigma)
+        #     min_sigma = min(min_sigma, sigma)
+        #     w = weight_original if sigma == 0 else 1.0 / np.sqrt(sigma)
+        #     weighted_sum += idx * w
+        #     weight_total += w
+        # rep_idx = int(np.round(weighted_sum / weight_total))
         wlen = float(wavelengths[rep_idx]) if rep_idx < len(wavelengths) else None
 
         # === Step 4: 统计特征信息 ===
