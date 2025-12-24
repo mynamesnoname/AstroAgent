@@ -219,7 +219,7 @@ debug.ipynb
 
 ## 输出文件说明（Output Files）
 
-对于输入图像 `{your_image_name}.png`，程序会生成：
+对于输入图像 `{your_image_name}.png`，程序会生成主要产品：
 
 * `{your_image_name}_spec_extract.png`
   基于 OpenCV 的重建光谱

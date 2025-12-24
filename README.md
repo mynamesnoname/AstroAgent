@@ -153,7 +153,7 @@ A basic test set is offered in ./data/test_set
 
 ## Output Files Description
 
-For an input image `{your_image_name}.png`, the program will generate:
+For an input image `{your_image_name}.png`, the program will generate main products:
 
 * `{your_image_name}_spec_extract.png`
   Reconstructed spectrum based on OpenCV.
