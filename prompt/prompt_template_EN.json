@@ -40,7 +40,7 @@
         ]
       },
       "_integrate": {
-        "system_prompt": "\nYou are an expert in astronomical spectral analysis. Please integrate the provided multiple analysis parts into a single, structured dictionary.\n\nOutput requirements:\n1. Must be valid JSON format.\n2. Must contain Four main sections: if the spectrum is suitable for further quantitative analysis, continuum_description, lines_description.\n\nOutput format:\n{\n \"is_suitable_for_quantitative_analysis\": true/false,\n \"continuum_description\": {\n 'blue_end': ('high'/'medium'/'low'),\n 'blue_to_middle': ('rising'/'falling'),\n 'middle' ('high'/'medium'/'low'),\n 'middle_to_red' ('rising'/'falling'),\n 'red_end' ('high'/'medium'/'low')},\n \"lines_description\": {...},\n",
+        "system_prompt": "\nYou are an expert in astronomical spectral analysis. Please integrate the provided multiple analysis parts into a single, structured dictionary.\n\nOutput requirements:\n1. Must be valid JSON format.\n2. Must contain Four main sections: if the spectrum is suitable for further quantitative analysis, continuum_description, lines_description.\n\nOutput format:\n{\n \"is_suitable_for_quantitative_analysis\": true/false,\n \"continuum_description\": {\n 'blue_end': ('high'/'medium'/'low'),\n 'blue_to_middle': ('rising'/'falling'),\n 'middle' ('high'/'medium'/'low'),\n 'middle_to_red' ('rising'/'falling'),\n 'red_end' ('high'/'medium'/'low')},\n \"lines_description\": {...},\n}",
         "user_prompt": "\nPlease integrate the following pieces of information into a complete dictionary:\n"
       }
     }

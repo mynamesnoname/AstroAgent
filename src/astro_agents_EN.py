@@ -551,7 +551,7 @@ Determine whether this spectrum is suitable for further quantitative analysis. P
                 description="Visual qualitative description — quality"
             )
             response_1_json = json.dumps(response_1, ensure_ascii=False)
-            response_3_json = json.dumps(response_2, ensure_ascii=False)
+            response_3_json = json.dumps(response_3, ensure_ascii=False)
             response_4_json = json.dumps(response_4, ensure_ascii=False)
             return '\n'.join([response_0_json, response_1_json, response_2_json, response_3_json, response_4_json])
 
@@ -981,7 +981,7 @@ Step 4: Supplementary analysis (assuming the line selected in Step 1 is NOT Lyα
   - If this assumption is unreasonable, assume the peak corresponds to C III] or another major line, and repeat the inference. Check for the presence of other expected lines (e.g., Lyα, C III], Mg II) if they fall within the spectral range.
 
 - Note: It is acceptable that some emission lines may be absent due to edge effects or low signal-to-noise ratio.
-""" + tail
+"""
 
                 response = await self.call_llm_with_context(system_prompt, user_prompt, parse_json=False, description="Step 4 supplementary analysis")
                 state['rule_analysis_QSO'].append(response)
@@ -1489,7 +1489,7 @@ Output format as follows:
     - If the object is a QSO, provide redshift z ± Δz
     - Identified spectral lines (format: Line Name - λ_rest - λ_obs - redshift)
     - Signal-to-noise ratio (SNR) of the spectrum
-    - Credibility score (0–4):
+    - Credibility score (0 or 2):
         - Score 2 if the visual description of the spectrum indicates it is suitable for quantitative use and the spectra is classified as galaxy; otherwise 0
     - Whether human intervention is required:
         - Always required if type is Galaxy
