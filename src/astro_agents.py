@@ -16,7 +16,7 @@ from .utils import (
     _find_features_multiscale, _plot_spectrum, getenv_int, 
     _load_feature_params, merge_features, plot_cleaned_features, 
     safe_to_bool, find_overlap_regions, _detect_axis_ticks_tesseract,
-    _detect_axis_ticks_paddle
+    _detect_axis_ticks_paddle, getenv_float
 )
 
 # ---------------------------------------------------------
@@ -658,29 +658,86 @@ Flux 误差：{delta_t_json}
         )
         state['preliminary_classification'] = response
 
-    async def preliminary_classification_monkey(self, state):
-        """ My dear monkey friend and its typewriter """
-        preliminary_classification_json = json.dumps(state['preliminary_classification'], ensure_ascii=False)
-        prompt = f"""
-你是一个天文学光谱分析助手。
-你接收到的是其他助手对一张光谱的光源类别的初步猜测：
-{preliminary_classification_json}
+#     async def preliminary_classification_conservative(self, state: SpectroState) -> str:
+#         """初步分类：根据光谱形态初步判断天体类型"""
 
-请输出这份猜测里给出的光源类别。
-"""+"""
-格式为 json，格式如下：
-{
-    'type': str,  # 天体类别，可能的取值为 "Galaxy", "QSO"
-}
-不要输出其他内容
-"""
-        response = await self.call_llm_with_context(
-            system_prompt = '',
-            user_prompt = prompt,
-            parse_json=True,
-            description="初步分类猴子"
-        )
-        return response
+#         visual_interpretation_json = json.dumps(state['visual_interpretation'], indent=2, ensure_ascii=False)
+#         preliminary_classification_json = json.dumps(state['preliminary_classification'], ensure_ascii=False)
+#         effective_snr = state['spectrum']['effective_snr']
+#         # 计算effective_snr的中位数
+#         median_effective_snr = np.median(effective_snr)
+#         SNR_threshold = getenv_float('SNR_THRESHOLD', '')
+#         if SNR_threshold == '':
+#             logging.error('环境变量 SNR_THRESHOLD 未设置')
+        
+#         if median_effective_snr < SNR_threshold:
+#             shem = """
+# {
+#     'type': str,  # 天体类别，可能的取值为 "Galaxy", "QSO"。但由于光谱信噪比较差，也允许选择"Unknow"
+# }
+# """
+#         else:
+#             shem = """
+# {
+#     'type': str,  # 天体类别，可能的取值为 "Galaxy", "QSO"
+# }
+# """
+
+#         band_name = state['band_name']
+#         band_wavelength = state['band_wavelength']
+#         if band_name: 
+#             band_info = f"""
+# 在 {band_wavelength} 波段，光谱中可能存在因观测仪器 camera filter 边缘引起的非物理特征。
+# """
+#         else:
+#             band_info = ""
+            
+# #         system_prompt = f"""
+# # 你是一位经验丰富的天文学光谱分析助手。
+
+# # 你的任务是根据光谱图和定性描述，定性猜测天体可能属于的类别。
+
+# # 初步判断光谱的类别为
+# # {preliminary_classification_json}
+
+# # 视觉描述为
+# # {visual_interpretation_json}
+
+# # 请根据描述对天体类别做进一步判断。
+
+# # 输出天体类别，格式为 json，格式如下：
+# # {shem}
+
+# # 仅输出唯一选项。不要输出其他信息。
+# # 仅做定性判断，不要进行定量分析或计算。
+# # """
+#         system_prompt = f"""
+# 你是一位经验丰富的天文学光谱分析助手。
+
+# 你的任务是根据光谱图，定性猜测天体可能属于的类别。
+# 仅做定性判断，不要进行定量分析或计算。
+
+# {band_info}
+
+# 输出天体类别，格式为 json，具体格式如下：
+# {shem}
+
+# 仅输出唯一选项。不要输出其他信息。
+# """
+#         user_prompt = f"""
+# 以下是光谱图像，请进行分析。
+# """
+#         response = await self.call_llm_with_context(
+#             system_prompt = system_prompt,
+#             user_prompt = user_prompt,
+#             image_path=state['image_path'],
+#             parse_json=True,
+#             description="初步分类"
+#         )
+#         state['preliminary_classification_conservative'] = response
+    
+#         print(f'preliminary_classification_conservative: \n{response}')
+    
     ###################################
     # QSO part
     ###################################
@@ -1014,7 +1071,8 @@ Step 4: 补充步骤（假设 Step 1 所选择的谱线并非 Lyα）
             plot_cleaned_features(state)
             await self.preliminary_classification(state)
             print(state['preliminary_classification'])
-
+            # await self.preliminary_classification_conservative(state)
+            
             # _shakespear = await self.preliminary_classification_monkey(state)
             # state['possible_object'] = _shakespear
             # print(f"Monkeys types: {_shakespear}")

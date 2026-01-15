@@ -44,10 +44,7 @@ class BaseAgent(ABC):
                 
                 # --- 调用 ---
                 if image_path:
-                    if OCR:
-                        response = await self.agent['OCR'].ainvoke({'messages': messages}, config={"recursion_limit": 125})
-                    else:
-                        response = await self.agent['vis'].ainvoke({'messages': messages}, config={"recursion_limit": 125})
+                    response = await self.agent['vis'].ainvoke({'messages': messages}, config={"recursion_limit": 300})
                 else:
                     response = await self.agent['text'].ainvoke({'messages': messages}, config={"recursion_limit": 125})
 
