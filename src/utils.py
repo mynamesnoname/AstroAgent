@@ -14,6 +14,7 @@ from typing import Any, List, Dict, Tuple, Optional, Union
 from scipy.optimize import curve_fit
 from scipy.ndimage import gaussian_filter1d, median_filter
 from scipy.signal import find_peaks, peak_widths
+from scipy.stats import mode
 
 def safe_to_bool(value):
     """专门处理true/True相关值的转换"""
@@ -26,30 +27,6 @@ def safe_to_bool(value):
 def image_to_base64(image_path):
     with open(image_path, "rb") as f:
         return base64.b64encode(f.read()).decode("utf-8")
-
-# def user_query(system_prompt, user_prompt, image_path=None):
-#     # 创建系统消息
-#     system_message = SystemMessage(content=system_prompt)
-    
-#     if not image_path:
-#         # 如果没有图片，创建纯文本用户消息
-#         human_message = HumanMessage(content=[{"type": "text", "text": user_prompt}])
-#         return [system_message, human_message]
-    
-#     # 处理单张图片或多张图片的情况
-#     base64_image = image_to_base64(image_path)
-    
-#     # 构建包含文本和图片的用户消息内容
-#     content = [{"type": "text", "text": user_prompt}]
-#     content.append({
-#         "type": "image_url",
-#         "image_url": {
-#             "url": f"data:image/jpeg;base64,{base64_image}"
-#         }
-#     })
-    
-#     human_message = HumanMessage(content=content)
-#     return [system_message, human_message]
 
 def user_query(system_prompt, user_prompt, image_path=None):
     # 创建系统消息
@@ -375,94 +352,6 @@ def _process_and_extract_curve_points(input_path: str):
     # 返回曲线点数量（简化信息）
     return curve_points, curve_gray_values
 
-# def weighted_average_flux(wavelength, flux, gray):
-#     """
-#     根据灰度值对同一波长的flux进行加权平均。
-
-#     参数：
-#     - wavelength: 一维数组，表示波长
-#     - flux: 一维数组，表示光谱强度（flux）
-#     - gray: 一维数组，表示每个像素的灰度值（权重）
-
-#     返回：
-#     - unique_wavelength: 每个唯一波长的数组
-#     - weighted_flux: 每个波长对应的加权平均flux值
-#     """
-#     df = pd.DataFrame({
-#         'wavelength': wavelength,
-#         'flux': flux,
-#         'gray': gray
-#     })
-
-#     # 对每个唯一的波长进行加权平均
-#     weighted_flux = df.groupby('wavelength', group_keys=False).apply(
-#         # lambda x: np.sum(x['flux'] * x['gray']) / np.sum(x['gray']),
-#         lambda x: np.average(x['flux']),
-#         include_groups=False
-#     )
-
-#     unique_wavelength = weighted_flux.index.to_numpy()
-#     return unique_wavelength, weighted_flux.to_numpy()
-
-# def _convert_to_spectrum(points, gray, axis_fitting_info):
-#     """
-#     转换曲线的像素坐标信息到波长（wavelength）和光谱强度（flux），
-#     并根据灰度值对同一波长的flux进行加权平均。
-
-#     输入：
-#     - points: 曲线像素坐标，形状为 (n, 2) 的数组，第一列为 x 坐标，第二列为 y 坐标
-#     - gray: 灰度值，形状为 (n,) 的数组，表示每个像素的灰度值（权重）
-#     - x_axis: x 轴像素到物理量的转换系数，字典形式 {'a': x_scale, 'b': x_offset}
-#     - y_axis: y 轴像素到物理量的转换系数，字典形式 {'a': y_scale, 'b': y_offset}
-
-#     输出：
-#     - spectrum_dict: 包含转换后的波长、flux 和加权平均后的波长与flux的字典
-#     """
-#     # 提取坐标
-#     points = np.array(points)
-#     xs = points[:, 0]
-#     ys = points[:, 1]
-
-#     # 提取 x 轴和 y 轴的物理量转换系数
-#     a_y = axis_fitting_info['y']['a']
-#     b_y = axis_fitting_info['y']['b']
-#     flux = a_y * ys + b_y
-
-#     a_x = axis_fitting_info['x']['a']
-#     b_x = axis_fitting_info['x']['b']
-#     wavelength = a_x * xs + b_x
-
-#     # 计算加权平均flux
-#     unique_wavelength, weighted_flux = weighted_average_flux(wavelength, flux, gray)
-
-#     max_unresolved_flux = []
-#     min_unresolved_flux = []
-#     for i, w in enumerate(unique_wavelength):
-#         unresolved_flux = flux[wavelength == w]
-#         max_unresolved_flux.append(np.max(unresolved_flux))
-#         min_unresolved_flux.append(np.min(unresolved_flux))
-    
-#     denominator = np.array(max_unresolved_flux) - np.array(min_unresolved_flux)
-#     effective_snr = np.where(
-#         denominator != 0,
-#         np.array(weighted_flux) / denominator,
-#         np.nan  # 或 np.nan，取决于你希望如何表示“无效 SNR”
-#     )
-#     # effective_snr = np.array(weighted_flux.tolist())/(np.array(max_unresolved_flux) - np.array(min_unresolved_flux))
-
-#     # 构造最终结果
-#     spectrum_dict = {
-#         'flux': flux.tolist(),
-#         'wavelength': wavelength.tolist(),
-#         'unique_wavelength': unique_wavelength.tolist(),
-#         'weighted_flux': weighted_flux.tolist(),
-#         'max_unresolved_flux': max_unresolved_flux,
-#         'min_unresolved_flux': min_unresolved_flux, 
-#         'effective_snr': effective_snr
-#     }
-
-#     return spectrum_dict
-
 def average_flux_by_wavelength(wavelength, flux):
     """
     对同一波长的flux进行简单平均。
@@ -547,6 +436,12 @@ def _convert_to_spectrum(points, gray, axis_fitting_info):
         mean_flux / np.array(std_flux),
         np.inf  # 如果标准差为0，SNR为无穷大
     )
+
+    snr_medium = np.median(snr)
+    # 检查snr的众数
+    result = mode(snr)
+    print("SNR中位数:", snr_medium)
+    print("SNR众数:", result.mode)
     
     # 将无穷大值替换为一个大数（可选）
     # snr[snr == np.inf] = 1e6
