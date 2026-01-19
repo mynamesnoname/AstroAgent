@@ -722,6 +722,7 @@ def _plot_spectrum(state):
     flux_top = state['spectrum']['max_unresolved_flux']
     flux_bottom = state['spectrum']['min_unresolved_flux']
     effective_snr = state['spectrum']['effective_snr']
+    delta_flux = state['spectrum']['delta_flux']
     # effective_snr = np.array(flux)/(np.array(flux_top) - np.array(flux_bottom))
 
     fig, axs = plt.subplots(2, 1, figsize=(10, 7))
@@ -767,7 +768,19 @@ def _plot_spectrum(state):
         plt.figure(figsize=(10, 3))
         # print(type(state['continuum']['wavelength']))
         # print(type(state['continuum']['flux']))
-        plt.plot(state['continuum']['wavelength'], state['continuum']['flux'], color='orange', label='Continuum')
+        contunuum_wavelength = np.array(state['continuum']['wavelength'])
+        continuum_flux = np.array(state['continuum']['flux'])
+        plt.plot(contunuum_wavelength, continuum_flux, color='orange', label='Continuum')
+        # mask = np.isin(wavelength, contunuum_wavelength)
+        # errorbar = abs((np.array(delta_flux)[mask]))
+        # plt.errorbar(state['continuum']['wavelength'], state['continuum']['flux'], 
+        #     yerr=errorbar, fmt='x', markersize=0,
+        #     ecolor='red', 
+        #     elinewidth=0.8,
+        #     capsize=2,
+        #     alpha=0.7,
+        #     zorder=5,
+        #     label='SNR')
         plt.xlabel('wavelength')
         plt.ylabel('flux')
         plt.legend(fontsize=12)
