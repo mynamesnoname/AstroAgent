@@ -456,7 +456,8 @@ def _convert_to_spectrum(points, gray, axis_fitting_info):
         'min_unresolved_flux': min_unresolved_flux,
         'delta_flux': delta_flux.tolist(),
         'std_flux': std_flux,
-        'effective_snr': snr.tolist()
+        'effective_snr': snr.tolist(),
+        'snr_medium': snr_medium
     }
 
     return spectrum_dict
@@ -1147,3 +1148,4 @@ def find_overlap_regions(band_names, band_wavelengths):
                 result[overlap_name] = [overlap_start, overlap_end]
     
     return result
+
