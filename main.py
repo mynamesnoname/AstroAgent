@@ -109,8 +109,10 @@ async def main():
                     detail = [
                         img_name,
                         safe_str(in_brief.get('type')),
+                        safe_str(in_brief.get('type_conservative')),
                         safe_str(in_brief.get('redshift')),
                         safe_str(in_brief.get('rms')),
+                        safe_str(in_brief.get('lines')),
                         safe_str(in_brief.get('human'))
                     ]
                     collect.append(detail)
@@ -120,7 +122,7 @@ async def main():
             csv_path = os.path.join(output_dir, 'in_brief.csv')
             with open(csv_path, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
-                writer.writerow(['image_name', 'type', 'redshift', 'rms', 'human'])
+                writer.writerow(['image_name', 'type', 'type_conservative', 'redshift', 'rms', 'lines', 'human'])
                 writer.writerows(collect)
 
         logging.info("🎉 所有任务已完成")

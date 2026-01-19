@@ -598,7 +598,7 @@ You are an experienced astronomical spectral analysis assistant.
 Your task is to guess the likely class of the astronomical object based on qualitative descriptions and spectral features.
 
 - If the continuum shows a trend of being higher in the blue end and lower in the red end (i.e., falling), the object is a QSO.
-- If the continuum shows a trend of being lower in the blue end, peaking in the middle, and dropping again toward the red end (i.e., rising → falling), the object is also a QSO.
+- If the continuum shows a trend of being lower in the blue end, peaking in the middle, and dropping again toward the red end (i.e., rising → falling), the object is also a QSO, whose main signal start in the middle.
 - If the continuum shows a trend of being lower in the blue end and higher in the red end (i.e., rising), the object is a Galaxy.
 
 Compare the likelihoods of these two possibilities and provide your choice.
@@ -651,29 +651,43 @@ Output in JSON format as follows:
         )
         state['preliminary_classification'] = response
 
-    async def preliminary_classification_monkey(self, state):
-        """My dear monkey friend and its typewriter"""
-        preliminary_classification_json = json.dumps(state['preliminary_classification'], ensure_ascii=False)
-        prompt = f"""
-You are an astronomical spectral analysis assistant.
-You have received a preliminary guess from another assistant regarding the source type of a spectrum:
-{preliminary_classification_json}
+    async def preliminary_classification_conservative(self, state: SpectroState) -> str:
+        """Preliminary classification: Make an initial determination of the celestial object type based on the spectral morphology."""
 
-Please output the source type indicated in this guess.
-""" + """
-Format the output as JSON:
-{
-    "type": str  // Possible values: "Galaxy", "QSO"
-}
+        # visual_interpretation_json = json.dumps(state['visual_interpretation'], indent=2, ensure_ascii=False)
+        preliminary_classification_json = json.dumps(state['preliminary_classification'], ensure_ascii=False)
+
+        system_prompt = f"""
+You are an experienced astronomical spectral analysis assistant responsible for interpreting astronomical spectra.
+"""
+        user_prompt = f"""
+The image shows the spectrum of an unknown celestial object, with an unknown redshift.
+Another astronomy assistant has suggested that the spectral type is:
+{preliminary_classification_json}
+Please provide your qualitative assessment based solely on the spectral morphology. Do not perform any specific calculations.
+
+If you agree with this classification, output: True  
+If you disagree with this classification, output: False
+
 Do not output anything else.
 """
         response = await self.call_llm_with_context(
-            system_prompt='',
-            user_prompt=prompt,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            image_path=state['image_path'],
             parse_json=True,
-            description="Preliminary classification monkey"
+            description="Preliminary classification"
         )
-        return response
+        
+        r = safe_to_bool(response)
+        if r:
+            state['preliminary_classification_conservative'] = state['preliminary_classification']
+        else:
+            state['preliminary_classification_conservative'] = {
+                'type': 'Unknow'
+            }
+    
+        print(f'preliminary_classification_conservative: \n{response}')
 
     ###################################
     # QSO part
@@ -1003,6 +1017,7 @@ Step 4: Supplementary analysis (assuming the line selected in Step 1 is NOT Lyα
             
             await self.preliminary_classification(state)
             print(state['preliminary_classification'])
+            await self.preliminary_classification_conservative(state)
 
             if state['preliminary_classification']['type'] == "QSO":
                 await self._QSO(state)
