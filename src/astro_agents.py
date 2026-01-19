@@ -658,85 +658,52 @@ Flux 误差：{delta_t_json}
         )
         state['preliminary_classification'] = response
 
-#     async def preliminary_classification_conservative(self, state: SpectroState) -> str:
-#         """初步分类：根据光谱形态初步判断天体类型"""
+    async def preliminary_classification_conservative(self, state: SpectroState) -> str:
+        """初步分类：根据光谱形态初步判断天体类型"""
 
-#         visual_interpretation_json = json.dumps(state['visual_interpretation'], indent=2, ensure_ascii=False)
-#         preliminary_classification_json = json.dumps(state['preliminary_classification'], ensure_ascii=False)
-#         effective_snr = state['spectrum']['effective_snr']
-#         # 计算effective_snr的中位数
-#         median_effective_snr = np.median(effective_snr)
-#         SNR_threshold = getenv_float('SNR_THRESHOLD', '')
-#         if SNR_threshold == '':
-#             logging.error('环境变量 SNR_THRESHOLD 未设置')
+        # visual_interpretation_json = json.dumps(state['visual_interpretation'], indent=2, ensure_ascii=False)
+        preliminary_classification_json = json.dumps(state['preliminary_classification'], ensure_ascii=False)
+
+        band_name = state['band_name']
+        band_wavelength = state['band_wavelength']
+        if band_name: 
+            band_info = f"""
+在 {band_wavelength} 波段，光谱中可能存在因观测仪器 camera filter 边缘引起的非物理特征。
+"""
+        else:
+            band_info = ""
+
+        system_prompt = f"""
+你是一位经验丰富的天文学光谱分析助手,负责对天文学光谱进行判断。
+"""
+        user_prompt = f"""
+图片为一张未知天体的光谱图，红移也未知。
+其他天文学助手认为这张光谱的类型为
+{preliminary_classification_json}
+请从光谱形态定性地给出你的判断。不要进行具体的计算。
+
+如果你支持这个判断，请输出：True
+如果你不支持这个判断，请输出：False
+
+请勿输出其他内容。
+"""
+        response = await self.call_llm_with_context(
+            system_prompt = system_prompt,
+            user_prompt = user_prompt,
+            image_path=state['image_path'],
+            parse_json=True,
+            description="初步分类"
+        )
         
-#         if median_effective_snr < SNR_threshold:
-#             shem = """
-# {
-#     'type': str,  # 天体类别，可能的取值为 "Galaxy", "QSO"。但由于光谱信噪比较差，也允许选择"Unknow"
-# }
-# """
-#         else:
-#             shem = """
-# {
-#     'type': str,  # 天体类别，可能的取值为 "Galaxy", "QSO"
-# }
-# """
-
-#         band_name = state['band_name']
-#         band_wavelength = state['band_wavelength']
-#         if band_name: 
-#             band_info = f"""
-# 在 {band_wavelength} 波段，光谱中可能存在因观测仪器 camera filter 边缘引起的非物理特征。
-# """
-#         else:
-#             band_info = ""
-            
-# #         system_prompt = f"""
-# # 你是一位经验丰富的天文学光谱分析助手。
-
-# # 你的任务是根据光谱图和定性描述，定性猜测天体可能属于的类别。
-
-# # 初步判断光谱的类别为
-# # {preliminary_classification_json}
-
-# # 视觉描述为
-# # {visual_interpretation_json}
-
-# # 请根据描述对天体类别做进一步判断。
-
-# # 输出天体类别，格式为 json，格式如下：
-# # {shem}
-
-# # 仅输出唯一选项。不要输出其他信息。
-# # 仅做定性判断，不要进行定量分析或计算。
-# # """
-#         system_prompt = f"""
-# 你是一位经验丰富的天文学光谱分析助手。
-
-# 你的任务是根据光谱图，定性猜测天体可能属于的类别。
-# 仅做定性判断，不要进行定量分析或计算。
-
-# {band_info}
-
-# 输出天体类别，格式为 json，具体格式如下：
-# {shem}
-
-# 仅输出唯一选项。不要输出其他信息。
-# """
-#         user_prompt = f"""
-# 以下是光谱图像，请进行分析。
-# """
-#         response = await self.call_llm_with_context(
-#             system_prompt = system_prompt,
-#             user_prompt = user_prompt,
-#             image_path=state['image_path'],
-#             parse_json=True,
-#             description="初步分类"
-#         )
-#         state['preliminary_classification_conservative'] = response
+        r = safe_to_bool(response)
+        if r:
+            state['preliminary_classification_conservative'] = state['preliminary_classification']
+        else:
+            state['preliminary_classification_conservative'] = {
+                'type': 'Unknown'
+            }
     
-#         print(f'preliminary_classification_conservative: \n{response}')
+        print(f'preliminary_classification_conservative: \n{response}')
     
     ###################################
     # QSO part
@@ -1071,7 +1038,7 @@ Step 4: 补充步骤（假设 Step 1 所选择的谱线并非 Lyα）
             plot_cleaned_features(state)
             await self.preliminary_classification(state)
             print(state['preliminary_classification'])
-            # await self.preliminary_classification_conservative(state)
+            await self.preliminary_classification_conservative(state)
             
             # _shakespear = await self.preliminary_classification_monkey(state)
             # state['possible_object'] = _shakespear
