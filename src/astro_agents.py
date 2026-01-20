@@ -762,16 +762,15 @@ Flux 误差：{delta_t_json}
 当信噪比小于 {snr_threshold} 时，由于信噪比较低，允许你的判断中加入Unknow选项（即 QSO, Galaxy 或 Unknow）
 """
         if dataset == 'CSST':
+#             如果连续谱呈现蓝端较高，红端较低的趋势（即下降），则该天体可能为 QSO；
+# 如果连续谱呈现 上升→下降 的趋势，则该天体可能为 QSO，这通常反映其幂律连续谱在有限波长范围内的表现，即信号没有覆盖整个观测窗口；
+
+# 如果连续谱呈现蓝端较低，红端较高的趋势（即上升），则该天体可能为 Galaxy ；
             # CSST version
             system_prompt = f"""
 你是一位经验丰富的天文学光谱分析助手。
 
-你的任务是根据光谱的continuum猜测天体可能属于的类别（Galaxy 或 QSO）。
-
-如果连续谱呈现蓝端较高，红端较低的趋势（即下降），则该天体可能为 QSO；
-如果连续谱呈现蓝端较低，中段较高，红端下降的趋势（即上升→下降），则该天体可能为 QSO，这通常反映其幂律连续谱在有限波长范围内的表现，即信号没有覆盖整个观测窗口；
-
-如果连续谱呈现蓝端较低，红端较高的趋势（即上升），则该天体可能为 Galaxy ；
+你的任务是根据光谱图像和光谱的的continuum猜测天体可能属于的类别（Galaxy 或 QSO）。只根据光谱和continuum的形态进行定性分析，不进行定量计算。
 
 比较两种光源的可能性，给出你的选择。
 {snr_stuff}
@@ -808,7 +807,7 @@ Flux 误差：{delta_t_json}
         response = await self.call_llm_with_context(
             system_prompt = system_prompt,
             user_prompt = user_prompt,
-            image_path=state['continuum_path'],
+            image_path=[state['continuum_path'],state['image_path']],
             parse_json=True,
             description="初步分类"
         )
@@ -1479,7 +1478,7 @@ class SpectralRefinementAssistant(BaseAgent):
                 ddd = ''
             elif len(state['auditing_history_QSO']) > 1:
                 debate_history_json = ''
-                for i in range(len(state['auditing_history_QSO'])):
+                for i in range(len(state['auditing_history_QSO'])-1):
                     auditing_history = state['auditing_history_QSO'][i] 
                     response_history = state['refine_history_QSO'][i]
 
@@ -1488,7 +1487,7 @@ class SpectralRefinementAssistant(BaseAgent):
 
                     debate_history_json += f"第{i+1}轮审查：\n{auditing_history_json}\n\n" + f"第{i+1}轮回应：\n{response_history_json}\n\n"
 
-                    ddd = f"""
+                ddd = f"""
 你和改进分析师对于这篇报告的辩论为
 {debate_history_json}
 
@@ -1576,7 +1575,7 @@ class SpectralSynthesisHost(BaseAgent):
 对光谱的视觉描述
 {visual_interpretation_json}
 
-对光谱的严格分类
+对光谱的分类
 {preliminary_classification_strict_json}
 """
         system_prompt = self.get_system_prompt() + prompt_1
@@ -1589,7 +1588,7 @@ class SpectralSynthesisHost(BaseAgent):
             refine_QSO = "\n\n".join(str(item) for item in state['refine_history_QSO'])
             refine_QSO_json = json.dumps(refine_QSO, ensure_ascii=False)
             prompt_2 = f"""
-进一步结论：
+进一步尝试：
 规则分析师的观点：
 {rule_analysis_QSO_json}
 
@@ -1610,8 +1609,8 @@ class SpectralSynthesisHost(BaseAgent):
     - Step 2
     - Step 3
     - Step 4
-- 进一步结论：
-    - 该天体的天体类型（Galaxy 还是 QSO）
+- 根据进一步结论做出的总结
+    - 进一步尝试中认为该天体的天体类型是（Galaxy 还是 QSO）
     - 如果天体是QSO，输出红移 z ± Δz
     - 认证出的谱线（输出 谱线名 - λ_rest - λ_obs - 红移）
     - 光谱的信噪比如何
@@ -1621,7 +1620,7 @@ class SpectralSynthesisHost(BaseAgent):
             如果能认证出 2 条以上的主要谱线（指 Lyα, C IV, C III, Mg II），则可信度为 3；
             能认证出 1 条主要谱线，且有其他较弱的特征，则可信度为 2；
             能认证出 1 条主要谱线，但没有其他特征辅助判断，则可信度为 1；
-    - 是否需要人工介入判断（可信度为 0-2 时必须引入人工判断。信噪比较低且无 Lyα 时必须引入人工判断。对光谱的严格分类为 Unknow 时必须引入人工判断。其余情况自行决策。）
+    - 是否需要人工介入判断（可信度为 0-2 时必须引入人工判断。无 Lyα 时必须引入人工判断。对光谱的严格分类为 Unknow 时必须引入人工判断。其余情况自行决策。）
 """
             user_prompt = prompt_2 + prompt_3
         else:
@@ -1630,11 +1629,11 @@ class SpectralSynthesisHost(BaseAgent):
 
 - 光谱的视觉特点
 - 对光谱的严格分类（Galaxy，QSO 还是 Unknow）
-- 进一步结论
-    - 该天体的天体类型（Galaxy 还是 QSO）
+- 对进一步尝试的总结：
+    - 进一步尝试中认为该天体的天体类型是（从 Galaxy / QSO 中选择，不允许输出 Unknow）
     - 光谱的信噪比如何
-    - 分析报告的可信度评分（0-4）
-        如果对光谱的视觉描述认为适合科学使用，且分析认证出类型为 Galaxy，则可信度为 2；否则为 0。
+    - 分析报告的可信度评分（0 or 2）
+        如果对光谱的严格分类认证出类型为 Galaxy，则可信度为 2；否则为 0。
     - 是否需要人工介入判断（如果对光谱的严格分类为 Unknow，则必须要求人工介入判断）
 """
         response = await self.call_llm_with_context(system_prompt, user_prompt, parse_json=False, description="总结")
@@ -1660,7 +1659,7 @@ class SpectralSynthesisHost(BaseAgent):
 你已经对一张天文学光谱做了总结
 {summary_json}
 
-- 请输出 **结论** 部分中的 **天体类型**（从这两个词语中选择：Galaxy, QSO）
+- 请输出 **对进一步尝试的总结** 部分中的 **天体类型**（从这两个词语中选择：Galaxy, QSO）
 
 - 输出格式为 str
 - 不要输出其他信息
@@ -1674,7 +1673,7 @@ class SpectralSynthesisHost(BaseAgent):
 你已经对一张天文学光谱做了总结
 {summary_json}
 
-请输出 **结论** 部分中的 **红移 z**（不需要输出 ± Δz）
+请输出 **对进一步尝试的总结** 部分中的 **红移 z**（不需要输出 ± Δz）
 
 - 输出格式为 float 或 None
 - 不要输出其他信息
@@ -1688,7 +1687,7 @@ class SpectralSynthesisHost(BaseAgent):
 你已经对一张天文学光谱做了总结
 {summary_json}
 
-请输出 **结论** 部分中认证出的谱线（只从 Lyα，C IV，C III，Mg II 中选择，无需记录其他谱线）
+请输出 **对进一步尝试的总结** 部分中认证出的谱线（只从 Lyα，C IV，C III，Mg II 中选择，无需记录其他谱线）
 
 - 输出格式为 str: '（谱线1）,（谱线2）,...' 或 None
 - 不要输出其他信息
@@ -1702,7 +1701,7 @@ class SpectralSynthesisHost(BaseAgent):
 你已经对一张天文学光谱做了总结
 {summary_json}
 
-请输出 **结论** 部分中的 **红移误差 Δz**（不需要输出 z）
+请输出 **对进一步尝试的总结** 部分中的 **红移误差 Δz**（不需要输出 z）
 
 - 输出格式为 float 或 None
 - 不要输出其他信息
@@ -1716,7 +1715,7 @@ class SpectralSynthesisHost(BaseAgent):
 你已经对一张天文学光谱做了总结
 {summary_json}
 
-请输出 **结论** 部分中的 **是否需要人工介入判断**
+请输出 **对进一步尝试的总结** 部分中的 **是否需要人工介入判断**
 
 - 仅输出“是”或“否”
 - 输出格式为 str
