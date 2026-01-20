@@ -67,7 +67,7 @@ class SpectroState(MessagesState):
     # ===========================
     visual_interpretation: Optional[List] = field(default=None)
     preliminary_classification: Optional[str] = None
-    preliminary_classification_strict: Optional[str] = None
+    preliminary_classification_with_confusion: Optional[str] = None
     possible_object: Optional[List] = field(default=None)
     Lyalpha_candidate: Optional[List] = field(default=None)
     rule_analysis_QSO: Optional[List] = field(default_factory=list)

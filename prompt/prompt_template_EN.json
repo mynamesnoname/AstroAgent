@@ -32,15 +32,8 @@
         "user_prompt_lines": "\n## Step 2: Emission/Absorption Features\nHere shows the spectrum. Please summarize:\n- Which dominates: broad lines or narrow lines?\n- Are there any asymmetric peaks?\nNotion: Do not use tools.\nOutput:\n{\n \"dominant_line_type\": \"broad/narrow\",\n \"asymmetric_peaks_wavelength\": List[float] or null\n}\n",
         "user_prompt_quality": "\n## Step 3: Data Quality\nYou are viewing a spectrum extracted from a PNG using OpenCV.\nThe image contains:\n- Blue line: the spectral signal\n- Pink regions: data missing due to OpenCV processing\n\nSummarize in 1-2 sentences:\n- Signal-to-noise ratio (high/low)\n- Which wavelength ranges are unreliable (i.e., where the pink regions are more prominent relative to the blue signal)?\n"
       },
-      "_get_ROI": {
-        "system_prompt": "\nYou are an expert in astronomical spectral analysis. Based on a qualitative description of a spectrum, you need to identify 4-5 most noteworthy wavelength intervals (Regions of Interest, ROI).\n\nPlease strictly provide the following information for each ROI:\n- Approximate wavelength range: formatted as \"λ_i ~ λ_f\", with an interval length between 400-1000 Å.\n- Morphological feature of the region (one sentence)\n- Suggested physical interpretation (one sentence)\n\nOutput format:\nROI 1:\n- wave_range: a list of two floats, e.g., [λ_i, λ_f]\n- feature_description: string, describing the morphological feature\n- physical_suggestion: string, giving the physical interpretation suggestion\nROI 2:\n...\n\n",
-        "user_prompt": "\nYou have just provided a qualitative description of a spectrum:\n{_visual_json}\n\nBased on this description, please list 4-5 most noteworthy wavelength intervals (ROI).\n",
-        "variables": [
-          "_visual_json"
-        ]
-      },
       "_integrate": {
-        "system_prompt": "\nYou are an expert in astronomical spectral analysis. Please integrate the provided multiple analysis parts into a single, structured dictionary.\n\nOutput requirements:\n1. Must be valid JSON format.\n2. Must contain Four main sections: if the spectrum is suitable for further quantitative analysis, continuum_description, lines_description.\n\nOutput format:\n{\n \"is_suitable_for_quantitative_analysis\": true/false,\n \"continuum_description\": {\n 'blue_end': ('high'/'medium'/'low'),\n 'blue_to_middle': ('rising'/'falling'),\n 'middle' ('high'/'medium'/'low'),\n 'middle_to_red' ('rising'/'falling'),\n 'red_end' ('high'/'medium'/'low')},\n \"lines_description\": {...},\n}",
+        "system_prompt": "\nYou are an expert in astronomical spectral analysis. Please integrate the provided multiple analysis parts into a single, structured dictionary.\n\nOutput requirements:\n1. Must be valid JSON format.\n2. Must contain following sections: SNR, continuum_description, lines_description.\n\nOutput format:\n{\n \"SNR\": {...},\n \"continuum_description\": {\n 'blue_end': ('high'/'medium'/'low'),\n 'blue_to_middle': ('rising'/'falling'),\n 'middle' ('high'/'medium'/'low'),\n 'middle_to_red' ('rising'/'falling'),\n 'red_end' ('high'/'medium'/'low')},\n \"lines_description\": {...},\n}",
         "user_prompt": "\nPlease integrate the following pieces of information into a complete dictionary:\n"
       }
     }

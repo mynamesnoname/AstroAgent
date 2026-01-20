@@ -32,13 +32,6 @@
         "user_prompt_lines": "\n## Step 2: 发射/吸收特征\n以下是一些显著的峰或谷。请总结：\n- 宽线（>2000 km/s）/窄线（<1000 km/s）二者哪个占主导？\n- 是否存在哪些非对称的峰？\n\n输出：\n{\n        \"dominant_line_type\": \"宽线/窄线\",\n        \"asymmetric_peaks_wavelength\": List[float] 或 null\n}\n",
         "user_prompt_quality": "\n## Step 3: 数据质量\n你正在阅读一张从PNG中用OpenCV提取出的光谱图。\n图中包含：\n- 蓝线：光谱信号\n- 粉红区：OpenCV导致的数据缺失\n\n用1-2句话总结：\n- 信噪比（高/低）\n- 哪些区域数据不可靠（即哪些波长范围对应的粉红区域相对蓝色信号更加明显）？\n"
       },
-      "_get_ROI": {
-        "system_prompt": "\n你是一个天文学光谱分析专家。基于对光谱的定性描述，你需要识别出4-5个最值得关注的波长区间(Regions of Interest, ROI)。\n\n请严格按照以下要求为每个ROI提供信息：\n- 大致波长区间：格式为\"λ_i ~ λ_f\"，区间长度在400-1000Å之间\n- 该区域的形态特征（一句话）\n- 物理含义建议（一句话）\n\n输出格式：\nROI 1:\n- wave_range: 包含两个浮点数的列表，格式如[λ_i, λ_f]\n- feature_description: 字符串，描述形态特征\n- physical_suggestion: 字符串，给出物理含义建议\nROI 2:\n...\n\n",
-        "user_prompt": "\n你刚才已经对一张光谱进行了定性描述：\n{_visual_json}\n\n基于这个描述，请列出4-5个最值得关注的波长区间(ROI)。\n",
-        "variables": [
-          "_visual_json"
-        ]
-      },
       "_integrate": {
         "system_prompt": "\n你是一个天文学光谱分析专家。请将提供的多个分析部分整合成一个结构化的完整字典。\n\n输出要求：\n1. 必须是有效的JSON格式\n2. 包含一下几个主要部分：信噪比（SNR）、continuum_description、lines_description\n\n输出格式：\n{\n    \"SNR\": {...},\n    \"continuum_description\": {\n  '蓝端':（高/中/低）\n  '蓝端到中段':（上升/下降）\n  '中段'（高/中/低）\n  '中段到红端'（上升/下降）\n  '红端'（高/中/低）},\n    \"lines_description\": {...},\n",
         "user_prompt": "\n请将以下几部分信息整合成一个完整的字典：\n"

@@ -77,8 +77,8 @@ class MCPManager:
             self.client = None
             return False
     
-    async def create_agent_with_tools(self, agent_name):
-        if agent_name == 'Spectral Visual Interpreter':
+    async def create_agent_with_tools(self, agent_name, want_tools=True):
+        if agent_name == 'Spectral Visual Interpreter' or want_tools==False:
             tools = []
         else:
             tools = await self.client.get_tools()
@@ -86,6 +86,9 @@ class MCPManager:
         vis_agent = create_agent(self.vis_llm, tools)
         agents = {"text": text_agent, "vis": vis_agent}
         return agents
+
+    async def lite_agent(self):
+        return self.llm, self.vis_llm
 
     async def close(self):
         """安全关闭 MCP 客户端"""
