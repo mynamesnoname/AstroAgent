@@ -18,16 +18,19 @@ class BaseAgent(ABC):
         
         # 延迟创建智能体实例，等到MCP工具初始化完成后再创建
         self.agent = None
+        self.llm=None
+        self.vis_llm=None
         
         print(f"智能体 {agent_name} 初始化完成")
 
-    async def ensure_agent_created(self):
+    async def ensure_agent_created(self, want_tools=True):
         """确保智能体实例已创建（在MCP工具初始化后调用）"""
         if self.agent is None:
-            self.agent = await self.mcp_manager.create_agent_with_tools(self.agent_name)
+            self.agent = await self.mcp_manager.create_agent_with_tools(self.agent_name, want_tools=True)
+            self.llm, self.vis_llm = await self.mcp_manager.lite_agent()
             print(f"智能体 {self.agent_name} 实例创建完成")
 
-    async def call_llm_with_context(self, system_prompt, user_prompt, image_path=None, parse_json=True, description="LLM输出", OCR=False):
+    async def call_llm_with_context(self, system_prompt, user_prompt, image_path=None, parse_json=True, description="LLM输出", want_tools=True):
         """
         调用 LLM 并可选直接解析 JSON。
         增强版：自动处理 RateLimitError 和 insufficient_quota。
@@ -37,18 +40,25 @@ class BaseAgent(ABC):
 
         for attempt in range(max_retries + 1):
             try:
-                await self.ensure_agent_created()
+                await self.ensure_agent_created(want_tools=want_tools)
 
                 # --- 构建消息 ---
                 messages = user_query(system_prompt, user_prompt, image_path)
                 
                 # --- 调用 ---
-                if image_path:
-                    response = await self.agent['vis'].ainvoke({'messages': messages}, config={"recursion_limit": 300})
-                else:
-                    response = await self.agent['text'].ainvoke({'messages': messages}, config={"recursion_limit": 125})
+                if want_tools:
+                    if image_path:
+                        response = await self.agent['vis'].ainvoke({'messages': messages}, config={"recursion_limit": 300})
+                    else:
+                        response = await self.agent['text'].ainvoke({'messages': messages}, config={"recursion_limit": 125})
 
-                raw_content = response['messages'][-1].content
+                    raw_content = response['messages'][-1].content
+                else:
+                    if image_path:
+                        response = self.vis_llm.invoke(messages)
+                    else:
+                        response = self.llm.invoke(messages)
+                    raw_content = response.content
 
                 if parse_json:
                     # 清理可能的 markdown code block 包裹
