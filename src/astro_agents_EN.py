@@ -1478,7 +1478,7 @@ Output format as follows:
     - If the object is a QSO, provide redshift z ± Δz
     - Identified spectral lines (format: Line Name - λ_rest - λ_obs - redshift)
     - Signal-to-noise ratio (SNR) of the spectrum
-- Credibility score of the analysis report (0–4):  
+- Credibility score of the analysis report (0–3):  
     - Score 3: Two or more major emission lines are confidently identified (e.g., Lyα, C IV, C III], Mg II).  
     - Score 2: One major emission line is identified, supported by additional weaker spectral features.  
     - Score 1: One major emission line is identified, but no corroborating features are present.  
