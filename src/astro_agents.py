@@ -616,7 +616,8 @@ Flux 误差：{delta_t_json}
             user_prompt = user_prompt,
             image_path=None,
             parse_json=True,
-            description="初步分类"
+            description="初步分类",
+            want_tools=False
         )
         state['preliminary_classification'] = response
 

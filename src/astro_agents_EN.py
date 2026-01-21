@@ -615,7 +615,8 @@ Output in JSON format as follows:
             user_prompt=user_prompt,
             image_path=None,
             parse_json=True,
-            description="Preliminary classification"
+            description="Preliminary classification",
+            want_tools=False
         )
         state['preliminary_classification'] = response
 
@@ -660,6 +661,9 @@ Output only one option. Do not include any other information.
             system_prompt = f"""
 You are an experienced astronomical spectral analysis assistant.
 
+- If the continuum shows a trend of being higher in the blue end and lower in the red end, the object is a QSO.
+- If the continuum shows a trend of being lower in the blue end and higher in the red end, the object is a Galaxy.
+
 Your task is to infer the likely class of the celestial object (either "Galaxy" or "QSO") based on the continuum.
 
 Compare the likelihoods of the two source types and provide your judgment.
@@ -687,7 +691,7 @@ Please analyze the following spectrum image.
             want_tools=False
         )
         state['preliminary_classification_with_confusion'] = response
-        # print(response)
+        print(f'preliminary_classification_with_confusion: {response}')
     ###################################
     # QSO part
     ###################################
