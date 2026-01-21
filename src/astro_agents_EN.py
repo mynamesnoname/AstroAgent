@@ -1479,9 +1479,9 @@ Output format as follows:
     - Identified spectral lines (format: Line Name - λ_rest - λ_obs - redshift)
     - Signal-to-noise ratio (SNR) of the spectrum
 - Credibility score of the analysis report (0–3):  
-    - Score 3: Two or more major emission lines are confidently identified (e.g., Lyα, C IV, C III], Mg II).  
-    - Score 2: One major emission line is identified, supported by additional weaker spectral features.  
-    - Score 1: One major emission line is identified, but no corroborating features are present.  
+    - Score 3: Two or more major emission lines (Lyα, C IV, C III], Mg II) are identified.  
+    - Score 2: Only one major emission line (Lyα, C IV, C III], Mg II) is identified, supported by additional weaker spectral features.  
+    - Score 1: One major emission line (Lyα, C IV, C III], Mg II) is identified, but no corroborating features are present.  
     - Score 0: The signal-to-noise ratio is too poor to reliably identify any emission lines.
 - Whether human intervention is required:
         - Required if credibility ≤ 2
