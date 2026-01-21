@@ -1494,9 +1494,8 @@ Output format as follows:
 Output format as follows:
 
 - Visual characteristics of the spectrum
-- Synthesize all analyses and provide the spectral classification 
-    - Just output a single word: Galaxy, QSO, or Unknow. 
-    - Do not output anything else.
+- Synthesize all analyses and provide the spectral classification: (Galaxy, QSO, or Unknow)
+    - Just output Galaxy, QSO, or Unknow. 
 - Conclusion based on further attempt
     - The celestial object type (Choose between Galaxy or QSO, do not output Unknow) provided in the further refinement attempt.
     - Signal-to-noise ratio (SNR) of the spectrum
