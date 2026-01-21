@@ -345,6 +345,18 @@ class SpectralVisualInterpreter(BaseAgent):
             state["spectrum"] = _convert_to_spectrum(state['curve_points'], state['curve_gray_values'], state['pixel_to_value'])
             # Step 1.10: 检测峰值/谷值
             await self.peak_trough_detection(state)
+            max_attempts = 100
+            attempts = 0
+            while (state['merged_peaks'] is None or state['merged_troughs'] is None) and attempts < max_attempts:
+                try:
+                    print(f"Retry peak/trough detection, attempt {attempts + 1}")
+                    await self.peak_trough_detection(state)
+                    attempts += 1
+                except Exception as e:
+                    print(f"Peak/trough detection failed: {e}")
+                    break
+            if state['merged_peaks'] is None or state['merged_troughs'] is None:
+                raise RuntimeError("Failed to detect peaks and troughs after maximum attempts")
             print(f"Detected {len(state['merged_peaks'])} peaks and {len(state['merged_troughs'])} troughs.")
             # Step 1.10.5: continuum拟合
             await self.continuum_fitting(state)
@@ -1474,7 +1486,8 @@ class SpectralSynthesisHost(BaseAgent):
 输出格式如下：
 
 - 光谱的视觉特点
-- 综合全部分析，给出光谱分类（Galaxy，QSO 还是 Unknow）
+- 光谱的初步分类（Galaxy，QSO 还是 Unknow）
+- 综合全部分析，给出的光谱分类（Galaxy，QSO 还是 Unknow）
 - 分析报告（综合规则分析师、审查分析师和完善分析师的所有观点，逐个 Step 进行结构化输出）
     - Step 1
     - Step 2
@@ -1498,6 +1511,7 @@ class SpectralSynthesisHost(BaseAgent):
 输出格式如下：
 
 - 光谱的视觉特点
+- 光谱的初步分类（Galaxy，QSO 还是 Unknow）
 - 综合全部分析，给出光谱分类（Galaxy，QSO 还是 Unknow）
 - 根据进一步尝试做出的总结：
     - 进一步尝试中认为该天体的天体类型是（只能从 Galaxy 或 QSO 中进行选择）

@@ -344,6 +344,17 @@ Do not output any additional content.
             state["spectrum"] = _convert_to_spectrum(state['curve_points'], state['curve_gray_values'], state['pixel_to_value'])
             # Step 1.10: Detect peaks and troughs
             await self.peak_trough_detection(state)
+            max_attempts = 5
+            attempts = 0
+            while (state['merged_peaks'] is None or state['merged_troughs'] is None) and attempts < max_attempts:
+                try:
+                    await self.peak_trough_detection(state)
+                    attempts += 1
+                except Exception as e:
+                    print(f"Peak/trough detection failed: {e}")
+                    break
+            if state['merged_peaks'] is None or state['merged_troughs'] is None:
+                raise RuntimeError("Failed to detect peaks and troughs after maximum attempts")
             print(f"Detected {len(state['merged_peaks'])} peaks and {len(state['merged_troughs'])} troughs.")
             # Step 1.10.5: Continuum fitting
             await self.continuum_fitting(state)
@@ -1469,9 +1480,9 @@ Refinement assistant's perspective:
 Output format as follows:
 
 - Visual characteristics of the spectrum
-- Synthesize all analyses and provide the spectral classification 
-    - Just output a single word: Galaxy, QSO, or Unknow. 
-    - Do not output anything else.
+- Preliminary classification (Galaxy, QSO, or Unknow)
+- Synthesize all analyses and provide the spectral classification (Galaxy, QSO, or Unknow)
+    - Just output Galaxy, QSO, or Unknow. 
 - Analysis report (synthesize all viewpoints from the rule-based analyst, auditor, and refinement assistant; structure output step-by-step)
     - Step 1
     - Step 2
@@ -1498,6 +1509,7 @@ Output format as follows:
 Output format as follows:
 
 - Visual characteristics of the spectrum
+- Preliminary classification (Galaxy, QSO, or Unknow)
 - Synthesize all analyses and provide the spectral classification: (Galaxy, QSO, or Unknow)
     - Just output Galaxy, QSO, or Unknow. 
 - Conclusion based on further attempt
