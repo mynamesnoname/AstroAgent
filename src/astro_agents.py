@@ -1511,7 +1511,7 @@ class SpectralSynthesisHost(BaseAgent):
 
     async def in_brief(self, state):
         summary_json = json.dumps(state['summary'], ensure_ascii=False)
-        prompt_type_with_confusion = f"""
+        prompt_type_synthesized = f"""
 你是一位负责统筹的【天文学光谱分析主持人】
 
 你已经对一张天文学光谱做了总结
@@ -1522,8 +1522,9 @@ class SpectralSynthesisHost(BaseAgent):
 - 输出格式为 str
 - 不要输出其他信息
 """
-        response_type_with_confusion = await self.call_llm_with_context('', prompt_type_with_confusion, parse_json=False, description="总结")
-        state['in_brief']['type_with_confusion'] = response_type_with_confusion
+        response_type_synthesized = await self.call_llm_with_context('', prompt_type_synthesized, parse_json=False, description="总结")
+        state['in_brief']['type_synthesized'] = response_type_synthesized
+        state['in_brief']['type_with_confusion'] = state['preliminary_classification']['type']
         
         prompt_type = f"""
 你是一位负责统筹的【天文学光谱分析主持人】
