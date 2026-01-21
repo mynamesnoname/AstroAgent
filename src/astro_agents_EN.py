@@ -1513,7 +1513,7 @@ Output format as follows:
 
     async def in_brief(self, state):
         summary_json = json.dumps(state['summary'], ensure_ascii=False)
-        prompt_type_with_confusion = f"""
+        prompt_type_synthesized = f"""
 You are a coordinating [Astronomical Spectral Analysis Host].
 
 You have already produced a summary for an astronomical spectrum:
@@ -1524,8 +1524,9 @@ You have already produced a summary for an astronomical spectrum:
 - Output format: str
 - Do not output any other information
 """
-        response_type_with_confusion = await self.call_llm_with_context('', prompt_type_with_confusion, parse_json=False, description="总结")
-        state['in_brief']['type_with_confusion'] = response_type_with_confusion
+        response_type_synthesized = await self.call_llm_with_context('', prompt_type_synthesized, parse_json=False, description="总结")
+        state['in_brief']['type_synthesized'] = response_type_synthesized
+        state['in_brief']['type_with_confusion'] = state['preliminary_classification']['type']
 
         prompt_type = f"""
 You are the lead astronomer acting as the 【Spectral Analysis Moderator】.
