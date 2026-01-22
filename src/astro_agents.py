@@ -655,7 +655,7 @@ Flux 误差：{delta_t_json}
             if overlap:
                 overlap_json = json.dumps(overlap, ensure_ascii=False)
                 band_stuff = f"""
-该光谱在 {overlap_json} 波段存在重叠区域，这些区域的信号为系统噪声，不应计入信号评估。
+该光谱在 {overlap_json} 波段存在因 camera filter 导致的噪声区域，这些区域的信号为系统噪声，不应计入信号评估。
 """
         if dataset == 'CSST':
             # CSST version
@@ -688,7 +688,7 @@ Flux 误差：{delta_t_json}
             system_prompt = f"""
 你是一位经验丰富的天文学光谱分析助手。
 
-你的任务是根据光谱的continuum猜测天体可能属于的类别（Galaxy 或 QSO）。
+你的任务是根据未知红移的光谱图像和continuum猜测天体可能属于的类别（Galaxy 或 QSO）。只根据图像和continuum的形态进行定性分析，不进行定量计算。
 
 从连续谱的角度来说：
 - 如果连续谱呈现蓝端较高，红端较低的趋势，则该天体可能为 QSO；
@@ -1464,7 +1464,8 @@ class SpectralSynthesisHost(BaseAgent):
 
     async def summary(self, state):
         try:
-            preliminary_classification_Carbon_based_life_json = json.dumps(state['preliminary_classification_with_confusion'], ensure_ascii=False)
+            preliminary_classification_with_confusion_json = json.dumps(state['preliminary_classification_with_confusion'], ensure_ascii=False)
+            preliminary_classification_json = json.dumps(state['preliminary_classification'], ensure_ascii=False)
             visual_interpretation_json = json.dumps(state['visual_interpretation'], ensure_ascii=False)
         except Exception as e:
             print("❌ An error occurred during spectral analysis:")
@@ -1478,7 +1479,7 @@ class SpectralSynthesisHost(BaseAgent):
 {visual_interpretation_json}
 
 对光谱的初步分类
-{preliminary_classification_Carbon_based_life_json}
+{preliminary_classification_with_confusion_json}
 """
         system_prompt = self.get_system_prompt() + prompt_1
 
@@ -1490,7 +1491,7 @@ class SpectralSynthesisHost(BaseAgent):
             refine_QSO = "\n\n".join(str(item) for item in state['refine_history_QSO'])
             refine_QSO_json = json.dumps(refine_QSO, ensure_ascii=False)
             prompt_2 = f"""
-进一步尝试：
+分析报告：
 规则分析师的观点：
 {rule_analysis_QSO_json}
 
@@ -1506,14 +1507,13 @@ class SpectralSynthesisHost(BaseAgent):
 
 - 光谱的视觉特点
 - 光谱的初步分类（Galaxy，QSO 还是 Unknow）
-- 综合全部分析，给出的光谱分类（Galaxy，QSO 还是 Unknow）
 - 分析报告（综合规则分析师、审查分析师和完善分析师的所有观点，逐个 Step 进行结构化输出）
     - Step 1
     - Step 2
     - Step 3
     - Step 4
-- 根据进一步尝试做出的总结：
-    - 进一步尝试中给出的该天体的天体类型（必须选择 Galaxy 或 QSO）
+- 分析报告总结：
+    - 分析报告中给出的该天体的天体类型（必须选择 Galaxy 或 QSO）
     - 如果天体是QSO，输出红移 z ± Δz
     - 认证出的谱线（输出 谱线名 - λ_rest - λ_obs - 红移）
     - 光谱的信噪比如何
@@ -1522,56 +1522,73 @@ class SpectralSynthesisHost(BaseAgent):
         能认证出 1 条主要谱线（指 Lyα, C IV, C III, Mg II），且有其他较弱的特征，则可信度为 2；
         能认证出 1 条主要谱线（指 Lyα, C IV, C III, Mg II），但没有其他特征辅助判断，则可信度为 1；
         如果信噪比差，无法认证出谱线，则可信度为 0.
-- 是否需要人工介入判断（可信度为 0-2 时必须引入人工判断。无 Lyα 时必须引入人工判断。对光谱的初步分类为 Unknow 时必须引入人工判断。其余情况自行决策。）
+- 是否需要人工介入判断
+    **注意**：
+        - 对光谱的初步分类为 Unknow 时必须引入人工判断。
+        - 可信度为 0-2 时必须引入人工判断。
+        - 无 Lyα 时必须引入人工判断。
 """
             user_prompt = prompt_2 + prompt_3
         else:
+
             user_prompt = f"""
+分析报告：
+{preliminary_classification_json}
+
 输出格式如下：
 
 - 光谱的视觉特点
 - 光谱的初步分类（Galaxy，QSO 还是 Unknow）
-- 综合全部分析，给出光谱分类（Galaxy，QSO 还是 Unknow）
-- 根据进一步尝试做出的总结：
-    - 进一步尝试中认为该天体的天体类型是（只能从 Galaxy 或 QSO 中进行选择）
+
+- 分析报告总结：
+    - 分析报告中给出的该天体的天体类型（必须选择 Galaxy 或 QSO）
     - 光谱的信噪比如何
     - 分析报告的可信度评分（0 or 2）
         如果对光谱的初步分类认证出类型为 Galaxy，则可信度为 2；否则为 0。
-- 是否需要人工介入判断（如果对光谱的初步分类为 Unknow，或可信度为0，则必须要求人工介入判断）
+- 是否需要人工介入判断
+    **注意**：
+        - 如果对光谱的初步分类为 Unknow，则必须要求人工介入判断；
+        - 如果可信度为0，则必须要求人工介入判断。
 """
-        response = await self.call_llm_with_context(system_prompt, user_prompt, parse_json=False, description="总结")
+        response = await self.call_llm_with_context(
+            system_prompt, 
+            user_prompt, 
+            parse_json=False, 
+            description="总结", 
+            want_tools=False
+        )
         state['summary'] = response
 
     async def in_brief(self, state):
         summary_json = json.dumps(state['summary'], ensure_ascii=False)
-        prompt_type_synthesized = f"""
-你是一位负责统筹的【天文学光谱分析主持人】
+#         prompt_type_synthesized = f"""
+# 你是一位负责统筹的【天文学光谱分析主持人】
 
-你已经对一张天文学光谱做了总结
-{summary_json}
+# 你已经对一张天文学光谱做了总结
+# {summary_json}
 
-- 请输出 **综合全部分析，给出的光谱分类 **（从这三个词语中选择：Galaxy, QSO, Unknow）
+# - 请输出 **综合全部分析，给出的光谱分类 **（从这三个词语中选择：Galaxy, QSO, Unknow）
 
-- 输出格式为 str
-- 不要输出其他信息
-"""
-        response_type_synthesized = await self.call_llm_with_context('', prompt_type_synthesized, parse_json=False, description="总结")
-        state['in_brief']['type_synthesized'] = response_type_synthesized
+# - 输出格式为 str
+# - 不要输出其他信息
+# """
+#         response_type_synthesized = await self.call_llm_with_context('', prompt_type_synthesized, parse_json=False, description="总结")
+#         state['in_brief']['type_synthesized'] = response_type_synthesized
         state['in_brief']['type_with_confusion'] = state['preliminary_classification']['type']
         
-        prompt_type = f"""
+        prompt_type_report = f"""
 你是一位负责统筹的【天文学光谱分析主持人】
 
 你已经对一张天文学光谱做了总结
 {summary_json}
 
-- 请输出 **根据进一步尝试做出的总结** 这一部分中的 **天体类型**（从这两个词语中选择：Galaxy, QSO）
+- 请输出 **分析报告总结** 这一部分中的 **天体类型**（从这两个词语中选择：Galaxy, QSO）
 
 - 输出格式为 str
 - 不要输出其他信息
 """
-        response_type = await self.call_llm_with_context('', prompt_type, parse_json=False, description="总结")
-        state['in_brief']['type'] = response_type
+        response_type_report = await self.call_llm_with_context('', prompt_type_report, parse_json=False, description="总结")
+        state['in_brief']['type_report'] = response_type_report
 
         prompt_redshift = f"""
 你是一位负责统筹的【天文学光谱分析主持人】
@@ -1579,7 +1596,7 @@ class SpectralSynthesisHost(BaseAgent):
 你已经对一张天文学光谱做了总结
 {summary_json}
 
-请输出 **根据进一步尝试做出的总结** 这一部分中的 **红移 z**（不需要输出 ± Δz）
+请输出 **分析报告总结** 这一部分中的 **红移 z**（不需要输出 ± Δz）
 
 - 输出格式为 float 或 None
 - 不要输出其他信息
@@ -1593,7 +1610,7 @@ class SpectralSynthesisHost(BaseAgent):
 你已经对一张天文学光谱做了总结
 {summary_json}
 
-请输出 **根据进一步尝试做出的总结** 这一部分中的 **红移误差 Δz**（不需要输出 z）
+请输出 **分析报告总结** 这一部分中的 **红移误差 Δz**（不需要输出 z）
 
 - 输出格式为 float 或 None
 - 不要输出其他信息
@@ -1607,7 +1624,7 @@ class SpectralSynthesisHost(BaseAgent):
 你已经对一张天文学光谱做了总结
 {summary_json}
 
-请输出 **根据进一步尝试做出的总结** 这一部分中认证出的谱线（只从 Lyα，C IV，C III，Mg II 中选择，无需记录其他谱线）
+请输出 **分析报告总结** 这一部分中认证出的谱线（只从 Lyα，C IV，C III，Mg II 中选择，无需记录其他谱线）
 
 - 输出格式为 str: '（谱线1）,（谱线2）,...' 或 None
 - 不要输出其他信息
@@ -1621,7 +1638,7 @@ class SpectralSynthesisHost(BaseAgent):
 你已经对一张天文学光谱做了总结
 {summary_json}
 
-请输出 **根据进一步尝试做出的总结** 部分中的 **是否需要人工介入判断**
+请输出 **分析报告总结** 部分中的 **是否需要人工介入判断**
 
 - 仅输出“是”或“否”
 - 输出格式为 str
