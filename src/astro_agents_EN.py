@@ -645,20 +645,34 @@ The signal-to-noise ratio (SNR) of this spectrum is {snr_medium}.
 - If the SNR is greater than {snr_threshold}, you MUST provide a definite classification (either "QSO" or "Galaxy").
 - If the SNR is less than {snr_threshold}, due to the low SNR, you MAY include "Unknow" as an option (i.e., "QSO", "Galaxy", or "Unknow").
 """
+        band_name = state['band_name']
+        band_wavelength = state['band_wavelength']
+        band_stuff = ''
+        if band_name and band_wavelength:
+            overlap = find_overlap_regions(band_name, band_wavelength)
+            if overlap:
+                overlap_json = json.dumps(overlap, ensure_ascii=False)
+                band_stuff = f"""
+This spectrum has noisy regions in the {overlap_json} band(s), which are resulted from camera filters. The signals in these regions are system noise and should not be included in signal evaluation.
+"""
         if dataset == 'CSST':
             # CSST version
             system_prompt = f"""
 You are an experienced astronomical spectral analysis assistant.
 
-Your task is to qualitatively infer the likely class of the celestial object (either "Galaxy" or "QSO") based solely on the shape of the continuum—do not perform quantitative calculations.
+Your task is to qualitatively infer the likely class of the celestial object (either "Galaxy" or "QSO") based solely on the shape of the continuum and spectrum—do not perform quantitative calculations.
 
 From the perspective of the continuum:
 - If the continuum shows a decreasing trend (higher in the blue end and lower in the red end), the object is likely a QSO.
 - If the continuum rises toward the middle and then declines toward the red end (i.e., increasing → decreasing), it is also likely a QSO. This typically reflects a power-law continuum observed over a limited wavelength range, where the full spectral window is not covered.
 - If the continuum shows an increasing trend (lower in the blue end and higher in the red end), the object is likely a Galaxy.
 
+From the perspective of spectra:  
+- If the spectral image shows prominent broad emission lines, the object is likely a QSO; otherwise, it is likely a galaxy.
+
 Please compare the likelihoods of these two source types and provide your judgment.
 {snr_stuff}
+{band_stuff}
 """ + """
 Output the object type in JSON format as follows:
 {
@@ -672,13 +686,18 @@ Output only one option. Do not include any other information.
             system_prompt = f"""
 You are an experienced astronomical spectral analysis assistant.
 
+Your task is to qualitatively infer the likely class of the celestial object (either "Galaxy" or "QSO") based solely on the shape of the continuum and spectrum—do not perform quantitative calculations.
+
+From the perspective of the continuum:
 - If the continuum shows a trend of being higher in the blue end and lower in the red end, the object is a QSO.
 - If the continuum shows a trend of being lower in the blue end and higher in the red end, the object is a Galaxy.
 
-Your task is to infer the likely class of the celestial object (either "Galaxy" or "QSO") based on the continuum.
+From the perspective of spectrum:  
+- If the spectral image shows prominent broad emission lines, the object is likely a QSO; otherwise, it is likely a galaxy.
 
 Compare the likelihoods of the two source types and provide your judgment.
 {snr_stuff}
+{band_stuff}
 """ + """
 Output the object type in JSON format as follows:
 {
@@ -695,8 +714,8 @@ Please analyze the following spectrum image.
         response = await self.call_llm_with_context(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
-            image_path=state['continuum_path'],
-            # image_path=[state['continuum_path'], state['image_path']],
+            # image_path=state['continuum_path'],
+            image_path=[state['continuum_path'], state['image_path']],
             parse_json=True,
             description="Preliminary classification",
             want_tools=False
@@ -1439,7 +1458,8 @@ Output Requirements:
 
     async def summary(self, state):
         try:
-            preliminary_classification_Carbon_based_life_json = json.dumps(state['preliminary_classification_with_confusion'], ensure_ascii=False)
+            preliminary_classification_with_confusion_json = json.dumps(state['preliminary_classification_with_confusion'], ensure_ascii=False)
+            preliminary_classification_json = json.dumps(state['preliminary_classification'], ensure_ascii=False)
             visual_interpretation_json = json.dumps(state['visual_interpretation'], ensure_ascii=False)
         except Exception as e:
             print("❌ An error occurred during spectral analysis:")
@@ -1453,7 +1473,7 @@ Visual description of the spectrum:
 {visual_interpretation_json}
 
 Preliminary classification:
-{preliminary_classification_Carbon_based_life_json}
+{preliminary_classification_with_confusion_json}
 """
         system_prompt = self.get_system_prompt() + prompt_1
 
@@ -1465,7 +1485,7 @@ Preliminary classification:
             refine_QSO = "\n\n".join(str(item) for item in state['refine_history_QSO'])
             refine_QSO_json = json.dumps(refine_QSO, ensure_ascii=False)
             prompt_2 = f"""
-Further Attempt:
+Analysis report:
 Rule-based analyst's perspective:
 {rule_analysis_QSO_json}
 
@@ -1481,15 +1501,13 @@ Output format as follows:
 
 - Visual characteristics of the spectrum
 - Preliminary classification (Galaxy, QSO, or Unknow)
-- Synthesize all analyses and provide the spectral classification (Galaxy, QSO, or Unknow)
-    - Just output Galaxy, QSO, or Unknow. 
 - Analysis report (synthesize all viewpoints from the rule-based analyst, auditor, and refinement assistant; structure output step-by-step)
     - Step 1
     - Step 2
     - Step 3
     - Step 4
-- Conclusion based on further attempt
-    - The celestial object type (Choose between Galaxy or QSO, do not output Unknow) provided in the further refinement attempt.
+- Conclusion of analysis report
+    - The celestial object type (Choose between Galaxy or QSO, do not output Unknow) provided in the report.
     - If the object is a QSO, provide redshift z ± Δz
     - Identified spectral lines (format: Line Name - λ_rest - λ_obs - redshift)
     - Signal-to-noise ratio (SNR) of the spectrum
@@ -1499,60 +1517,64 @@ Output format as follows:
     - Score 1: One major emission line (Lyα, C IV, C III], Mg II) is identified, but no corroborating features are present.  
     - Score 0: The signal-to-noise ratio is too poor to reliably identify any emission lines.
 - Whether human intervention is required:
+    **Note**
         - Required if credibility ≤ 2
         - Required if SNR is low and Lyα is absent
-        - Otherwise, decide autonomously
+        - Required if the preliminary classification is "Unknow"
 """
             user_prompt = prompt_2 + prompt_3
         else:
             user_prompt = f"""
+Analysis report:
+{preliminary_classification_json}
+
 Output format as follows:
 
 - Visual characteristics of the spectrum
 - Preliminary classification (Galaxy, QSO, or Unknow)
-- Synthesize all analyses and provide the spectral classification: (Galaxy, QSO, or Unknow)
-    - Just output Galaxy, QSO, or Unknow. 
-- Conclusion based on further attempt
-    - The celestial object type (Choose between Galaxy or QSO, do not output Unknow) provided in the further refinement attempt.
+
+- Conclusion of analysis report
+    - The celestial object type (Choose between Galaxy or QSO, do not output Unknow) provided in the report.
     - Signal-to-noise ratio (SNR) of the spectrum
     - Credibility score (0 or 2):
         - Score 2 if the preliminary classification of thespectra is galaxy; otherwise 0
 - Whether human intervention is required:
-        - if the spectral classification is "Unknow" or scored 0, human review is mandatory.
+    **Note**
+        - if the spectral preliminary classification is "Unknow" or scored 0, human review is mandatory.
 """
         response = await self.call_llm_with_context(system_prompt, user_prompt, parse_json=False, description="Summary")
         state['summary'] = response
 
     async def in_brief(self, state):
         summary_json = json.dumps(state['summary'], ensure_ascii=False)
-        prompt_type_synthesized = f"""
-You are a coordinating [Astronomical Spectral Analysis Host].
+#         prompt_type_synthesized = f"""
+# You are a coordinating [Astronomical Spectral Analysis Host].
 
-You have already produced a summary for an astronomical spectrum:
-{summary_json}
+# You have already produced a summary for an astronomical spectrum:
+# {summary_json}
 
-- Please output only the **Synthesize all analyses and provide the spectral classification** part (choose one of these three terms: Unknow, Galaxy, QSO)
+# - Please output only the **Synthesize all analyses and provide the spectral classification** part (choose one of these three terms: Unknow, Galaxy, QSO)
 
-- Output format: str
-- Do not output any other information
-"""
-        response_type_synthesized = await self.call_llm_with_context('', prompt_type_synthesized, parse_json=False, description="总结")
-        state['in_brief']['type_synthesized'] = response_type_synthesized
+# - Output format: str
+# - Do not output any other information
+# """
+#         response_type_synthesized = await self.call_llm_with_context('', prompt_type_synthesized, parse_json=False, description="总结")
+#         state['in_brief']['type_synthesized'] = response_type_synthesized
         state['in_brief']['type_with_confusion'] = state['preliminary_classification']['type']
 
-        prompt_type = f"""
+        prompt_type_report = f"""
 You are the lead astronomer acting as the 【Spectral Analysis Moderator】.
 
 You have already summarized an astronomical spectrum:
 {summary_json}
 
-- Please output only the **celestial object type** from the section titled "**Conclusion based on further attempt**". Choose strictly between these two terms: Galaxy or QSO.
+- Please output only the **celestial object type** from the section titled "**Conclusion of analysis report**". Choose strictly between these two terms: Galaxy or QSO.
 
 - Output format: str
 - Do not output any other information.
 """
-        response_type = await self.call_llm_with_context('', prompt_type, parse_json=False, description="Summary")
-        state['in_brief']['type'] = response_type
+        response_type_report = await self.call_llm_with_context('', prompt_type_report, parse_json=False, description="总结")
+        state['in_brief']['type_report'] = response_type_report
 
         prompt_redshift = f"""
 You are a coordinating [Astronomical Spectral Analysis Host].
@@ -1560,7 +1582,7 @@ You are a coordinating [Astronomical Spectral Analysis Host].
 You have already produced a summary for an astronomical spectrum:
 {summary_json}
 
-Please extract only the **redshift z** from the **Conclusion based on further attempt** section (do not include ± Δz)
+Please extract only the **redshift z** from the **Conclusion of analysis report** section (do not include ± Δz)
 
 - Output format: float or None
 - Do not output any other information
@@ -1574,7 +1596,7 @@ You are a coordinating [Astronomical Spectral Analysis Host].
 You have already produced a summary for an astronomical spectrum:
 {summary_json}
 
-Please extract only the **redshift uncertainty Δz** from the **Conclusion based on further attempt** section (do not include z)
+Please extract only the **redshift uncertainty Δz** from the **Conclusion of analysis report** section (do not include z)
 
 - Output format: float or None
 - Do not output any other information
@@ -1588,9 +1610,9 @@ You are a coordinating [Astronomical Spectral Analysis Host].
 You have already produced a summary for an astronomical spectrum:
 {summary_json}
 
-Please output only the emission lines identified in the section titled "Conclusion based on further attempt", selecting exclusively from: Lyα, C IV, C III], Mg II. Do not include any other spectral lines.
+Please output only the emission lines identified in the section titled "Conclusion of analysis report", selecting exclusively from: Lyα, C IV, C III], Mg II. Do not include any other spectral lines.
 
-- Output format: float or None
+- Output format: str: '(line 1), (line 2), ...' or None
 - Do not output any other information
 """
         response_lines = await self.call_llm_with_context('', prompt_lines, parse_json=False, description="总结")
@@ -1602,7 +1624,7 @@ You are a coordinating [Astronomical Spectral Analysis Host].
 You have already produced a summary for an astronomical spectrum:
 {summary_json}
 
-Please indicate whether **human intervention is required**, based on the **Conclusion based on further attempt** section.
+Please indicate whether **human intervention is required**, based on the **Conclusion of analysis report** section.
 
 - Output only “Yes” or “No”
 - Output format: str
