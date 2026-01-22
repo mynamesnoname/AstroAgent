@@ -647,20 +647,34 @@ Flux 误差：{delta_t_json}
 - 当信噪比大于 {snr_threshold} 时，请你必须给出判断（即 QSO 或 Galaxy）
 - 当信噪比小于 {snr_threshold} 时，由于信噪比较低，允许你的判断中加入Unknow选项（即 QSO, Galaxy 或 Unknow）
 """
+        band_name = state['band_name']
+        band_wavelength = state['band_wavelength']
+        band_stuff = ''
+        if band_name and band_wavelength:
+            overlap = find_overlap_regions(band_name, band_wavelength)
+            if overlap:
+                overlap_json = json.dumps(overlap, ensure_ascii=False)
+                band_stuff = f"""
+该光谱在 {overlap_json} 波段存在重叠区域，这些区域的信号为系统噪声，不应计入信号评估。
+"""
         if dataset == 'CSST':
             # CSST version
             system_prompt = f"""
 你是一位经验丰富的天文学光谱分析助手。
 
-你的任务是根据光谱的continuum猜测天体可能属于的类别（Galaxy 或 QSO）。只根据continuum的形态进行定性分析，不进行定量计算。
+你的任务是根据未知红移的光谱图像和continuum猜测天体可能属于的类别（Galaxy 或 QSO）。只根据图像和continuum的形态进行定性分析，不进行定量计算。
 
 从连续谱的角度来说：
 - 如果连续谱呈现蓝端较高，红端较低的趋势（即下降），则该天体可能为 QSO；
 - 如果连续谱呈现蓝端较低，中段较高，红端下降的趋势（即上升→下降），则该天体可能为 QSO，这通常反映其幂律连续谱在有限波长范围内的表现，即信号没有覆盖整个观测窗口；
 - 如果连续谱呈现蓝端较低，红端较高的趋势（即上升），则该天体可能为 Galaxy ；
 
+从图像的角度来说：
+- 如果光谱图像中存在明显的宽发射线特征，则该天体可能为 QSO；反之可能为 Galaxy；
+
 请结合以上规则，比较两种光源的可能性，给出你的选择。
 {snr_stuff}
+{band_stuff}
 """+"""
 输出天体类别，格式为如下 json 形式：
 {
@@ -676,11 +690,16 @@ Flux 误差：{delta_t_json}
 
 你的任务是根据光谱的continuum猜测天体可能属于的类别（Galaxy 或 QSO）。
 
-如果连续谱呈现蓝端较高，红端较低的趋势，则该天体可能为 QSO；
-如果连续谱呈现蓝端较低，红端较高的趋势，则该天体可能为 Galaxy；
+从连续谱的角度来说：
+- 如果连续谱呈现蓝端较高，红端较低的趋势，则该天体可能为 QSO；
+- 如果连续谱呈现蓝端较低，红端较高的趋势，则该天体可能为 Galaxy；
+
+从图像的角度来说：
+- 如果光谱图像中存在明显的宽发射线特征，则该天体可能为 QSO；反之可能为 Galaxy；
 
 比较两种光源的可能性，给出你的选择。
 {snr_stuff}
+{band_stuff}
 """+"""
 输出天体类别，格式为如下的 json 形式：
 {
@@ -695,8 +714,8 @@ Flux 误差：{delta_t_json}
         response = await self.call_llm_with_context(
             system_prompt = system_prompt,
             user_prompt = user_prompt,
-            image_path=state['continuum_path'],
-            # image_path=[state['continuum_path'],state['image_path']],
+            # image_path=state['continuum_path'],
+            image_path=[state['continuum_path'],state['image_path']],
             parse_json=True,
             description="初步分类",
             want_tools=False
@@ -1503,7 +1522,7 @@ class SpectralSynthesisHost(BaseAgent):
         能认证出 1 条主要谱线（指 Lyα, C IV, C III, Mg II），且有其他较弱的特征，则可信度为 2；
         能认证出 1 条主要谱线（指 Lyα, C IV, C III, Mg II），但没有其他特征辅助判断，则可信度为 1；
         如果信噪比差，无法认证出谱线，则可信度为 0.
-- 是否需要人工介入判断（可信度为 0-2 时必须引入人工判断。无 Lyα 时必须引入人工判断。对光谱的严格分类为 Unknow 时必须引入人工判断。其余情况自行决策。）
+- 是否需要人工介入判断（可信度为 0-2 时必须引入人工判断。无 Lyα 时必须引入人工判断。对光谱的初步分类为 Unknow 时必须引入人工判断。其余情况自行决策。）
 """
             user_prompt = prompt_2 + prompt_3
         else:
@@ -1518,7 +1537,7 @@ class SpectralSynthesisHost(BaseAgent):
     - 光谱的信噪比如何
     - 分析报告的可信度评分（0 or 2）
         如果对光谱的初步分类认证出类型为 Galaxy，则可信度为 2；否则为 0。
-- 是否需要人工介入判断（如果对光谱的分类为 Unknow或可信度为0，则必须要求人工介入判断）
+- 是否需要人工介入判断（如果对光谱的初步分类为 Unknow，或可信度为0，则必须要求人工介入判断）
 """
         response = await self.call_llm_with_context(system_prompt, user_prompt, parse_json=False, description="总结")
         state['summary'] = response
