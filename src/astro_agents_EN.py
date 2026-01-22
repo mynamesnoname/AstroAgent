@@ -1516,9 +1516,9 @@ Output format as follows:
     - The celestial object type (Choose between Galaxy or QSO, do not output Unknow) provided in the further refinement attempt.
     - Signal-to-noise ratio (SNR) of the spectrum
     - Credibility score (0 or 2):
-        - Score 2 if the visual description of the spectrum indicates it is suitable for quantitative use and the spectra is classified as galaxy; otherwise 0
+        - Score 2 if the preliminary classification of thespectra is galaxy; otherwise 0
 - Whether human intervention is required:
-        - if the spectral classification is "Unknow", human review is mandatory.
+        - if the spectral classification is "Unknow" or scored 0, human review is mandatory.
 """
         response = await self.call_llm_with_context(system_prompt, user_prompt, parse_json=False, description="Summary")
         state['summary'] = response

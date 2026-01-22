@@ -1517,8 +1517,8 @@ class SpectralSynthesisHost(BaseAgent):
     - 进一步尝试中认为该天体的天体类型是（只能从 Galaxy 或 QSO 中进行选择）
     - 光谱的信噪比如何
     - 分析报告的可信度评分（0 or 2）
-        如果对光谱的严格分类认证出类型为 Galaxy，则可信度为 2；否则为 0。
-- 是否需要人工介入判断（如果对光谱的分类为 Unknow，则必须要求人工介入判断）
+        如果对光谱的初步分类认证出类型为 Galaxy，则可信度为 2；否则为 0。
+- 是否需要人工介入判断（如果对光谱的分类为 Unknow或可信度为0，则必须要求人工介入判断）
 """
         response = await self.call_llm_with_context(system_prompt, user_prompt, parse_json=False, description="总结")
         state['summary'] = response
