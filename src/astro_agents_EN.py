@@ -1475,7 +1475,17 @@ Visual description of the spectrum:
 
 """
         system_prompt = self.get_system_prompt() + prompt_1
-
+        snr_threshold = getenv_float("SNR_THRESHOLD", '')
+        if snr_threshold == '':
+            snr_stuff = ''
+        else:
+            snr_medium = state['spectrum']['snr_medium']
+            snr_stuff = f"""
+- Please provide a final classification of the spectral type: 
+    The signal-to-noise ratio (SNR) of this spectrum is {snr_medium}.
+        - If the SNR is greater than {snr_threshold}, you must make a definite classification (i.e., either QSO or Galaxy).
+        - If the SNR is less than {snr_threshold}, due to the low signal-to-noise ratio, you may include "Unknown" as an option (i.e., QSO, Galaxy, or Unknown).
+"""
         if state['preliminary_classification']['type'] == "QSO":
             rule_analysis_QSO = "\n\n".join(str(item) for item in state['rule_analysis_QSO'])
             rule_analysis_QSO_json = json.dumps(rule_analysis_QSO, ensure_ascii=False)
@@ -1520,6 +1530,7 @@ Output format as follows:
         - Required if credibility ≤ 2
         - Required if SNR is low and Lyα is absent
         - Required if the preliminary classification is "Unknow"
+{snr_stuff}
 """
             user_prompt = prompt_2 + prompt_3
         else:
@@ -1540,32 +1551,31 @@ Output format as follows:
 - Whether human intervention is required:
     **Note**
         - if the spectral preliminary classification is "Unknow" or scored 0, human review is mandatory.
+{snr_stuff}
 """
         response = await self.call_llm_with_context(system_prompt, user_prompt, parse_json=False, description="Summary")
         state['summary'] = response
 
     async def in_brief(self, state):
         summary_json = json.dumps(state['summary'], ensure_ascii=False)
-        snr_threshold = getenv_float("SNR_THRESHOLD", '')
-        if snr_threshold == '':
-            snr_stuff = ''
-        else:
-            snr_medium = state['spectrum']['snr_medium']
-            snr_stuff = f"""
-You are an [Astronomical Spectral Analysis Assistant].
-Below is a spectral analysis report based on a PNG spectral image:
+
+        snr_stuff = f"""
+You are the lead astronomer acting as the 【Spectral Analysis Moderator】.
+
+You have already summarized an astronomical spectrum:
 {summary_json}
-Please provide a final classification of the spectral type.
-The signal-to-noise ratio (SNR) of this spectrum is {snr_medium}.
-- If the SNR is greater than {snr_threshold}, you must make a definite classification (i.e., either QSO or Galaxy).
-- If the SNR is less than {snr_threshold}, due to the low signal-to-noise ratio, you may include "Unknown" as an option (i.e., QSO, Galaxy, or Unknown).
+
+- Please output only the **final classification** part of this report.
+
+- Output format: str
+- Do not output any other information.
 """
         prompt_type_with_confusion = snr_stuff
         response_type_with_confusion = await self.call_llm_with_context(
         prompt_type_with_confusion, '', parse_json=False, description="总结", want_tools=False
         )
         state['in_brief']['type_with_confusion'] = response_type_with_confusion
-        # state['in_brief']['type_with_confusion'] = state['preliminary_classification']['type']
+        state['in_brief']['type_with_confusion'] = state['preliminary_classification_with_confusion']['type']
 
         prompt_type_report = f"""
 You are the lead astronomer acting as the 【Spectral Analysis Moderator】.
