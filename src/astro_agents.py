@@ -1472,14 +1472,13 @@ class SpectralSynthesisHost(BaseAgent):
             print(f"Error type: {type(e).__name__}")
             print(f"Error message: {str(e)}")
             raise
-
+# 对光谱的初步分类
+# {preliminary_classification_with_confusion_json}
         prompt_1 = f"""
 
 对光谱的视觉描述
 {visual_interpretation_json}
 
-对光谱的初步分类
-{preliminary_classification_with_confusion_json}
 """
         system_prompt = self.get_system_prompt() + prompt_1
 
@@ -1501,12 +1500,12 @@ class SpectralSynthesisHost(BaseAgent):
 完善分析师的观点：
 {refine_QSO_json}
 """
+# - 光谱的初步分类（Galaxy，QSO 还是 Unknow）
             prompt_3 = f"""
 
 输出格式如下：
 
 - 光谱的视觉特点
-- 光谱的初步分类（Galaxy，QSO 还是 Unknow）
 - 分析报告（综合规则分析师、审查分析师和完善分析师的所有观点，逐个 Step 进行结构化输出）
     - Step 1
     - Step 2
@@ -1530,7 +1529,7 @@ class SpectralSynthesisHost(BaseAgent):
 """
             user_prompt = prompt_2 + prompt_3
         else:
-
+# - 光谱的初步分类（Galaxy，QSO 还是 Unknow）
             user_prompt = f"""
 分析报告：
 {preliminary_classification_json}
@@ -1538,7 +1537,6 @@ class SpectralSynthesisHost(BaseAgent):
 输出格式如下：
 
 - 光谱的视觉特点
-- 光谱的初步分类（Galaxy，QSO 还是 Unknow）
 
 - 分析报告总结：
     - 分析报告中给出的该天体的天体类型（必须选择 Galaxy 或 QSO）
@@ -1559,22 +1557,30 @@ class SpectralSynthesisHost(BaseAgent):
         )
         state['summary'] = response
 
+
+
     async def in_brief(self, state):
         summary_json = json.dumps(state['summary'], ensure_ascii=False)
-#         prompt_type_synthesized = f"""
-# 你是一位负责统筹的【天文学光谱分析主持人】
-
-# 你已经对一张天文学光谱做了总结
-# {summary_json}
-
-# - 请输出 **综合全部分析，给出的光谱分类 **（从这三个词语中选择：Galaxy, QSO, Unknow）
-
-# - 输出格式为 str
-# - 不要输出其他信息
-# """
-#         response_type_synthesized = await self.call_llm_with_context('', prompt_type_synthesized, parse_json=False, description="总结")
-#         state['in_brief']['type_synthesized'] = response_type_synthesized
-        state['in_brief']['type_with_confusion'] = state['preliminary_classification']['type']
+        snr_threshold = getenv_float("SNR_THRESHOLD", '')
+        if snr_threshold == '':
+            snr_stuff = ''
+        else:
+            snr_medium = state['spectrum']['snr_medium']
+            snr_stuff = f"""
+你是一个【天文学光谱分析助手】。
+以下是一份基于PNG光谱图像的 **光谱分析报告**：
+{summary_json}
+请对光谱类型进行最终判断。
+该光谱的信噪比为{snr_medium}。
+- 当信噪比大于 {snr_threshold} 时，请你必须给出判断（即 QSO 或 Galaxy）
+- 当信噪比小于 {snr_threshold} 时，由于信噪比较低，允许你的判断中加入Unknow选项（即 QSO, Galaxy 或 Unknow）
+"""
+        prompt_type_with_confusion = snr_stuff
+        response_type_with_confusion = await self.call_llm_with_context(
+        prompt_type_with_confusion, '', parse_json=False, description="总结", want_tools=False
+        )
+        state['in_brief']['type_with_confusion'] = response_type_with_confusion
+        # state['in_brief']['type_with_confusion'] = state['preliminary_classification']['type']
         
         prompt_type_report = f"""
 你是一位负责统筹的【天文学光谱分析主持人】
