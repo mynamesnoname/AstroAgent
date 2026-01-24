@@ -1558,7 +1558,6 @@ Output format as follows:
 
     async def in_brief(self, state):
         summary_json = json.dumps(state['summary'], ensure_ascii=False)
-
         snr_stuff = f"""
 You are the lead astronomer acting as the 【Spectral Analysis Moderator】.
 
@@ -1575,7 +1574,7 @@ You have already summarized an astronomical spectrum:
         prompt_type_with_confusion, '', parse_json=False, description="总结", want_tools=False
         )
         state['in_brief']['type_with_confusion'] = response_type_with_confusion
-        state['in_brief']['type_with_confusion'] = state['preliminary_classification_with_confusion']['type']
+        # state['in_brief']['type_with_confusion'] = state['preliminary_classification_with_confusion']['type']
 
         prompt_type_report = f"""
 You are the lead astronomer acting as the 【Spectral Analysis Moderator】.
