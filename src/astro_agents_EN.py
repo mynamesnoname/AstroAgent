@@ -1466,14 +1466,13 @@ Output Requirements:
             print(f"Error type: {type(e).__name__}")
             print(f"Error message: {str(e)}")
             raise
-
+# Preliminary classification:
+# {preliminary_classification_with_confusion_json}
         prompt_1 = f"""
 
 Visual description of the spectrum:
 {visual_interpretation_json}
 
-Preliminary classification:
-{preliminary_classification_with_confusion_json}
 """
         system_prompt = self.get_system_prompt() + prompt_1
 
@@ -1495,12 +1494,12 @@ Auditor's perspective:
 Refinement assistant's perspective:
 {refine_QSO_json}
 """
+# - Preliminary classification (Galaxy, QSO, or Unknow)
             prompt_3 = f"""
 
 Output format as follows:
 
 - Visual characteristics of the spectrum
-- Preliminary classification (Galaxy, QSO, or Unknow)
 - Analysis report (synthesize all viewpoints from the rule-based analyst, auditor, and refinement assistant; structure output step-by-step)
     - Step 1
     - Step 2
@@ -1524,6 +1523,7 @@ Output format as follows:
 """
             user_prompt = prompt_2 + prompt_3
         else:
+# - Preliminary classification (Galaxy, QSO, or Unknow)
             user_prompt = f"""
 Analysis report:
 {preliminary_classification_json}
@@ -1531,7 +1531,6 @@ Analysis report:
 Output format as follows:
 
 - Visual characteristics of the spectrum
-- Preliminary classification (Galaxy, QSO, or Unknow)
 
 - Conclusion of analysis report
     - The celestial object type (Choose between Galaxy or QSO, do not output Unknow) provided in the report.
@@ -1547,20 +1546,26 @@ Output format as follows:
 
     async def in_brief(self, state):
         summary_json = json.dumps(state['summary'], ensure_ascii=False)
-#         prompt_type_synthesized = f"""
-# You are a coordinating [Astronomical Spectral Analysis Host].
-
-# You have already produced a summary for an astronomical spectrum:
-# {summary_json}
-
-# - Please output only the **Synthesize all analyses and provide the spectral classification** part (choose one of these three terms: Unknow, Galaxy, QSO)
-
-# - Output format: str
-# - Do not output any other information
-# """
-#         response_type_synthesized = await self.call_llm_with_context('', prompt_type_synthesized, parse_json=False, description="总结")
-#         state['in_brief']['type_synthesized'] = response_type_synthesized
-        state['in_brief']['type_with_confusion'] = state['preliminary_classification']['type']
+        snr_threshold = getenv_float("SNR_THRESHOLD", '')
+        if snr_threshold == '':
+            snr_stuff = ''
+        else:
+            snr_medium = state['spectrum']['snr_medium']
+            snr_stuff = f"""
+You are an [Astronomical Spectral Analysis Assistant].
+Below is a spectral analysis report based on a PNG spectral image:
+{summary_json}
+Please provide a final classification of the spectral type.
+The signal-to-noise ratio (SNR) of this spectrum is {snr_medium}.
+- If the SNR is greater than {snr_threshold}, you must make a definite classification (i.e., either QSO or Galaxy).
+- If the SNR is less than {snr_threshold}, due to the low signal-to-noise ratio, you may include "Unknown" as an option (i.e., QSO, Galaxy, or Unknown).
+"""
+        prompt_type_with_confusion = snr_stuff
+        response_type_with_confusion = await self.call_llm_with_context(
+        prompt_type_with_confusion, '', parse_json=False, description="总结", want_tools=False
+        )
+        state['in_brief']['type_with_confusion'] = response_type_with_confusion
+        # state['in_brief']['type_with_confusion'] = state['preliminary_classification']['type']
 
         prompt_type_report = f"""
 You are the lead astronomer acting as the 【Spectral Analysis Moderator】.
