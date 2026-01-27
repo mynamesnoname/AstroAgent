@@ -635,93 +635,121 @@ Flux 误差：{delta_t_json}
 
     async def preliminary_classification_with_confusion(self, state: SpectroState) -> str:
         """初步分类：根据光谱形态初步判断天体类型"""
-
         dataset = os.getenv("DATA_SET", "")
-        snr_threshold = getenv_float("SNR_THRESHOLD", '')
-        if snr_threshold == '':
-            snr_stuff = ''
-        else:
-            snr_medium = state['spectrum']['snr_medium']
-            snr_stuff = f"""
-该光谱的信噪比为{snr_medium}。
-- 当信噪比大于 {snr_threshold} 时，请你必须给出判断（即 QSO 或 Galaxy）
-- 当信噪比小于 {snr_threshold} 时，由于信噪比较低，允许你的判断中加入Unknow选项（即 QSO, Galaxy 或 Unknow）
-"""
+        wavelength = np.array(state['spectrum']['new_wavelength'])
+
         band_name = state['band_name']
         band_wavelength = state['band_wavelength']
         band_stuff = ''
         if band_name and band_wavelength:
             overlap = find_overlap_regions(band_name, band_wavelength)
-            if overlap:
-                overlap_json = json.dumps(overlap, ensure_ascii=False)
-                band_stuff = f"""
-该光谱在 {overlap_json} 波段存在因 camera filter 导致的噪声区域，这些区域的信号为系统噪声，不应计入信号评估。
+        # test 1: snr cut
+        if overlap:
+            mask = np.zeros_like(wavelength, dtype=bool)
+            for key, interval in overlap.items():
+                a, b = interval
+                band_mask = (wavelength >= a) & (wavelength <= b)            
+            mask = mask | band_mask
+            mask = ~mask
+        else:
+            mask = np.ones_like(wavelength, dtype=bool)
+        snr = np.array(state['spectrum']['effective_snr'])
+        mask_ = ~np.isinf(snr)  # 排除正负无穷大值
+        mask_[0] = False  # 同时排除第一个值
+        mask_[-1] = False
+        mask = mask & mask_
+        snr_ok = np.abs(snr[mask])
+        snr_max = np.max(snr_ok)
+
+        snr_threshold = getenv_float("SNR_THRESHOLD", '')
+        confusion_parameter = getenv_float("CONFUSION_PARAMETER", '')
+        if snr_threshold == '':
+            snr_stuff = ''
+        else:
+            snr_threshold_reduced = confusion_parameter*snr_threshold
+            snr_stuff = f"""
+该光谱的最大信噪比为 {snr_max}。
+- 当最大信噪比大于 {snr_threshold} 时，请你必须给出判断（即 QSO 或 Galaxy）；
+- 当最大信噪比小于 {snr_threshold}，但大于 {snr_threshold_reduced} 时，允许你的判断中加入 Unknow 选项（即 QSO, Galaxy 或 Unknow）；
+- 当最大信噪比小于 {snr_threshold_reduced} 时，直接输出 Unknow。
 """
+        continuum_interpretation_json = json.dumps(state['visual_interpretation']['continuum_description'], ensure_ascii=False)
         if dataset == 'CSST':
             # CSST version
             system_prompt = f"""
 你是一位经验丰富的天文学光谱分析助手。
 
-你的任务是根据未知红移的光谱图像和continuum猜测天体可能属于的类别（Galaxy 或 QSO）。只根据图像和continuum的形态进行定性分析，不进行定量计算。
+你的任务是根据未知红移的光谱特征猜测天体可能属于的类别（Galaxy 或 QSO）。
 
 从连续谱的角度来说：
 - 如果连续谱呈现蓝端较高，红端较低的趋势（即下降），则该天体可能为 QSO；
 - 如果连续谱呈现蓝端较低，中段较高，红端下降的趋势（即上升→下降），则该天体可能为 QSO，这通常反映其幂律连续谱在有限波长范围内的表现，即信号没有覆盖整个观测窗口；
 - 如果连续谱呈现蓝端较低，红端较高的趋势（即上升），则该天体可能为 Galaxy ；
 
-从图像的角度来说：
-- 如果光谱图像中存在明显的宽发射线特征，则该天体可能为 QSO；反之可能为 Galaxy；
-
-请结合以上规则，比较两种光源的可能性，给出你的选择。
 {snr_stuff}
-{band_stuff}
-"""+"""
-输出天体类别，格式为如下 json 形式：
-{
-    'type': str,  # 天体类别
-}
 
-仅输出唯一选项。不要输出其他信息。
+前一位天文学助手已经定性地描述了光谱的整体形态：
+{continuum_interpretation_json}
+请结合以上规则，比较两种光源的可能性，给出你的判断。
 """
         else:
             # DESI version
             system_prompt = f"""
 你是一位经验丰富的天文学光谱分析助手。
 
-你的任务是根据未知红移的光谱图像和continuum猜测天体可能属于的类别（Galaxy 或 QSO）。只根据图像和continuum的形态进行定性分析，不进行定量计算。
+你的任务是根据未知红移的光谱特征猜测天体可能属于的类别（Galaxy 或 QSO）。
 
 从连续谱的角度来说：
 - 如果连续谱呈现蓝端较高，红端较低的趋势，则该天体可能为 QSO；
 - 如果连续谱呈现蓝端较低，红端较高的趋势，则该天体可能为 Galaxy；
 
-从图像的角度来说：
-- 如果光谱图像中存在明显的宽发射线特征，则该天体可能为 QSO；反之可能为 Galaxy；
-
-比较两种光源的可能性，给出你的选择。
 {snr_stuff}
-{band_stuff}
-"""+"""
-输出天体类别，格式为如下的 json 形式：
-{
-    'type': str,  # 天体类别
-}
 
-仅输出唯一选项。不要输出其他信息。
+前一位天文学助手已经定性地描述了光谱的整体形态：
+{continuum_interpretation_json}
+请结合以上规则，比较两种光源的可能性，给出你的判断。
 """
         user_prompt = f"""
-请根据以下光谱图进行分析。
+请开始分析。
 """
         response = await self.call_llm_with_context(
             system_prompt = system_prompt,
             user_prompt = user_prompt,
-            # image_path=state['continuum_path'],
-            image_path=[state['continuum_path'],state['image_path']],
+            # image_path=[state['continuum_path'],state['image_path']],
             parse_json=True,
             description="初步分类",
             want_tools=False
         )
         state['preliminary_classification_with_confusion'] = response
-        print(f'preliminary_classification_with_confusion: {response}')
+        # print(f'preliminary_classification_with_confusion: {response}')
+
+    async def preliminary_classification_monkey(self, state: SpectroState) -> str:
+        """对 preliminary_classification_with_confusion 进行结构化输出"""
+        
+        system_prompt = """
+你是一个善于提取信息的 AI 助手。
+
+你的任务是根据以下信息，提取出对某天体光谱进行分类的结果。
+
+请输出 json 格式的结果，格式如下：
+{
+    'type': str,  # 天体类别，可能的取值为 "Galaxy", "QSO", "Unknow"
+}
+"""
+        user_prompt = f"""
+请根据以下信息，提取出初步分类的结果：
+
+{state['preliminary_classification_with_confusion']}
+"""
+        response = await self.call_llm_with_context(
+            system_prompt = system_prompt,
+            user_prompt = user_prompt,
+            parse_json=True,
+            description="初步分类",
+            want_tools=False
+        )
+        state['preliminary_classification_monkey'] = response
+        print(f'preliminary_classification_monkey: {response}')
 
     ###################################
     # QSO part
@@ -951,7 +979,7 @@ Step 1: Lyα 谱线检测
                     else:
                         # 处理wiped_peaks为空的情况
                         wws = 0  # 或使用默认值
-                    print(f"wws: {wws}")
+                    # print(f"wws: {wws}")
                     for key in overlap_regions:
                         range = overlap_regions[key]
                         overlap_regions[key] = [range[0]-wws, range[1]+wws] # Broaden the overlap regions to make sure LLM won't miss them
@@ -986,6 +1014,7 @@ Step 2: 其他显著发射线分析
                 raise e
 
         async def step_3_QSO(state):
+            print("Step 3: 综合判断")
             try:
                 header = _common_prompt_header_QSO(state)
                 tail = _common_prompt_tail("Step 3: 综合判断")
@@ -1009,6 +1038,7 @@ Step 3: 综合判断
                 raise e
             
         async def step_4_QSO(state):
+            print("Step 4: 补充步骤")
             try: 
                 header = _common_prompt_header_QSO(state, include_step_1_only=True)
                 tail = _common_prompt_tail("Step 4: 补充步骤（假设 Step 1 所选择的谱线并非 Lyα）")
@@ -1055,8 +1085,8 @@ Step 4: 补充步骤（假设 Step 1 所选择的谱线并非 Lyα）
 
             plot_cleaned_features(state)
             await self.preliminary_classification(state)
-            # print(state['preliminary_classification'])
             await self.preliminary_classification_with_confusion(state)
+            await self.preliminary_classification_monkey(state)
 
             if state['preliminary_classification']['type'] == "QSO":
                 await self._QSO(state)
@@ -1464,7 +1494,7 @@ class SpectralSynthesisHost(BaseAgent):
 
     async def summary(self, state):
         try:
-            preliminary_classification_with_confusion_json = json.dumps(state['preliminary_classification_with_confusion'], ensure_ascii=False)
+            preliminary_classification_monkey_json = json.dumps(state['preliminary_classification_monkey'], ensure_ascii=False)
             preliminary_classification_json = json.dumps(state['preliminary_classification'], ensure_ascii=False)
             visual_interpretation_json = json.dumps(state['visual_interpretation'], ensure_ascii=False)
         except Exception as e:
@@ -1472,12 +1502,13 @@ class SpectralSynthesisHost(BaseAgent):
             print(f"Error type: {type(e).__name__}")
             print(f"Error message: {str(e)}")
             raise
-# 对光谱的初步分类
-# {preliminary_classification_with_confusion_json}
         prompt_1 = f"""
 
 对光谱的视觉描述
 {visual_interpretation_json}
+
+对光谱的初步分类
+{preliminary_classification_monkey_json}
 
 """
         system_prompt = self.get_system_prompt() + prompt_1
@@ -1490,22 +1521,25 @@ class SpectralSynthesisHost(BaseAgent):
             refine_QSO = "\n\n".join(str(item) for item in state['refine_history_QSO'])
             refine_QSO_json = json.dumps(refine_QSO, ensure_ascii=False)
             prompt_2 = f"""
-分析报告：
-规则分析师的观点：
+进一步尝试给出的分析报告：
+- 规则分析师的观点：
 {rule_analysis_QSO_json}
 
-审查分析师的观点：
+- 审查分析师的观点：
 {auditing_QSO_json}
 
-完善分析师的观点：
+- 完善分析师的观点：
 {refine_QSO_json}
 """
-# - 光谱的初步分类（Galaxy，QSO 还是 Unknow）
             prompt_3 = f"""
 
 输出格式如下：
 
-- 光谱的视觉特点
+1. 光谱的视觉特点
+
+2. 光谱的初步分类（根据“对光谱的初步分类”这一部分进行回答，光谱是 Galaxy，QSO 还是 Unknow）
+
+3.进一步尝试：
 - 分析报告（综合规则分析师、审查分析师和完善分析师的所有观点，逐个 Step 进行结构化输出）
     - Step 1
     - Step 2
@@ -1516,135 +1550,173 @@ class SpectralSynthesisHost(BaseAgent):
     - 如果天体是QSO，输出红移 z ± Δz
     - 认证出的谱线（输出 谱线名 - λ_rest - λ_obs - 红移）
     - 光谱的信噪比如何
-    - 分析报告的可信度评分（0-3）：
-        如果能认证出 2 条以上的主要谱线（指 Lyα, C IV, C III, Mg II），则可信度为 3；
-        能认证出 1 条主要谱线（指 Lyα, C IV, C III, Mg II），且有其他较弱的特征，则可信度为 2；
-        能认证出 1 条主要谱线（指 Lyα, C IV, C III, Mg II），但没有其他特征辅助判断，则可信度为 1；
+"""
+            system_prompt = system_prompt + prompt_2 + prompt_3
+            response = await self.call_llm_with_context(
+                system_prompt, 
+                "请开始总结", 
+                parse_json=False, 
+                description="总结", 
+                want_tools=False
+            )
+            system_prompt_4 = f"""
+你是一个善于处理信息的 AI 助手。
+
+以下是对一个天文学光谱的详细研究：
+{response}
+
+请接着以上研究输出一个结构化总结，输出格式为
+
+4. 光谱的可信度评分（0-3）：
+    - 如果 **2. 光谱的初步分类** 这一节输出为 Unknow （请勿与 **分析报告总结** 中的信息混淆），则可信度为 0；
+    - 如果 **2. 光谱的初步分类** 这一节输出非 Unknow，则根据以下规则进行评分：
+        分析报告能认证出 2 条以上的主要谱线（指 Lyα, C IV, C III, Mg II），则可信度为 3；
+        分析报告能认证出 1 条主要谱线（指 Lyα, C IV, C III, Mg II），且有其他较弱的特征，则可信度为 2；
+        分析报告能认证出 1 条主要谱线（指 Lyα, C IV, C III, Mg II），但没有其他特征辅助判断，则可信度为 1；
         如果信噪比差，无法认证出谱线，则可信度为 0.
-- 是否需要人工介入判断
+
+5. 是否需要人工介入判断
     **注意**：
         - 对光谱的初步分类为 Unknow 时必须引入人工判断。
         - 可信度为 0-2 时必须引入人工判断。
         - 无 Lyα 时必须引入人工判断。
 """
-            user_prompt = prompt_2 + prompt_3
+            response_ = await self.call_llm_with_context(
+                system_prompt_4,
+                "请开始总结",
+                parse_json=False, 
+                description="总结", 
+                want_tools=False
+            )
+            state['summary'] = response + "\n" + response_
         else:
-# - 光谱的初步分类（Galaxy，QSO 还是 Unknow）
             user_prompt = f"""
-分析报告：
-{preliminary_classification_json}
 
+进一步尝试给出的分析报告：
+{preliminary_classification_json}
+            
 输出格式如下：
 
-- 光谱的视觉特点
+1. 光谱的视觉特点
 
+2. 光谱的初步分类（根据“对光谱的初步分类”这一部分进行回答，光谱是 Galaxy，QSO 还是 Unknow）
+
+3.进一步尝试：
 - 分析报告总结：
     - 分析报告中给出的该天体的天体类型（必须选择 Galaxy 或 QSO）
     - 光谱的信噪比如何
-    - 分析报告的可信度评分（0 or 2）
-        如果对光谱的初步分类认证出类型为 Galaxy，则可信度为 2；否则为 0。
-- 是否需要人工介入判断
+
+4. 光谱的可信度评分（0 or 2）
+    - 如果对光谱的初步分类为 Galaxy，则可信度为 2；否则为 0。
+
+5.  是否需要人工介入判断
     **注意**：
         - 如果对光谱的初步分类为 Unknow，则必须要求人工介入判断；
         - 如果可信度为0，则必须要求人工介入判断。
 """
-        response = await self.call_llm_with_context(
-            system_prompt, 
-            user_prompt, 
-            parse_json=False, 
-            description="总结", 
-            want_tools=False
-        )
-        state['summary'] = response
-
+            response = await self.call_llm_with_context(
+                system_prompt, 
+                user_prompt, 
+                parse_json=False, 
+                description="总结", 
+                want_tools=False
+            )
+            state['summary'] = response
 
 
     async def in_brief(self, state):
         summary_json = json.dumps(state['summary'], ensure_ascii=False)
-        snr_threshold = getenv_float("SNR_THRESHOLD", '')
-        if snr_threshold == '':
-            snr_stuff = ''
-        else:
-            snr_medium = state['spectrum']['snr_medium']
-            snr_stuff = f"""
-你是一个【天文学光谱分析助手】。
-以下是一份基于PNG光谱图像的 **光谱分析报告**：
+
+        common_header = f"""
+你是一个善于提取信息的 AI 助手。
+
+以下是对一个天文学光谱的详细总结：
 {summary_json}
-请对光谱类型进行最终判断。
-该光谱的信噪比为{snr_medium}。
-- 当信噪比大于 {snr_threshold} 时，请你必须给出判断（即 QSO 或 Galaxy）
-- 当信噪比小于 {snr_threshold} 时，由于信噪比较低，允许你的判断中加入Unknow选项（即 QSO, Galaxy 或 Unknow）
+
 """
-        prompt_type_with_confusion = snr_stuff
-        response_type_with_confusion = await self.call_llm_with_context(
-        prompt_type_with_confusion, '', parse_json=False, description="总结", want_tools=False
-        )
-        state['in_brief']['type_with_confusion'] = response_type_with_confusion
-        # state['in_brief']['type_with_confusion'] = state['preliminary_classification']['type']
-        
-        prompt_type_report = f"""
-你是一位负责统筹的【天文学光谱分析主持人】
-
-你已经对一张天文学光谱做了总结
-{summary_json}
-
-- 请输出 **分析报告总结** 这一部分中的 **天体类型**（从这两个词语中选择：Galaxy, QSO）
+        prompt_type_with_confusion = common_header + f"""
+请输出 **2. 光谱的初步分类** 这一部分中的 **天体类型**（从这三个词语中选择：Galaxy, QSO 或 Unknow）
 
 - 输出格式为 str
 - 不要输出其他信息
 """
-        response_type_report = await self.call_llm_with_context('', prompt_type_report, parse_json=False, description="总结")
+        response_type_with_confusion = await self.call_llm_with_context(
+            prompt_type_with_confusion, '', 
+            parse_json=False, 
+            description="总结", 
+            want_tools=False
+        )
+        state['in_brief']['type_with_confusion'] = response_type_with_confusion
+        
+        prompt_type_report = common_header + f"""
+请输出 **3. 分析报告总结** 这一部分中的 **天体类型**（从这两个词语中选择：Galaxy, QSO）
+
+- 输出格式为 str
+- 不要输出其他信息
+"""
+        response_type_report = await self.call_llm_with_context(
+            prompt_type_report, '',
+            parse_json=False, 
+            description="总结",
+            want_tools=False
+        )
         state['in_brief']['type_report'] = response_type_report
 
-        prompt_redshift = f"""
-你是一位负责统筹的【天文学光谱分析主持人】
-
-你已经对一张天文学光谱做了总结
-{summary_json}
-
-请输出 **分析报告总结** 这一部分中的 **红移 z**（不需要输出 ± Δz）
+        prompt_redshift = common_header + f"""
+请输出 **3. 分析报告总结** 这一部分中的 **红移 z**（不需要输出 ± Δz）
 
 - 输出格式为 float 或 None
 - 不要输出其他信息
 """
-        response_redshift = await self.call_llm_with_context('', prompt_redshift, parse_json=False, description="总结")
+        response_redshift = await self.call_llm_with_context(
+            prompt_redshift, '', 
+            parse_json=False, 
+            description="总结",
+            want_tools=False
+        )
         state['in_brief']['redshift'] = response_redshift
 
-        prompt_rms = f"""
-你是一位负责统筹的【天文学光谱分析主持人】
-
-你已经对一张天文学光谱做了总结
-{summary_json}
-
-请输出 **分析报告总结** 这一部分中的 **红移误差 Δz**（不需要输出 z）
+        prompt_rms = common_header + f"""
+请输出 **3. 分析报告总结** 这一部分中的 **红移误差 Δz**（不需要输出 z）
 
 - 输出格式为 float 或 None
 - 不要输出其他信息
 """
-        response_rms = await self.call_llm_with_context('', prompt_rms, parse_json=False, description="总结")
+        response_rms = await self.call_llm_with_context(
+            prompt_rms, '', 
+            parse_json=False, 
+            description="总结",
+            want_tools=False
+        )
         state['in_brief']['rms'] = response_rms
 
-        prompt_lines = f"""
-你是一位负责统筹的【天文学光谱分析主持人】
-
-你已经对一张天文学光谱做了总结
-{summary_json}
-
-请输出 **分析报告总结** 这一部分中认证出的谱线（只从 Lyα，C IV，C III，Mg II 中选择，无需记录其他谱线）
+        prompt_lines = common_header + f"""
+请输出 **3. 分析报告总结** 这一部分中认证出的谱线（只从 Lyα，C IV，C III，Mg II 中选择，无需记录其他谱线）
 
 - 输出格式为 str: '（谱线1）,（谱线2）,...' 或 None
 - 不要输出其他信息
 """
-        response_lines = await self.call_llm_with_context('', prompt_lines, parse_json=False, description="总结")
+        response_lines = await self.call_llm_with_context(
+            prompt_lines, '', 
+            parse_json=False, 
+            description="总结", 
+            want_tools=False
+        )
         state['in_brief']['lines'] = response_lines
 
-        prompt_human = f"""
-你是一位负责统筹的【天文学光谱分析主持人】
+        prompt_score = common_header + f"""
+请输出 **4. 光谱的可信度评分** 这一部分给出的分数（从 0 到 3）
+"""
+        response_score = await self.call_llm_with_context(
+            prompt_score, '', 
+            parse_json=False, 
+            description="总结", 
+            want_tools=False
+        )
+        state['in_brief']['score'] = response_score
 
-你已经对一张天文学光谱做了总结
-{summary_json}
-
-请输出 **分析报告总结** 部分中的 **是否需要人工介入判断**
+        prompt_human = common_header + f"""
+请输出 **5. 是否需要人工介入判断** 部分中的回答
 
 - 仅输出“是”或“否”
 - 输出格式为 str
@@ -1657,6 +1729,12 @@ class SpectralSynthesisHost(BaseAgent):
         try:
             await self.summary(state)
             await self.in_brief(state)
+            supplimentary_classification_json = state['preliminary_classification_with_confusion']
+            state['summary'] += f"""
+
+补充材料：光谱的初步分类
+{supplimentary_classification_json}
+"""
             return state
         except Exception as e:
             import traceback
@@ -1666,3 +1744,4 @@ class SpectralSynthesisHost(BaseAgent):
             print("Full traceback:")
             traceback.print_exc()
             # 可选：返回当前状态或抛出异常
+            raise
