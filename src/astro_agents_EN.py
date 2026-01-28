@@ -668,7 +668,7 @@ Output in JSON format as follows:
             snr_stuff = f"""
 The maximum signal-to-noise ratio of this spectrum is {snr_max}.
 - When the maximum SNR is greater than {snr_threshold}, you must provide a judgment (i.e., QSO or Galaxy);
-- When the maximum SNR is less than {snr_threshold} but greater than {snr_threshold_reduced}, you are allowed to include the Unknown option in your judgment (i.e., QSO, Galaxy, or Unknown);
+- When the maximum SNR is less than {snr_threshold} but greater than {snr_threshold_reduced}, you are allowed to include the Unknown option in your judgment. Choose one between QSO, Galaxy, and Unknown;
 - When the maximum SNR is less than {snr_threshold_reduced}, directly output Unknown.
 """
         continuum_interpretation_json = json.dumps(state['visual_interpretation']['continuum_description'], ensure_ascii=False)
