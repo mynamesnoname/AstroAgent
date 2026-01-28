@@ -633,7 +633,7 @@ Flux 误差：{delta_t_json}
         )
         state['preliminary_classification'] = response
 
-    async def preliminary_classification_with_confusion(self, state: SpectroState) -> str:
+    async def preliminary_classification_with_absention(self, state: SpectroState) -> str:
         """初步分类：根据光谱形态初步判断天体类型"""
         dataset = os.getenv("DATA_SET", "")
         wavelength = np.array(state['spectrum']['new_wavelength'])
@@ -722,11 +722,11 @@ Flux 误差：{delta_t_json}
             description="初步分类",
             want_tools=False
         )
-        state['preliminary_classification_with_confusion'] = response
-        # print(f'preliminary_classification_with_confusion: {response}')
+        state['preliminary_classification_with_absention'] = response
+        # print(f'preliminary_classification_with_absention: {response}')
 
     async def preliminary_classification_monkey(self, state: SpectroState) -> str:
-        """对 preliminary_classification_with_confusion 进行结构化输出"""
+        """对 preliminary_classification_with_absention 进行结构化输出"""
         
         system_prompt = """
 你是一个善于提取信息的 AI 助手。
@@ -741,7 +741,7 @@ Flux 误差：{delta_t_json}
         user_prompt = f"""
 请根据以下信息，提取出初步分类的结果：
 
-{state['preliminary_classification_with_confusion']}
+{state['preliminary_classification_with_absention']}
 """
         response = await self.call_llm_with_context(
             system_prompt = system_prompt,
@@ -1009,7 +1009,7 @@ Step 2: 其他显著发射线分析
 3. 如果存在发射线与观测峰值的匹配，根据匹配结果，分别使用工具 calculate_redshift 计算红移。按“发射线名--静止系波长--观测波长--红移”的格式输出。
 """
 
-                response = await self.call_llm_with_context(system_prompt, user_prompt, parse_json=False, description="Step 2 发射线分析")
+                response = await self.call_llm_with_context(system_prompt, user_prompt, parse_json=True, description="Step 2 发射线分析")
                 state['rule_analysis_QSO'].append(response)
             except Exception as e:
                 logging.error(f"Error in step_2_QSO: {e}")
@@ -1033,7 +1033,7 @@ Step 3: 综合判断
 2.仅在有显著的 Lyα 峰值，且红移计算结果与其他谱线基本一致时，进行以下操作：
     - 因为天文学中存在外流等现象，请将当前所有匹配中**最低电离态谱线的红移**作为光谱的红移。输出红移结果。（因为存在不对称和展宽，Lyα的置信度是较低的）
 """
-                response = await self.call_llm_with_context(system_prompt, user_prompt, parse_json=False, description="Step 3 综合判断")
+                response = await self.call_llm_with_context(system_prompt, user_prompt, parse_json=True, description="Step 3 综合判断")
                 state['rule_analysis_QSO'].append(response)
             except Exception as e:
                 logging.error(f"Error in step_3_QSO: {e}")
@@ -1066,7 +1066,7 @@ Step 4: 补充步骤（假设 Step 1 所选择的谱线并非 Lyα）
 - 注意：允许在由于光谱边缘的信号残缺或信噪比不佳导致部分发射线不可见。
 """ + tail
 
-                response = await self.call_llm_with_context(system_prompt, user_prompt, parse_json=False, description="Step 4 补充分析")
+                response = await self.call_llm_with_context(system_prompt, user_prompt, parse_json=True, description="Step 4 补充分析")
                 state['rule_analysis_QSO'].append(response)
             except Exception as e:
                 logging.error(f"Error in step_4_QSO: {e}")
@@ -1087,7 +1087,7 @@ Step 4: 补充步骤（假设 Step 1 所选择的谱线并非 Lyα）
 
             plot_cleaned_features(state)
             await self.preliminary_classification(state)
-            await self.preliminary_classification_with_confusion(state)
+            await self.preliminary_classification_with_absention(state)
             await self.preliminary_classification_monkey(state)
 
             if state['preliminary_classification']['type'] == "QSO":
@@ -1260,7 +1260,7 @@ class SpectralAnalysisAuditor(BaseAgent):
 请回应其他分析师的回答，并继续进行审查。
 """
             user_prompt = body
-            response = await self.call_llm_with_context(system_prompt, user_prompt, parse_json=False, description="报告审查")
+            response = await self.call_llm_with_context(system_prompt, user_prompt, parse_json=True, description="报告审查")
             state['auditing_history_QSO'].append(response)
         except Exception as e:
             print(f"Error in auditing: {e}")
@@ -1438,7 +1438,7 @@ class SpectralRefinementAssistant(BaseAgent):
 请对建议进行回应。
 """
             user_prompt = body
-            response = await self.call_llm_with_context(system_prompt, user_prompt, parse_json=False, description="回应审查")
+            response = await self.call_llm_with_context(system_prompt, user_prompt, parse_json=True, description="回应审查")
             state['refine_history_QSO'].append(response)
         except Exception as e:
             logging.error(f"Error in refine: {e}")
@@ -1557,7 +1557,7 @@ class SpectralSynthesisHost(BaseAgent):
             response = await self.call_llm_with_context(
                 system_prompt, 
                 "请开始总结", 
-                parse_json=False, 
+                parse_json=True, 
                 description="总结", 
                 want_tools=False
             )
@@ -1586,7 +1586,7 @@ class SpectralSynthesisHost(BaseAgent):
             response_ = await self.call_llm_with_context(
                 system_prompt_4,
                 "请开始总结",
-                parse_json=False, 
+                parse_json=True, 
                 description="总结", 
                 want_tools=False
             )
@@ -1619,7 +1619,7 @@ class SpectralSynthesisHost(BaseAgent):
             response = await self.call_llm_with_context(
                 system_prompt, 
                 user_prompt, 
-                parse_json=False, 
+                parse_json=True, 
                 description="总结", 
                 want_tools=False
             )
@@ -1636,33 +1636,33 @@ class SpectralSynthesisHost(BaseAgent):
 {summary_json}
 
 """
-        prompt_type_with_confusion = common_header + f"""
+        prompt_type_with_absention = common_header + f"""
 请输出 **2. 光谱的初步分类** 这一部分中的 **天体类型**（从这三个词语中选择：Galaxy, QSO 或 Unknow）
 
-- 输出格式为 str
+- 输出格式为 str  (Galaxy, QSO, or Unknow)
 - 不要输出其他信息
 """
-        response_type_with_confusion = await self.call_llm_with_context(
-            prompt_type_with_confusion, '', 
-            parse_json=False, 
+        response_type_with_absention = await self.call_llm_with_context(
+            prompt_type_with_absention, '', 
+            parse_json=True, 
             description="总结", 
             want_tools=False
         )
-        state['in_brief']['type_with_confusion'] = response_type_with_confusion
+        state['in_brief']['type_with_absention'] = response_type_with_absention
         
-        prompt_type_report = common_header + f"""
+        prompt_type_forced = common_header + f"""
 请输出 **3. 分析报告总结** 这一部分中的 **天体类型**（从这两个词语中选择：Galaxy, QSO）
 
 - 输出格式为 str
 - 不要输出其他信息
 """
-        response_type_report = await self.call_llm_with_context(
-            prompt_type_report, '',
-            parse_json=False, 
+        response_type_forced = await self.call_llm_with_context(
+            prompt_type_forced, '',
+            parse_json=True, 
             description="总结",
             want_tools=False
         )
-        state['in_brief']['type_report'] = response_type_report
+        state['in_brief']['type_forced'] = response_type_forced
 
         prompt_redshift = common_header + f"""
 请输出 **3. 分析报告总结** 这一部分中的 **红移 z**（不需要输出 ± Δz）
@@ -1672,7 +1672,7 @@ class SpectralSynthesisHost(BaseAgent):
 """
         response_redshift = await self.call_llm_with_context(
             prompt_redshift, '', 
-            parse_json=False, 
+            parse_json=True, 
             description="总结",
             want_tools=False
         )
@@ -1686,7 +1686,7 @@ class SpectralSynthesisHost(BaseAgent):
 """
         response_rms = await self.call_llm_with_context(
             prompt_rms, '', 
-            parse_json=False, 
+            parse_json=True, 
             description="总结",
             want_tools=False
         )
@@ -1700,7 +1700,7 @@ class SpectralSynthesisHost(BaseAgent):
 """
         response_lines = await self.call_llm_with_context(
             prompt_lines, '', 
-            parse_json=False, 
+            parse_json=True, 
             description="总结", 
             want_tools=False
         )
@@ -1711,7 +1711,7 @@ class SpectralSynthesisHost(BaseAgent):
 """
         response_score = await self.call_llm_with_context(
             prompt_score, '', 
-            parse_json=False, 
+            parse_json=True, 
             description="总结", 
             want_tools=False
         )
@@ -1724,14 +1724,14 @@ class SpectralSynthesisHost(BaseAgent):
 - 输出格式为 str
 - 不要输出其他信息
 """
-        response_human = await self.call_llm_with_context('', prompt_human, parse_json=False, description="总结")
+        response_human = await self.call_llm_with_context('', prompt_human, parse_json=True, description="总结")
         state['in_brief']['human'] = response_human
     
     async def run(self, state: SpectroState) -> SpectroState:
         try:
             await self.summary(state)
             await self.in_brief(state)
-            supplimentary_classification_json = state['preliminary_classification_with_confusion']
+            supplimentary_classification_json = state['preliminary_classification_with_absention']
             state['summary'] += f"""
 
 补充材料：光谱的初步分类

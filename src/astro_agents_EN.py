@@ -631,7 +631,7 @@ Output in JSON format as follows:
         )
         state['preliminary_classification'] = response
 
-    async def preliminary_classification_with_confusion(self, state: SpectroState) -> str:
+    async def preliminary_classification_with_absention(self, state: SpectroState) -> str:
         """Preliminary classification: Initially determine the celestial object type based on the spectral morphology."""
         dataset = os.getenv("DATA_SET", "")
         wavelength = np.array(state['spectrum']['new_wavelength'])
@@ -728,11 +728,11 @@ Please begin the analysis.
             description="Preliminary classification",
             want_tools=False
         )
-        state['preliminary_classification_with_confusion'] = response
-        print(f'preliminary_classification_with_confusion: {response}')
+        state['preliminary_classification_with_absention'] = response
+        print(f'preliminary_classification_with_absention: {response}')
 
     async def preliminary_classification_monkey(self, state: SpectroState) -> str:
-        """Structured output for preliminary_classification_with_confusion"""
+        """Structured output for preliminary_classification_with_absention"""
 
         system_prompt = """
 You are an AI assistant skilled in extracting information.
@@ -747,7 +747,7 @@ Please output the result in JSON format as follows:
         user_prompt = f"""
 Please extract the preliminary classification result based on the following information:
 
-{state['preliminary_classification_with_confusion']}
+{state['preliminary_classification_with_absention']}
 """
         response = await self.call_llm_with_context(
             system_prompt=system_prompt,
@@ -1013,7 +1013,7 @@ Step 2: Analysis of other prominent emission lines
 3. If matches exist, compute their redshifts using `calculate_redshift`. Output in the format: "Line name -- rest wavelength -- observed wavelength -- redshift".
 """
 
-                response = await self.call_llm_with_context(system_prompt, user_prompt, parse_json=False, description="Step 2 emission line analysis")
+                response = await self.call_llm_with_context(system_prompt, user_prompt, parse_json=True, description="Step 2 emission line analysis")
                 state['rule_analysis_QSO'].append(response)
             except Exception as e:
                 logging.error(f"Error in step_2_QSO: {e}")
@@ -1037,7 +1037,7 @@ Step 3: synthesis
 2. Only if a significant Lyα peak exists AND its redshift is consistent with other lines, proceed as follows:
    - Due to astrophysical phenomena like outflows, adopt the redshift from the **lowest-ionization-state line** among all matched lines as the final redshift. Output this redshift value. (Note: Lyα is less reliable due to asymmetry and broadening.)
 """
-                response = await self.call_llm_with_context(system_prompt, user_prompt, parse_json=False, description="Step 3 final synthesis")
+                response = await self.call_llm_with_context(system_prompt, user_prompt, parse_json=True, description="Step 3 final synthesis")
                 state['rule_analysis_QSO'].append(response)
             except Exception as e:
                 logging.error(f"Error in step_3_QSO: {e}")
@@ -1070,7 +1070,7 @@ Step 4: Supplementary analysis (assuming the line selected in Step 1 is NOT Lyα
 - Note: It is acceptable that some emission lines may be absent due to edge effects or low signal-to-noise ratio.
 """
 
-                response = await self.call_llm_with_context(system_prompt, user_prompt, parse_json=False, description="Step 4 supplementary analysis")
+                response = await self.call_llm_with_context(system_prompt, user_prompt, parse_json=True, description="Step 4 supplementary analysis")
                 state['rule_analysis_QSO'].append(response)
             except Exception as e:
                 logging.error(f"Error in step_4_QSO: {e}")
@@ -1089,7 +1089,7 @@ Step 4: Supplementary analysis (assuming the line selected in Step 1 is NOT Lyα
             plot_cleaned_features(state)
             await self.preliminary_classification(state)
             print(state['preliminary_classification'])
-            await self.preliminary_classification_with_confusion(state)
+            await self.preliminary_classification_with_absention(state)
             await self.preliminary_classification_monkey(state)
 
             if state['preliminary_classification']['type'] == "QSO":
@@ -1263,7 +1263,7 @@ The debate history of you and refinement analyst is listed as follows:
 Please respond to the analyst's reply and continue your review.
 """
             user_prompt = body
-            response = await self.call_llm_with_context(system_prompt, user_prompt, parse_json=False, description="Report Review")
+            response = await self.call_llm_with_context(system_prompt, user_prompt, parse_json=True, description="Report Review")
             state['auditing_history_QSO'].append(response)
         except Exception as e:
             print(f"Error in auditing: {e}")
@@ -1441,7 +1441,7 @@ The latest feedback from the reviewing auditor is:
 Please respond to this feedback.
 """
             user_prompt = body
-            response = await self.call_llm_with_context(system_prompt, user_prompt, parse_json=False, description="Responding to Review")
+            response = await self.call_llm_with_context(system_prompt, user_prompt, parse_json=True, description="Responding to Review")
             state['refine_history_QSO'].append(response)
         except Exception as e:
             logging.error(f"Error in refine: {e}")
@@ -1563,7 +1563,7 @@ Output format as follows:
             response = await self.call_llm_with_context(
                 system_prompt, 
                 "Please synthesize the spectrum's interpretation", 
-                parse_json=False, 
+                parse_json=True, 
                 description="总结", 
                 want_tools=False
             )
@@ -1592,7 +1592,7 @@ Please read the interpretation above and continue to output the following inform
             response_ = await self.call_llm_with_context(
                 system_prompt_4, 
                 "Please continues the spectrum's interpretation",
-                parse_json=False, 
+                parse_json=True, 
                 description="总结", 
                 want_tools=False
             )
@@ -1624,7 +1624,7 @@ Output format as follows:
             response = await self.call_llm_with_context(
                 system_prompt, 
                 user_prompt, 
-                parse_json=False, 
+                parse_json=True, 
                 description="Summary", 
                 want_tools=False
             )
@@ -1641,33 +1641,33 @@ Below is a detailed summary of an astronomical spectrum:
 {summary_json}
 
 """
-        prompt_type_with_confusion = common_header + f"""
+        prompt_type_with_absention = common_header + f"""
 Please output the **celestial object type** from section **2. Preliminary classification of the spectrum** (choose one from: Galaxy, QSO, or Unknow).
 
-- Output format: str
+- Output format: str (Galaxy, QSO, or Unknow)
 - Do not output any other information.
 """
-        response_type_with_confusion = await self.call_llm_with_context(
-            prompt_type_with_confusion, '', 
-            parse_json=False, 
+        response_type_with_absention = await self.call_llm_with_context(
+            prompt_type_with_absention, '', 
+            parse_json=True, 
             description="Summarize", 
             want_tools=False
         )
-        state['in_brief']['type_with_confusion'] = response_type_with_confusion
+        state['in_brief']['type_with_absention'] = response_type_with_absention
         
-        prompt_type_report = common_header + f"""
+        prompt_type_forced = common_header + f"""
 Please output the **celestial object type** from section **3. Conclusion of analysis report** (choose one from: Galaxy, QSO).
 
 - Output format: str
 - Do not output any other information.
 """
-        response_type_report = await self.call_llm_with_context(
-            prompt_type_report, '',
-            parse_json=False, 
+        response_type_forced = await self.call_llm_with_context(
+            prompt_type_forced, '',
+            parse_json=True, 
             description="Summarize",
             want_tools=False
         )
-        state['in_brief']['type_report'] = response_type_report
+        state['in_brief']['type_forced'] = response_type_forced
 
         prompt_redshift = common_header + f"""
 Please output the **redshift z** from section **3. Conclusion of analysis report** (do not output ± Δz).
@@ -1677,7 +1677,7 @@ Please output the **redshift z** from section **3. Conclusion of analysis report
 """
         response_redshift = await self.call_llm_with_context(
             prompt_redshift, '', 
-            parse_json=False, 
+            parse_json=True, 
             description="Summarize",
             want_tools=False
         )
@@ -1691,7 +1691,7 @@ Please output the **redshift error Δz** from section **3. Conclusion of analysi
 """
         response_rms = await self.call_llm_with_context(
             prompt_rms, '', 
-            parse_json=False, 
+            parse_json=True, 
             description="Summarize",
             want_tools=False
         )
@@ -1705,7 +1705,7 @@ Please output the **identified spectral lines** from section **3. Conclusion of 
 """
         response_lines = await self.call_llm_with_context(
             prompt_lines, '', 
-            parse_json=False, 
+            parse_json=True, 
             description="Summarize", 
             want_tools=False
         )
@@ -1716,7 +1716,7 @@ Please output the **score** given in section **4. Credibility score of the spect
 """
         response_score = await self.call_llm_with_context(
             prompt_score, '', 
-            parse_json=False, 
+            parse_json=True, 
             description="Summarize", 
             want_tools=False
         )
@@ -1729,14 +1729,14 @@ Please output the answer from section **5. Whether human intervention is require
 - Output format: str
 - Do not output any other information.
 """
-        response_human = await self.call_llm_with_context('', prompt_human, parse_json=False, description="Summarize")
+        response_human = await self.call_llm_with_context('', prompt_human, parse_json=True, description="Summarize")
         state['in_brief']['human'] = response_human
 
     async def run(self, state: SpectroState) -> SpectroState:
         try:
             await self.summary(state)
             await self.in_brief(state)
-            supplimentary_classification_json = state['preliminary_classification_with_confusion']
+            supplimentary_classification_json = state['preliminary_classification_with_absention']
             state['summary'] += f"""
 
 Supplementary materials: The preliminary classification of the spectrum:
