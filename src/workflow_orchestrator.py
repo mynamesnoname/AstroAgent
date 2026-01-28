@@ -35,27 +35,32 @@ class WorkflowOrchestrator:
     def __init__(self, config_file: str = "mcp_config.json"):
         # 加载环境变量
         load_dotenv()
-        
-        language = os.getenv('LANGUAGE')
-        
-        if language == "CN":
-            self.agent_classes = {
+
+        # 定义语言到代理类的映射
+        _AGENT_CLASSES = {
+            "CN": {
                 'SpectralVisualInterpreter': CN_SpectralVisualInterpreter,
                 'SpectralRuleAnalyst': CN_SpectralRuleAnalyst,
                 'SpectralAnalysisAuditor': CN_SpectralAnalysisAuditor,
                 'SpectralRefinementAssistant': CN_SpectralRefinementAssistant,
                 'SpectralSynthesisHost': CN_SpectralSynthesisHost
-            }
-        elif language == "EN":
-            self.agent_classes = {
+            },
+            "EN": {
                 'SpectralVisualInterpreter': EN_SpectralVisualInterpreter,
                 'SpectralRuleAnalyst': EN_SpectralRuleAnalyst,
                 'SpectralAnalysisAuditor': EN_SpectralAnalysisAuditor,
                 'SpectralRefinementAssistant': EN_SpectralRefinementAssistant,
                 'SpectralSynthesisHost': EN_SpectralSynthesisHost
             }
+        }
+
+        language = os.getenv('LANGUAGE', 'CN')  # 默认使用 'CN'
+
+        if language in _AGENT_CLASSES:
+            self.agent_classes = _AGENT_CLASSES[language]
         else:
-            raise ValueError(f"Language {language} is not supported")
+            print('Language is not supported, using CN by default.')
+            self.agent_classes = _AGENT_CLASSES['CN']
         
         # 初始化MCP管理器
         self.mcp_manager = MCPManager(config_file)

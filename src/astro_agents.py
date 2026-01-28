@@ -670,7 +670,9 @@ Flux 误差：{delta_t_json}
             snr_stuff = f"""
 该光谱的最大信噪比为 {snr_max}。
 - 当最大信噪比大于 {snr_threshold} 时，请你必须给出判断（即 QSO 或 Galaxy）；
-- 当最大信噪比小于 {snr_threshold}，但大于 {snr_threshold_reduced} 时，允许你的判断中加入 Unknow 选项（即 QSO, Galaxy 或 Unknow）；
+- 当最大信噪比小于 {snr_threshold}，但大于 {snr_threshold_reduced} 时，你可以从“QSO”、“Galaxy”和“Unknow”中选择。在此情况下：
+    - SNR 越接近 {snr_threshold}，你应越倾向于给出明确的类别（“QSO”或“Galaxy”）；
+    - SNR 越小（即远低于 {snr_threshold}），你应越倾向于选择“Unknow”。
 - 当最大信噪比小于 {snr_threshold_reduced} 时，直接输出 Unknow。
 """
         continuum_interpretation_json = json.dumps(state['visual_interpretation']['continuum_description'], ensure_ascii=False)
