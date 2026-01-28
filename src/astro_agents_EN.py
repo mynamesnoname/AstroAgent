@@ -668,9 +668,19 @@ Output in JSON format as follows:
             snr_stuff = f"""
 The maximum signal-to-noise ratio of this spectrum is {snr_max}.
 - When the maximum SNR is greater than {snr_threshold}, you must provide a judgment (i.e., QSO or Galaxy);
-- When the maximum SNR is less than {snr_threshold} but greater than {snr_threshold_reduced}, you are allowed to include the Unknown option in your judgment. Choose one between QSO, Galaxy, and Unknown;
-- When the maximum SNR is less than {snr_threshold_reduced}, directly output Unknown.
+- When the maximum SNR is less than {snr_threshold} but greater than {snr_threshold_reduced}, you may choose among "QSO", "Galaxy", or "Unknow". In this regime:
+    - The closer the SNR is to {snr_threshold}, the more confident you should be in assigning a clear class ("QSO" or "Galaxy").
+    - The lower the SNR (i.e., the farther below {snr_threshold}), the more appropriate it is to select "Unknow".
+- When the maximum SNR is less than {snr_threshold_reduced}, directly output Unknow.
 """
+#             snr_stuff = f"""
+# The maximum signal-to-noise ratio (SNR) of this spectrum is {snr_max:.2f}.
+# - If the maximum SNR is greater than or equal to {snr_threshold}, you **must** provide a definitive classification: either "QSO" or "Galaxy".
+# - If the maximum SNR is less than {snr_threshold}, you may choose among "QSO", "Galaxy", or "Unknow". In this regime:
+#     - The closer the SNR is to {snr_threshold}, the more confident you should be in assigning a clear class ("QSO" or "Galaxy").
+#     - The lower the SNR (i.e., the farther below {snr_threshold}), the more appropriate it is to select "Unknow".
+#     Use your best judgment to balance confidence and uncertainty based on the provided SNR value.
+# """
         continuum_interpretation_json = json.dumps(state['visual_interpretation']['continuum_description'], ensure_ascii=False)
         if dataset == 'CSST':
             # CSST version
@@ -719,7 +729,7 @@ Please begin the analysis.
             want_tools=False
         )
         state['preliminary_classification_with_confusion'] = response
-        # print(f'preliminary_classification_with_confusion: {response}')
+        print(f'preliminary_classification_with_confusion: {response}')
 
     async def preliminary_classification_monkey(self, state: SpectroState) -> str:
         """Structured output for preliminary_classification_with_confusion"""
@@ -731,7 +741,7 @@ Your task is to extract the classification result for a celestial object's spect
 
 Please output the result in JSON format as follows:
 {
-    'type': str,  # Celestial object category, possible values are "Galaxy", "QSO", "Unknown"
+    'type': str,  # Celestial object category, possible values are "Galaxy", "QSO", "Unknow"
 }
 """
         user_prompt = f"""
