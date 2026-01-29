@@ -641,6 +641,8 @@ Output in JSON format as follows:
         band_stuff = ''
         if band_name and band_wavelength:
             overlap = find_overlap_regions(band_name, band_wavelength)
+        else:
+            overlap = None
         # test 1: snr cut
         if overlap:
             mask = np.zeros_like(wavelength, dtype=bool)
