@@ -155,6 +155,33 @@ class SpectralVisualInterpreter(BaseAgent):
         except:
             logging.error(f"LLM 输出格式错误: {response}")
 
+    async def border_detection_and_cropping(self, state: SpectroState):
+        state['margin'] = {
+            'top': 20,
+            'right': 10,
+            'bottom': 15,
+            'left': 10,
+        }
+        stop = False
+        while not stop:
+            state["chart_border"] = _detect_chart_border(state['image_path'], state['margin'])
+            _crop_img(state['image_path'], state["chart_border"], state['crop_path'])
+            box_new = await self.check_border(state)
+            values = [box_new['top'], box_new['bottom'], box_new['left'], box_new['right']]
+            margin = [state['margin']['top'], state['margin']['right'], state['margin']['bottom'], state['margin']['left']] 
+            if all(values):  # All edges are clean
+                stop = True
+            elif any(m > 30 for m in margin):
+                stop = True
+            else:
+                for k, v in box_new.items():
+                    if v:
+                        state['margin'][k] = state['margin'][k]
+                    else:
+                        state['margin'][k] += 2
+            # print(f"box_new: {box_new}")
+            # print(f"margin: {state['margin']}")
+
     async def peak_trough_detection(self, state: SpectroState):
         try:
             sigma_list, tol_pixels, prom_peaks, prom_troughs, _, _ = _load_feature_params()
@@ -288,7 +315,7 @@ class SpectralVisualInterpreter(BaseAgent):
         return state
 
     # --------------------------
-    # Step 1.1~1.11: 主流程
+    # Step 1.1~1.12: 主流程
     # --------------------------
     async def run(self, state: SpectroState, plot: bool = True):
         """执行完整视觉分析流程"""
@@ -308,31 +335,7 @@ class SpectralVisualInterpreter(BaseAgent):
             # Step 1.4: 修正
             await self.revise_axis_mapping(state)
             # Step 1.5: 边框检测与裁剪
-            state['margin'] = {
-                'top': 20,
-                'right': 10,
-                'bottom': 15,
-                'left': 10,
-            }
-            stop = False
-            while stop is False:
-                state["chart_border"] = _detect_chart_border(state['image_path'], state['margin'])
-                _crop_img(state['image_path'], state["chart_border"], state['crop_path'])
-                box_new = await self.check_border(state)
-                values = [box_new['top'], box_new['bottom'], box_new['left'], box_new['right']]
-                margin = [state['margin']['top'], state['margin']['right'], state['margin']['bottom'], state['margin']['left']] 
-                if all(values):  # 所有都是 True（非零/非False）
-                    stop = True
-                elif any(m > 30 for m in margin):
-                    stop = True
-                else:
-                    for k, v in box_new.items():
-                        if v == True:
-                            state['margin'][k] = state['margin'][k]
-                        else:
-                            state['margin'][k] = state['margin'][k] + 2
-                # print(f"box_new: {box_new}")
-                # print(f"margin: {state['margin']}")
+            await self.border_detection_and_cropping(state)
             # Step 1.6: 重映射像素
             state["tick_pixel_remap"] = _remap_to_cropped_canvas(state['tick_pixel_raw'], state["chart_border"])
             # Step 1.7: 拟合像素-数值
@@ -358,9 +361,9 @@ class SpectralVisualInterpreter(BaseAgent):
             if state['merged_peaks'] is None or state['merged_troughs'] is None:
                 raise RuntimeError("Failed to detect peaks and troughs after maximum attempts")
             print(f"Detected {len(state['merged_peaks'])} peaks and {len(state['merged_troughs'])} troughs.")
-            # Step 1.10.5: continuum拟合
+            # Step 1.11: continuum拟合
             await self.continuum_fitting(state)
-            # Step 1.11: 可选绘图
+            # Step 1.12: 可选绘图
             if plot:
                 try:
                     state["spectrum_fig"] = _plot_spectrum(state)
@@ -1086,8 +1089,8 @@ Step 4: 补充步骤（假设 Step 1 所选择的谱线并非 Lyα）
             await self.describe_spectrum_picture(state)
 
             plot_cleaned_features(state)
-            await self.preliminary_classification(state)
             await self.preliminary_classification_with_absention(state)
+            await self.preliminary_classification(state)
             await self.preliminary_classification_monkey(state)
 
             if state['preliminary_classification']['type'] == "QSO":
