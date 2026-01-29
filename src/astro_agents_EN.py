@@ -160,6 +160,32 @@ Do not output any additional content.
             return response
         except:
             logging.error(f"Error in check_border: {response}")
+    async def border_detection_and_cropping(self, state: SpectroState):
+        state['margin'] = {
+            'top': 20,
+            'right': 10,
+            'bottom': 15,
+            'left': 10,
+        }
+        stop = False
+        while not stop:
+            state["chart_border"] = _detect_chart_border(state['image_path'], state['margin'])
+            _crop_img(state['image_path'], state["chart_border"], state['crop_path'])
+            box_new = await self.check_border(state)
+            values = [box_new['top'], box_new['bottom'], box_new['left'], box_new['right']]
+            margin = [state['margin']['top'], state['margin']['right'], state['margin']['bottom'], state['margin']['left']] 
+            if all(values):  # All edges are clean
+                stop = True
+            elif any(m > 30 for m in margin):
+                stop = True
+            else:
+                for k, v in box_new.items():
+                    if v:
+                        state['margin'][k] = state['margin'][k]
+                    else:
+                        state['margin'][k] += 2
+            # print(f"box_new: {box_new}")
+            # print(f"margin: {state['margin']}")
 
     async def peak_trough_detection(self, state: SpectroState):
         try:
@@ -287,7 +313,7 @@ Do not output any additional content.
         return state
 
     # --------------------------
-    # Steps 1.1–1.11: Main pipeline
+    # Steps 1.1–1.12: Main pipeline
     # --------------------------
     async def run(self, state: SpectroState, plot: bool = True):
         """Execute the full visual analysis pipeline."""
@@ -307,31 +333,7 @@ Do not output any additional content.
             # Step 1.4: Revise mapping
             state["tick_pixel_raw"] = await self.revise_axis_mapping(state)
             # Step 1.5: Border detection and cropping
-            state['margin'] = {
-                'top': 20,
-                'right': 10,
-                'bottom': 15,
-                'left': 10,
-            }
-            stop = False
-            while not stop:
-                state["chart_border"] = _detect_chart_border(state['image_path'], state['margin'])
-                _crop_img(state['image_path'], state["chart_border"], state['crop_path'])
-                box_new = await self.check_border(state)
-                values = [box_new['top'], box_new['bottom'], box_new['left'], box_new['right']]
-                margin = [state['margin']['top'], state['margin']['right'], state['margin']['bottom'], state['margin']['left']] 
-                if all(values):  # All edges are clean
-                    stop = True
-                elif any(m > 30 for m in margin):
-                    stop = True
-                else:
-                    for k, v in box_new.items():
-                        if v:
-                            state['margin'][k] = state['margin'][k]
-                        else:
-                            state['margin'][k] += 2
-                # print(f"box_new: {box_new}")
-                # print(f"margin: {state['margin']}")
+            await self.border_detection_and_cropping(state)
             # Step 1.6: Remap pixels to cropped canvas
             state["tick_pixel_remap"] = _remap_to_cropped_canvas(state['tick_pixel_raw'], state["chart_border"])
             # Step 1.7: Fit pixel-to-value relationship
@@ -356,9 +358,9 @@ Do not output any additional content.
             if state['merged_peaks'] is None or state['merged_troughs'] is None:
                 raise RuntimeError("Failed to detect peaks and troughs after maximum attempts")
             print(f"Detected {len(state['merged_peaks'])} peaks and {len(state['merged_troughs'])} troughs.")
-            # Step 1.10.5: Continuum fitting
+            # Step 1.11: Continuum fitting
             await self.continuum_fitting(state)
-            # Step 1.11: Optional plotting
+            # Step 1.12: Optional plotting
             if plot:
                 try:
                     state["spectrum_fig"] = _plot_spectrum(state)
@@ -1089,9 +1091,9 @@ Step 4: Supplementary analysis (assuming the line selected in Step 1 is NOT Lyα
             await self.describe_spectrum_picture(state)
             
             plot_cleaned_features(state)
+            await self.preliminary_classification_with_absention(state)
             await self.preliminary_classification(state)
             print(state['preliminary_classification'])
-            await self.preliminary_classification_with_absention(state)
             await self.preliminary_classification_monkey(state)
 
             if state['preliminary_classification']['type'] == "QSO":
