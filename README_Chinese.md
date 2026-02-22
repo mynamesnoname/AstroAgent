@@ -236,6 +236,9 @@ debug.ipynb
 * `{your_image_name}_summary.md`
   最终综合报告（天体类型、红移、置信度）
 
+* in_brief.csv
+  输出结果摘要的 CSV 格式表格
+
 以及副产品
 
 * `{your_image_name}_cropped.png`

@@ -1,7 +1,0 @@
-{
-    "spectro_tools": {
-        "command": "python",
-        "args": ["-m", "src.mcp_server_tools"],  
-        "transport": "stdio"
-    }
-}

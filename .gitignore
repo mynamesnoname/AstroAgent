@@ -2,15 +2,6 @@
 # Data & outputs (RECURSIVE)
 # ====================
 data/
-!data/.gitkeep          # 可选：若需保留空 data/ 目录结构
-
-# 或更精细控制（推荐）：
-# data/**/*.png
-# data/**/*.jpg
-# data/**/*.tar.gz
-# data/**/output/
-# data/**/input/          # 如果 input 也是生成的
-# data/test_set/
 
 # Logs
 log/
@@ -18,7 +9,6 @@ log/
 # Environments
 .env
 .env.*
-!.env.example           # 显式保留模板
 
 # VS Code
 .vscode/

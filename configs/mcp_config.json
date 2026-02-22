@@ -1,0 +1,7 @@
+{
+    "spectro_tools": {
+        "command": "python",
+        "args": ["/home/wbc/code3/llm-spectro-agent/src/AstroAgent/mcp_tools/spectro_server.py"],  
+        "transport": "stdio"
+    }
+}

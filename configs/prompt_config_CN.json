@@ -1,0 +1,182 @@
+{
+    "VisualInterpreter":{
+        "detect_axis_ticks":{
+            "path": "CN/VisualInterpreter/detect_axis_ticks",
+            "variables": []
+        },
+        "combine_axis_mapping":{
+            "path": "CN/VisualInterpreter/combine_axis_mapping",
+            "variables": ["axis_info", "ocr"]
+        },
+        "revise_axis_mapping":{
+            "path": "CN/VisualInterpreter/revise_axis_mapping",
+            "variables": ["axis_mapping"]
+        },
+        "check_border":{
+            "path": "CN/VisualInterpreter/check_border",
+            "variables": []
+        }
+    },
+    "RuleAnalyst":{
+        "check_arm_noise":{
+            "path": "CN/RuleAnalyst/check_arm_noise",
+            "variables": ["arm_name", "overlap_regions"]
+        },
+        "describe_continuum":{
+            "path": "CN/RuleAnalyst/describe_continuum",
+            "variables": []
+        },
+        "describe_lines":{
+            "path": "CN/RuleAnalyst/describe_lines",
+            "variables": ["peaks", "troughs"]
+        },
+        "describe_quality":{
+            "path": "CN/RuleAnalyst/describe_quality",
+            "variables": []
+        },
+        "preliminary_classification":{
+            "path": "CN/RuleAnalyst/preliminary_classification",
+            "variables": ["dataset", "continuum_description"]
+        },
+        "preliminary_classification_with_absention":{
+            "path": "CN/RuleAnalyst/preliminary_classification_with_absention",
+            "variables": [
+                "dataset", 
+                "continuum_description", 
+                "snr_max", 
+                "snr_threshold_upper", 
+                "snr_threshold_lower"
+            ]
+        },
+        "preliminary_classification_with_absention_monkey":{
+            "path": "CN/RuleAnalyst/preliminary_classification_with_absention_monkey",
+            "variables": [
+                "preliminary_classification_with_absention"
+            ]
+        },
+        "step_1_QSO":{
+            "path": "CN/RuleAnalyst/step_1_QSO",
+            "variables": [
+                "qualitative_analysis",
+                "peak_list",
+                "trough_list",
+                "wl_left",
+                "wl_right",
+                "sigma_list",
+                "tol_wavelength",
+                "lyalpha_candidates"
+            ]
+        },
+        "step_2_QSO":{
+            "path": "CN/RuleAnalyst/step_2_QSO",
+            "variables": [
+                "qualitative_analysis",
+                "peak_list",
+                "trough_list",
+                "wl_left",
+                "wl_right",
+                "sigma_list",
+                "tol_wavelength",
+                "overlap_regions",
+                "wiped_peaks",
+                "history"
+            ]
+        },
+        "step_3_QSO":{
+            "path": "CN/RuleAnalyst/step_3_QSO",
+            "variables": [
+                "qualitative_analysis",
+                "peak_list",
+                "trough_list",
+                "wl_left",
+                "wl_right",
+                "sigma_list",
+                "tol_wavelength",
+                "history"
+            ]
+        },
+        "step_4_QSO":{
+            "path": "CN/RuleAnalyst/step_4_QSO",
+            "variables": [
+                "qualitative_analysis",
+                "peak_list",
+                "trough_list",
+                "wl_left",
+                "wl_right",
+                "sigma_list",
+                "tol_wavelength",
+                "history"
+            ]
+        }
+    },
+    "AnalysisAuditor":{
+        "auditing":{
+            "path": "CN/AnalysisAuditor/auditing",
+            "variables": [
+                "wl_left",
+                "wl_right",
+                "peak_list",
+                "trough_list",
+                "overlap_regions",
+                "wiped_peaks",
+                "rule_analysis",
+                "debate_history",
+                "a",
+                "rms",
+                "tol"
+            ]
+        }
+    },
+    "RefinementAssistant":{
+        "refining":{
+            "path": "CN/RefinementAssistant/refining",
+            "variables": [
+                "wl_left",
+                "wl_right",
+                "peak_list",
+                "trough_list",
+                "overlap_regions",
+                "wiped_peaks",
+                "rule_analysis",
+                "debate_history",
+                "a",
+                "rms",
+                "tol",
+                "latest_auditing"
+            ]
+        }
+    },
+    "SynthesisHost":{
+        "summary":{
+            "path": "CN/SynthesisHost/summary",
+            "variables": [
+                "visual_interpretation",
+                "preliminary_classification_with_absention",
+                "preliminary_classification",
+                "rule_analysis_QSO",
+                "auditing_QSO",
+                "refining_QSO"
+            ]
+        },
+        "in_brief_redshift":{
+            "path": "CN/SynthesisHost/in_brief_redshift",
+            "variables": ["summary"]
+        },
+        "in_brief_rms":{
+            "path": "CN/SynthesisHost/in_brief_rms",
+            "variables": ["summary"]
+        },
+        "in_brief_lines":{
+            "path": "CN/SynthesisHost/in_brief_lines",
+            "variables": ["summary"]
+        },
+        "in_brief_score":{
+            "path": "CN/SynthesisHost/in_brief_score",
+            "variables": ["summary"]
+        },
+        "in_brief_human":{
+            "path": "CN/SynthesisHost/in_brief_human",
+            "variables": ["summary"]
+        }
+    }
+}
