@@ -30,7 +30,7 @@ Below are some important environment variables:
     - e.g. If `INPUT_DIR`=`/path/to/your/project/input`, `OUTPUT_DIR`=`/path/to/your/project/output`, `IMAGE_NAME`=`your_image_name`, then the input image will be `/path/to/your/project/input/your_image_name.png`. And the output files will be saved to `/path/to/your/project/output/`.
 
 - `BATCH_HEADER`, `BATCH_START`, `BATCH_END`: These variables are used to specify the range of images to process in batch mode. 
-    - e.g. If `BATCH_HEADER`=`example`, `BATCH_START`=`1`, `BATCH_END`=`10`, then the input images will be `/path/to/your/project/input/example_1.png`, `/path/to/your/project/input/example_2.png`, ..., `/path/to/your/project/input/example_10.png`.
+    - e.g. If `BATCH_HEADER`=`example_`, `BATCH_START`=`1`, `BATCH_END`=`10`, then the input images will be `/path/to/your/project/input/example_1.png`, `/path/to/your/project/input/example_2.png`, ..., `/path/to/your/project/input/example_10.png`.
     - If `BATCH_START`=`01`, `BATCH_END`=`10`, then the input images will be `/path/to/your/project/input/example_01.png`, `/path/to/your/project/input/example_02.png`, ..., `/path/to/your/project/input/example_10.png`.
     - You can leave `BATCH_HEADER` empty if your input images are named `1.png`, `2.png`, ..., `10.png`.
 
