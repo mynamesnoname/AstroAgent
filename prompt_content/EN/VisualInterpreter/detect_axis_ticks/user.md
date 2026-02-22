@@ -1,0 +1,1 @@
+Please analyze this spectrum plot and extract the axis information.

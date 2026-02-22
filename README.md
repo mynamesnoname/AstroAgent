@@ -170,6 +170,9 @@ For an input image `{your_image_name}.png`, the program will generate main produ
 * `{your_image_name}_summary.md`
   Final comprehensive report (object type, redshift, confidence level).
 
+  * in_brief.csv
+  The brief summary of the analysis
+
 And by-products:
 
 * `{your_image_name}_cropped.png`
