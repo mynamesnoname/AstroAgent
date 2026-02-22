@@ -134,20 +134,23 @@ Edit `.env` to specify:
 
 ## Quick Start
 
-### 1. Run the Analysis
+See [Quick start](Quickstart.md) for a quick start guide.
+
+### Run the Analysis
 Execute the main script:
 ```bash
 python main.py
 ```
 Results will be saved to the output directory specified in `.env`.
-
-### 2. Try the Notebook (Optional)
-For interactive exploration and debugging, see `debug.ipynb`. After setting up your environment variables, you can run this notebook to step through the analysis pipeline.
-
 ---
 
 ## Test set
-A basic test set is offered in ./data/test_set
+A basic test set is offered in 
+
+```text
+./test_set/CSST/input
+./test_set/DESI/input
+```
 
 ---
 

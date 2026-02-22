@@ -183,7 +183,9 @@ cp .env_example .env
 
 ## 快速开始（Quick Start）
 
-### 1. 运行分析
+详见 [Quick Start](Quickstart.md)
+
+### 运行分析
 
 ```bash
 python main.py
@@ -193,27 +195,15 @@ python main.py
 
 ---
 
-### 2. 使用 Notebook（可选）
-
-如需交互式调试或逐步理解流程，可使用：
-
-```text
-debug.ipynb
-```
-
-在设置好环境变量后即可运行。
-
----
-
 ## 测试数据集（Test Set）
 
-在以下路径提供了一个基础测试集：
+在以下路径提供了基础测试集：
 
 ```text
-./test_set/csst/mock_set1/input
+./test_set/CSST/input
+./test_set/DESI/input
 ```
 使用时请将 .env 中的 `INPUT_DIR` 设置为该路径。
-环境变量 DATA_SET=DESI
 
 ---
 
