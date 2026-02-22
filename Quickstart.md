@@ -35,7 +35,7 @@ Below are some important environment variables:
     - You can leave `BATCH_HEADER` empty if your input images are named `1.png`, `2.png`, ..., `10.png`.
 
 - `DATASET`: This variable is used to specify the dataset. It is related with the prompts. The prompts in `prompt_content` directory is modified according to the dataset instrument and spectrum characteristics. Now we support `DESI` and `CSST`.
-- `OCR`: This variable is used to specify the OCR engine. It is related with the prompts. We support `PaddleOCR` and `Tesseract OCR`.
+- `OCR`: This variable is used to specify the OCR engine. We support `Paddle OCR` (recommended) and `Tesseract OCR`.
 
 After setting up your environment variables, you can run the agent by running the following command:
 ```bash
