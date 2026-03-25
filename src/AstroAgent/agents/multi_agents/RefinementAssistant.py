@@ -10,7 +10,7 @@ from AstroAgent.agents.common.state import SpectroState
 from AstroAgent.agents.common.base_agent import BaseAgent
 from AstroAgent.core.runtime.runtime_container import RuntimeContainer
 
-from AstroAgent.agents.common.utils import find_overlap_regions, get_wiped_lines
+from AstroAgent.agents.multi_agents.utils.usage import find_overlap_regions, get_wiped_lines
 
 
 class RefinementAssistant(BaseAgent):
@@ -25,7 +25,8 @@ class RefinementAssistant(BaseAgent):
 
     
     async def run(self, state: SpectroState) -> SpectroState:
-        await self.refining(state)
+        if state['preliminary_classification']['type'] == 'QSO':
+            await self.refining(state)
         return state
 
     async def refining(self, state: SpectroState) -> SpectroState:
@@ -58,9 +59,9 @@ class RefinementAssistant(BaseAgent):
             for tr in state.get('cleaned_troughs', [])[:num_troughs]
         ]
 
-        rms = state["pixel_to_value"]["x"]["rms"]
-        a_x = state['pixel_to_value']['x']['a']
-        tol = self.runtime.configs.params.tol_pixels
+        # rms = state["pixel_to_value"]["x"]["rms"]
+        rms = state.get("pixel_to_value", {}).get("x", {}).get("rms", 0)
+        tol = self.runtime.configs.params.tol_wavelength
         rule_analysis = state['rule_analysis_QSO']
         wl_left = state['spectrum']['new_wavelength'][0]
         wl_right = state['spectrum']['new_wavelength'][-1]
@@ -103,7 +104,6 @@ class RefinementAssistant(BaseAgent):
             wiped_peaks=wiped_peaks if arm_name else None,
             rule_analysis=rule_analysis,
             debate_history=debate_history,
-            a=a_x,
             rms=rms,
             tol=tol,
             latest_auditing=latest_auditing

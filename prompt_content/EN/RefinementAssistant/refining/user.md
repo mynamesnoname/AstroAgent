@@ -82,7 +82,6 @@ Due to astrophysical outflow effects, the redshift derived from the lowest-ioniz
 Use the `calculate_rms_for_qso_redshift_tool` to compute the redshift uncertainty ±Δz:  
 - Tool inputs:  
     wavelength_rest: List[float]  # Rest-frame wavelengths of the lowest-ionization-state emission lines (avoid Lyα here due to potential broadening effects; prefer other lines when possible)  
-    a: float = {{ a }}  
     tolerance: int = {{ tol }}  
     rms_lambda = {{ rms }}: float  
 

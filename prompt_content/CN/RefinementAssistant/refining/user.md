@@ -76,8 +76,7 @@ Note:
 由于天文学上外流效应的影响，应使用最低电离态的发射线的红移作为光谱红移的最佳结果。
 使用工具 calculate_rms_for_qso_redshift_tool 计算红移误差 ± Δz
     - 工具的输入为
-        wavelength_rest: List[float], # 最低电离态的发射线的静止系波长（Lyα易受展宽影响，不适用于此处，尽量选择Lyα外的谱线）
-        a: float = {{ a }},           
+        wavelength_rest: List[float], # 最低电离态的发射线的静止系波长（Lyα易受展宽影响，不适用于此处，尽量选择Lyα外的谱线）          
         tolerance: int = {{ tol }},     
         rms_lambda = {{ rms }}: float   
 

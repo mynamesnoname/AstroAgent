@@ -42,19 +42,19 @@ class ResultWriter:
         output_dir = self._resolve_output_dir(state)
         os.makedirs(output_dir, exist_ok=True)
 
-        image_name = state.get("image_name", "unknown")
+        file_name = state.get("file_name", "unknown")
 
-        self._write_rule_analysis(state, output_dir, image_name)
-        self._write_summary(state, output_dir, image_name)
-        self._write_in_brief(state, output_dir, image_name)
-        self._write_snapshot(state, output_dir, image_name)
+        self._write_rule_analysis(state, output_dir, file_name)
+        self._write_summary(state, output_dir, file_name)
+        self._write_in_brief(state, output_dir, file_name)
+        self._write_snapshot(state, output_dir, file_name)
 
     # =========================
     # 📄 Artifact Writers
     # =========================
 
-    def _write_rule_analysis(self, state: SpectroState, output_dir: str, image_name: str):
-        path = os.path.join(output_dir, f"{image_name}_rule_analysis.md")
+    def _write_rule_analysis(self, state: SpectroState, output_dir: str, file_name: str):
+        path = os.path.join(output_dir, f"{file_name}_rule_analysis.md")
         if not self._can_write(path):
             return
 
@@ -76,8 +76,8 @@ class ResultWriter:
         if content:
             self._write_text(path, content)
 
-    def _write_summary(self, state: SpectroState, output_dir: str, image_name: str):
-        path = os.path.join(output_dir, f"{image_name}_summary.md")
+    def _write_summary(self, state: SpectroState, output_dir: str, file_name: str):
+        path = os.path.join(output_dir, f"{file_name}_summary.md")
         if not self._can_write(path):
             return
 
@@ -87,8 +87,8 @@ class ResultWriter:
 
         self._write_text(path, summary)
 
-    def _write_in_brief(self, state: SpectroState, output_dir: str, image_name: str):
-        path = os.path.join(output_dir, f"{image_name}_in_brief.json")
+    def _write_in_brief(self, state: SpectroState, output_dir: str, file_name: str):
+        path = os.path.join(output_dir, f"{file_name}_in_brief.json")
         if not self._can_write(path):
             return
 
@@ -97,18 +97,18 @@ class ResultWriter:
             return
 
         payload = {
-            "image_name": image_name,
+            "file_name": file_name,
             "timestamp": self._now(),
             "in_brief": in_brief,
         }
 
         self._write_json(path, payload)
 
-    def _write_snapshot(self, state: SpectroState, output_dir: str, image_name: str):
+    def _write_snapshot(self, state: SpectroState, output_dir: str, file_name: str):
         """
         保存一个安全的 state 快照（用于 debug / 复现）
         """
-        path = os.path.join(output_dir, f"{image_name}_snapshot.json")
+        path = os.path.join(output_dir, f"{file_name}_snapshot.json")
         if not self._can_write(path):
             return
 
@@ -149,7 +149,7 @@ class ResultWriter:
                 safe[k] = f"<non-serializable: {type(v).__name__}>"
 
         return {
-            "image_name": state.get("image_name"),
+            "file_name": state.get("file_name"),
             "timestamp": self._now(),
             "state": safe,
         }

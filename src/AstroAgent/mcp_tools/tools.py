@@ -37,14 +37,13 @@ def predict_obs_wavelength(
 
 def qso_redshift_rms(
     wavelength_rest: float,
-    a: float,            # Å / pixel
-    tolerance: int,      # pixel tolerance
+    tolerance: int,      # wavelength tolerance (Å)
     rms_lambda: float,   # Å
 ) -> float:
     """
     σ_z = sqrt((a·t)^2 + σ_λ^2) / λ_rest
     """
-    return np.sqrt((a * tolerance) ** 2 + rms_lambda ** 2) / wavelength_rest
+    return np.sqrt(tolerance ** 2 + rms_lambda ** 2) / wavelength_rest
 
 # def _calculate_redshift(obs_wavelength: Union[float, List[float]], rest_wavelength: Union[float, List[float]]) -> Union[float, List[float]]:
 #     """根据观测波长和谱线本征波长计算红移。"""

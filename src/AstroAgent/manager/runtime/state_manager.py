@@ -13,7 +13,7 @@ class SpectroStateFactory:
     """
     精简版 SpectroStateFactory
     - 只依赖 ParamsConfig（用于波段信息等分析参数）
-    - 在 create() 时传入 image_name, input_dir, output_dir
+    - 在 create() 时传入 file_name, input_dir, output_dir
     """
 
     def __init__(self, configs: AllConfig):
@@ -23,7 +23,7 @@ class SpectroStateFactory:
 
     def create(
         self,
-        image_name: str,
+        file_name: str,
         input_dir: str,
         output_dir: str
     ) -> SpectroState:
@@ -35,10 +35,11 @@ class SpectroStateFactory:
         # print(arm_name, arm_wavelength_range)
 
         # 构造路径
-        image_path = os.path.join(input_dir, f"{image_name}.png")
-        crop_path = os.path.join(output_dir, f"{image_name}_cropped.png")
-        spec_extract_path = os.path.join(output_dir, f"{image_name}_spec_extract.png")
-        continuum_path = os.path.join(output_dir, f"{image_name}_continuum.png")
+        input_format = self.io_config.input_format
+        file_path = os.path.join(input_dir, f"{file_name}.{input_format}")
+        crop_path = os.path.join(output_dir, f"{file_name}_cropped.png")
+        spec_extract_path = os.path.join(output_dir, f"{file_name}_spec_extract.png")
+        continuum_path = os.path.join(output_dir, f"{file_name}_continuum.png")
 
         # prompt_path = self.io_config.prompt
 
@@ -48,8 +49,8 @@ class SpectroStateFactory:
 
 
         state = SpectroState(
-            image_name=image_name,
-            image_path=image_path,
+            file_name=file_name,
+            file_path=file_path,
             output_dir=output_dir,
             crop_path=crop_path,
             spec_extract_path=spec_extract_path,

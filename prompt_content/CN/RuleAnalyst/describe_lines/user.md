@@ -3,22 +3,30 @@
 ## 发射/吸收特征
 以下是一些显著的峰或谷：
 - 峰
-{% for p in peaks %}
+{% if cleaned_peaks %}
+{% for p in cleaned_peaks %}
 波长：{{ p.wavelength }}
-Flux:  {{ p.mean_flux }}
-Prominence: {{ p.max_prominence }}
+Flux:  {{ p.flux }}
+Prominence: {{ p.prominence }}
 Width: {{ p.describe }}
 
 {% endfor %}
+{% else %}
+无显著峰特征
+{% endif %}
 
 - 谷
-{% for t in troughs %}
+{% if cleaned_troughs %}
+{% for t in cleaned_troughs %}
 波长：{{ t.wavelength }}
-Flux:  {{ t.mean_flux }}
-Depth: {{ t.max_depth }}
+Flux:  {{ t.flux }}
+Depth: {{ t.depth }}
 Width: {{ t.describe }}
 
 {% endfor %}
+{% else %}
+无显著谷特征
+{% endif %}
 
 请根据数据和图片总结：
 - 宽线（>2000 km/s）/窄线（<1000 km/s）二者哪个占主导？

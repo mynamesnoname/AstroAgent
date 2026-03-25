@@ -19,7 +19,7 @@ class ParamsConfig(BaseModel):
     ocr: str
     continuum_smoothing: int
     sigma_list: List[int]
-    tol_pixels: int
+    tol_wavelength: int
     prom_threshold_peaks: float
     prom_threshold_troughs: float
     num_peaks: int
@@ -53,7 +53,7 @@ class ParamsConfig(BaseModel):
             ocr=os.getenv("OCR") or "paddle",
             continuum_smoothing=getenv_int("CONTINUUM_SMOOTHING", 100),
             sigma_list=getenv_int_list("SIGMA_LIST", [2, 4, 16]),
-            tol_pixels=getenv_int("TOL_PIXELS", 10),
+            tol_wavelength=getenv_int("TOL_WAVELENGTH", 10),
             prom_threshold_peaks=getenv_float("PROM_THRESHOLD_PEAKS", 0.01),
             prom_threshold_troughs=getenv_float("PROM_THRESHOLD_TROUGHS", 0.05),
             num_peaks=getenv_int("PEAKS_NUMBER", 10),

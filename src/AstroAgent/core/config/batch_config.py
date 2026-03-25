@@ -34,9 +34,9 @@ class BatchConfig(BaseModel):
     @classmethod
     def from_env(cls) -> "BatchConfig":
         return cls(
-            header=os.getenv("BATCH_HEADER", ""),
-            start=os.getenv("BATCH_START") or None,
-            end=os.getenv("BATCH_END") or None,
+            header=os.getenv("FILE_BATCH_HEADER", ""),
+            start=os.getenv("FILE_BATCH_START") or None,
+            end=os.getenv("FILE_BATCH_END") or None,
         )
 
     @field_validator("start", "end")
