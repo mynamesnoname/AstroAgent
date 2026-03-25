@@ -3,22 +3,30 @@ This is a continuum image extracted from an astronomical spectrum.
 ## Emission/Absorption Features
 Below are some prominent peaks or troughs:
 - Peaks
-{% for p in peaks %}
+{% if cleaned_peaks %}
+{% for p in cleaned_peaks %}
 Wavelength: {{ p.wavelength }}
-Flux:  {{ p.mean_flux }}
-Prominence: {{ p.max_prominence }}
+Flux:  {{ p.flux }}
+Prominence: {{ p.prominence }}
 Width: {{ p.describe }}
 
 {% endfor %}
+{% else %}
+No prominent peaks found.
+{% endif %}
 
 - Troughs
-{% for t in troughs %}
+{% if cleaned_troughs %}
+{% for t in cleaned_troughs %}
 Wavelength: {{ t.wavelength }}
-Flux:  {{ t.mean_flux }}
-Depth: {{ t.max_depth }}
+Flux:  {{ t.flux }}
+Depth: {{ t.depth }}
 Width: {{ t.describe }}
 
 {% endfor %}
+{% else %}
+No prominent troughs found.
+{% endif %}
 
 Please summarize based on the data and image:
 - Which dominates: broad lines (>2000 km/s) or narrow lines (<1000 km/s)?

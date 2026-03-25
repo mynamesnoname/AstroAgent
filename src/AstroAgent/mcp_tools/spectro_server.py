@@ -82,7 +82,6 @@ def predict_obs_wavelength_tool(
 @server.tool()
 def calculate_rms_for_qso_redshift_tool(
     wavelength_rest: float,
-    a: float,
     tolerance: int,
     rms_lambda: float,
 ) -> dict:
@@ -92,7 +91,6 @@ def calculate_rms_for_qso_redshift_tool(
     try:
         rms = qso_redshift_rms(
             wavelength_rest=wavelength_rest,
-            a=a,
             tolerance=tolerance,
             rms_lambda=rms_lambda,
         )

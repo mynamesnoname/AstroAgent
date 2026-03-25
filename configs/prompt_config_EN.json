@@ -15,6 +15,10 @@
         "check_border":{
             "path": "EN/VisualInterpreter/check_border",
             "variables": []
+        },
+        "select_line_center_with_llm":{
+            "path": "EN/VisualInterpreter/select_line_center_with_llm",
+            "variables": ["group_data", "approved_peaks", "approved_troughs", "sigma_list"]
         }
     },
     "RuleAnalyst":{
@@ -28,7 +32,7 @@
         },
         "describe_lines":{
             "path": "EN/RuleAnalyst/describe_lines",
-            "variables": ["peaks", "troughs"]
+            "variables": ["cleaned_peaks", "cleaned_troughs"]
         },
         "describe_quality":{
             "path": "EN/RuleAnalyst/describe_quality",
@@ -121,7 +125,6 @@
                 "wiped_peaks",
                 "rule_analysis",
                 "debate_history",
-                "a",
                 "rms",
                 "tol"
             ]
@@ -139,7 +142,6 @@
                 "wiped_peaks",
                 "rule_analysis",
                 "debate_history",
-                "a",
                 "rms",
                 "tol",
                 "latest_auditing"

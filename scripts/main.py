@@ -26,10 +26,10 @@ async def main():
         # Load configs
         # ------------------------
         configs = AllConfig.from_env()
-        model_config = configs.model
+        # model_config = configs.model
         io_config = configs.io
         batch_config = configs.batch
-        params_config = configs.params
+        # params_config = configs.params
         factory = SpectroStateFactory(configs)
         writer = ResultWriter()
 
@@ -62,15 +62,15 @@ async def main():
         # ------------------------
         if io_config.run_mode=='b':
             if batch_config.is_batch_mode():
-                image_ids = batch_config.generate_ids()
-                logging.info(f"Batch mode enabled, total images: {len(image_ids)}")
+                file_ids = batch_config.generate_ids()
+                logging.info(f"Batch mode enabled, total images: {len(file_ids)}")
             else: 
                 raise ValueError("Batch mode is enabled but start/end are not set")
         else:
-            if not io_config.image_name:
+            if not io_config.file_name:
                 logging.error("IMAGE_NAME is not set for single image mode")
                 return
-            image_ids = [io_config.image_name]
+            file_ids = [io_config.file_name]
             logging.info("Single image mode enabled")
 
         # ------------------------
@@ -91,30 +91,31 @@ async def main():
         # Main processing loop
         # ------------------------
         results = []
-        total = len(image_ids)
+        total = len(file_ids)
 
-        for idx, img_name in enumerate(image_ids, start=1):
-            image_path = os.path.join(input_dir, f"{img_name}.png")
+        for idx, file_name in enumerate(file_ids, start=1):
+            format = io_config.input_format
+            file_path = os.path.join(input_dir, f"{file_name}.{format}")
 
-            if not os.path.isfile(image_path):
-                logging.warning(f"Skipping missing file: {image_path}")
+            if not os.path.isfile(file_path):
+                logging.warning(f"Skipping missing file: {file_path}")
                 continue
 
-            logging.info(f"Processing image {idx}/{total}: {img_name}.png")
+            logging.info(f"Processing image {idx}/{total}: {file_name}.{format}")
 
             try:
                 state = factory.create(
-                    image_name=img_name,
+                    file_name=file_name,
                     input_dir=input_dir,
                     output_dir=output_dir
                 )
                 result = await orchestrator.run_analysis_single(state)
                 writer.write(result)
-                logging.info(f"Image {img_name}.png processed")
+                logging.info(f"Image {file_name}.{format} processed")
 
                 in_brief = result.get("in_brief", {})
                 results.append([
-                    img_name,
+                    file_name,
                     safe_str(in_brief.get("type_with_absention")),
                     safe_str(in_brief.get("type_forced")),
                     safe_str(in_brief.get("redshift")),
@@ -125,7 +126,7 @@ async def main():
                 ])
 
             except Exception as e:
-                logging.exception(f"Failed to process image {img_name}.png: {e}")
+                logging.exception(f"Failed to process image {file_name}.{format}: {e}")
 
         # ------------------------
         # Save results
@@ -135,7 +136,7 @@ async def main():
             with open(csv_path, "w", newline="", encoding="utf-8") as f:
                 writer_ = csv.writer(f)
                 writer_.writerow([
-                    "image_name",
+                    "file_name",
                     "type_with_absention",
                     "type_forced",
                     "redshift",

@@ -73,8 +73,7 @@ If Lyα is reported, compare its flux with those of other lines (e.g., C IV, C I
 Due to astrophysical outflow effects, the redshift derived from the lowest-ionization emission line should be adopted as the best estimate of the systemic redshift.  
 
 Use the `calculate_rms_for_qso_redshift_tool` to compute the redshift uncertainty ±Δz, with the following inputs:  
-- `wavelength_rest`: List[float] — rest-frame wavelengths of the lowest-ionization emission lines (avoid Lyα here due to its susceptibility to broadening; prefer other lines when possible)  
-- `a`: float = {{ a }}  
+- `wavelength_rest`: List[float] — rest-frame wavelengths of the lowest-ionization emission lines (avoid Lyα here due to its susceptibility to broadening; prefer other lines when possible)   
 - `tolerance`: int = {{ tol }}  
 - `rms_lambda`: float = {{ rms }}
 

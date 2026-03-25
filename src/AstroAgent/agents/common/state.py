@@ -19,18 +19,12 @@ class SpectroState(MessagesState):
     # ===========================
     # 🔹 原始输入
     # ===========================
-    image_path: Optional[str] = None
-    image_name: Optional[str] = None
+    file_path: Optional[str] = None
+    file_name: Optional[str] = None
     output_dir: Optional[str] = None
     crop_path: Optional[str] = None
     spec_extract_path: Optional[str] = None
     continuum_path: Optional[str] = None
-    
-    # sigma_lambda: Optional[int] = None
-    # sigma_list: List[Union[int, float]] = field(default_factory=list)
-    # arm_name: Optional[List[str]] = None
-    # arm_wavelength_range: Optional[List[List[float]]] = None
-    # prompt: Optional[dict] = None
 
     # ===========================
     # 🔹 图像识别与像素映射信息
@@ -48,16 +42,23 @@ class SpectroState(MessagesState):
     curve_points: Optional[List[List[int]]] = None
     curve_gray_values: Optional[Union[List[float], np.ndarray]] = None
     spectrum: Optional[Dict[str, Union[List[float], float]]] = None
-    peaks: Optional[List[Dict[str, float]]] = None
-    troughs: Optional[List[Dict[str, float]]] = None
-    ROI_peaks: Optional[List[Dict[str, float]]] = None
-    ROI_troughs: Optional[List[Dict[str, float]]] = None
-    merged_peaks: Optional[List[Dict[str, float]]] = None
-    merged_troughs: Optional[List[Dict[str, float]]] = None
+    peak_groups: Optional[List[List[Dict[str, Any]]]] = None
+    trough_groups: Optional[List[List[Dict[str, Any]]]] = None
+    cleaned_spectrum: Optional[Dict[str, Union[List[float], float]]] = None
     continuum: Optional[Dict[str, Any]] = None
+    residual_spectrum: Optional[Dict[str, Union[List[float], float]]] = None
+    approved_peaks: Optional[List[Dict[str, float]]] = None
+    approved_troughs: Optional[List[Dict[str, float]]] = None
+    peaks: Optional[List[Dict[str, float]]] = None  
+    troughs: Optional[List[Dict[str, float]]] = None
+    # ROI_peaks: Optional[List[Dict[str, float]]] = None
+    # ROI_troughs: Optional[List[Dict[str, float]]] = None
+    # merged_peaks: Optional[List[Dict[str, float]]] = None
+    # merged_troughs: Optional[List[Dict[str, float]]] = None
     cleaned_peaks: Optional[List[Dict[str, float]]] = None
     wiped_peaks: Optional[List[Dict[str, float]]] = None
     cleaned_troughs: Optional[List[Dict[str, float]]] = None
+    overlap_regions: Optional[Dict[str, List[float]]] = None
     # ===========================
     # 🔹 可视化对象
     # ===========================

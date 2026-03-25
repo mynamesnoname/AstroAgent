@@ -4,7 +4,8 @@ This is a continuum image extracted from an astronomical spectrum.
 
 The plot includes:  
 - Blue line: spectral signal  
-- Pink regions: data gaps caused by the OpenCV image reading process  
+- Pink regions: data gaps caused by the OpenCV image reading process (may not exist in all images)
+- Yellow line: signal-to-noise ratio
 
 Summarize in 2–3 sentences:  
 - Signal-to-noise ratio (high/low)  
