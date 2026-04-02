@@ -163,7 +163,16 @@ pip install -r requirements.txt
 
 ---
 
-## 3. 环境变量配置
+### 3. MCP 配置
+将 `configs/mcp_config.json` 中的:
+```json
+"args": ["/data2/wbc/llm-spectro-agent/src/AstroAgent/mcp_tools/spectro_server.py"],  
+```
+改为对应路径 (即项目的 `/src/AstroAgent/mcp_tools/spectro_server.py`)
+
+---
+
+## 4. 环境变量配置
 
 复制示例配置文件：
 
