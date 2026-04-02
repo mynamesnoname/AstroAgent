@@ -118,7 +118,14 @@ Install the required Python packages:
 pip install -r requirements.txt
 ```
 
-### 3. Environment Setup
+### 3. MCP config
+Turn to `configs/mcp_config.json`, change the following line:
+```json
+"args": ["/data2/wbc/llm-spectro-agent/src/AstroAgent/mcp_tools/spectro_server.py"],  
+```
+to your spectrum server path. (it's `/src/AstroAgent/mcp_tools/spectro_server.py`)
+
+### 4. Environment Setup
 Copy the example configuration and fill in your settings:
 ```bash
 cp .env_example .env
