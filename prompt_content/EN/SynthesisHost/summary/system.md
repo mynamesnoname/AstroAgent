@@ -52,16 +52,17 @@ Output format as follows:
 4. Spectrum reliability score (0–3):  
     - If section **2. Preliminary classification of the spectrum** yields "Unknown" (do not confuse this with the analysis report summary), assign a reliability score of 0.  
     - Otherwise, assign a score according to the following criteria:  
-        - ≥2 major emission lines identified (Lyα, C IV, C III, Mg II) → 3  
-        - 1 major emission line plus additional weaker features → 2  
-        - Only 1 major emission line with no supporting features → 1  
-        - Poor SNR preventing reliable line identification → 0  
+        - Confident classification: two or more secure features (Lyα, C IV, C III, Mg II) → 4  
+        - Probable classification: at least one secure feature, with correct continuum shape; or many weak features → 3  
+        - Possible classification: one strong emission feature, but not sure what it is → 2  
+        - Unlikely classification: one or some unidentified features → 1  
+        - Nothing there: no signal. → 0  
 
 5. Is human intervention required?  
 **Note**:  
     - Human intervention is mandatory if the preliminary classification is "Unknown".  
     - Human intervention is mandatory if the reliability score is 0–2.  
-    - Human intervention is mandatory if Lyα is not detected.
+    - Human intervention is mandatory if Lyα is not detected, or only Lyα is detected.
 
 {% else %}
 
