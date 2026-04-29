@@ -3,7 +3,7 @@ import os
 from typing import Optional, Dict, Any, List
 from pydantic import BaseModel
 
-from AstroAgent.core.config._utils import getenv_int, getenv_int_list, getenv_float, getenv_optional_float, safe_to_bool
+from AstroAgent.core.config._utils import getenv_int, getenv_int_list, getenv_float, getenv_optional_float
 
 
 # ------------------------
@@ -11,21 +11,40 @@ from AstroAgent.core.config._utils import getenv_int, getenv_int_list, getenv_fl
 # ------------------------
 
 class ParamsConfig(BaseModel):
-    dataset: str
     arm_name: Optional[List[str]]
     arm_wavelength_range: Optional[List[List[float]]]
-    snr_threshold_upper: Optional[float]
-    snr_threshold_lower: Optional[float]
     ocr: str
-    continuum_smoothing: int
-    sigma_list: List[int]
-    tol_wavelength: int
-    prom_threshold_peaks: float
-    prom_threshold_troughs: float
+    tol_wavelength_qso_elg: int
+    tol_wavelength_lrg_bgs: int
     num_peaks: int
     num_troughs: int
-    label: bool
-    max_debate_rounds: int
+    min_qso_redshift: float
+    min_galaxy_redshift: float
+    step_f_concurrency: int
+
+    # ── 吸收线检测参数 ──
+    abs_window_width: int
+    abs_window_overlap: int
+    abs_delta_chi2_base: float
+    abs_dynamic_threshold_factor: float
+    abs_global_delta_chi2_threshold: float
+    abs_fwhm_min: float
+    abs_fwhm_max: float
+    abs_snr_depth_threshold: float
+    smooth_sigma_trough: float
+    smooth_prominence_frac_trough: float
+
+    # ── 发射线检测参数 ──
+    em_window_width: int
+    em_window_overlap: int
+    em_delta_chi2_base: float
+    em_dynamic_threshold_factor: float
+    em_global_delta_chi2_threshold: float
+    em_sys_err_frac: float
+    em_fwhm_min: float
+    em_fwhm_max: float
+    smooth_sigma: float
+    smooth_prominence_frac: float
 
     @classmethod
     def from_env(cls) -> "ParamsConfig":
@@ -45,21 +64,40 @@ class ParamsConfig(BaseModel):
             )
 
         return cls(
-            dataset=os.getenv("DATASET") or "DESI",
             arm_name=arm_name,
             arm_wavelength_range=arm_wavelength_range,
-            snr_threshold_upper=getenv_optional_float("SNR_THRESHOLD_UPPER"),
-            snr_threshold_lower=getenv_optional_float("SNR_THRESHOLD_LOWER"),
             ocr=os.getenv("OCR") or "paddle",
-            continuum_smoothing=getenv_int("CONTINUUM_SMOOTHING", 100),
-            sigma_list=getenv_int_list("SIGMA_LIST", [2, 4, 16]),
-            tol_wavelength=getenv_int("TOL_WAVELENGTH", 10),
-            prom_threshold_peaks=getenv_float("PROM_THRESHOLD_PEAKS", 0.01),
-            prom_threshold_troughs=getenv_float("PROM_THRESHOLD_TROUGHS", 0.05),
+            tol_wavelength_qso_elg=getenv_int("TOL_WAVELENGTH_QSO_ELG", 100),
+            tol_wavelength_lrg_bgs=getenv_int("TOL_WAVELENGTH_LRG_BGS", 30),            
             num_peaks=getenv_int("PEAKS_NUMBER", 10),
             num_troughs=getenv_int("TROUGHS_NUMBER", 15),
-            label=safe_to_bool(os.getenv("LABEL")),
-            max_debate_rounds=getenv_int("MAX_DEBATE_ROUNDS", 3),
+            min_qso_redshift=getenv_optional_float("MIN_QSO_REDSHIFT") or float('-inf'),
+            min_galaxy_redshift=getenv_optional_float("MIN_GALAXY_REDSHIFT") or float('-inf'),
+            step_f_concurrency=getenv_int("STEP_F_CONCURRENCY", 4),
+
+            # ── 吸收线检测参数 ──
+            abs_window_width=getenv_int("ABS_WINDOW_WIDTH", 100),
+            abs_window_overlap=getenv_int("ABS_WINDOW_OVERLAP", 60),
+            abs_delta_chi2_base=getenv_float("ABS_DELTA_CHI2_BASE", 0.02),
+            abs_dynamic_threshold_factor=getenv_float("ABS_DYNAMIC_THRESHOLD_FACTOR", 100.0),
+            abs_global_delta_chi2_threshold=getenv_float("ABS_GLOBAL_DELTA_CHI2_THRESHOLD", 0.5),
+            abs_fwhm_min=getenv_float("ABS_FWHM_MIN", 5.0),
+            abs_fwhm_max=getenv_float("ABS_FWHM_MAX", 100.0),
+            abs_snr_depth_threshold=getenv_float("ABS_SNR_DEPTH_THRESHOLD", 3.0),
+            smooth_sigma_trough=getenv_float("SMOOTH_SIGMA_TROUGH", 16.0),
+            smooth_prominence_frac_trough=getenv_float("SMOOTH_PROMINENCE_FRAC_TROUGH", 0.01),
+
+            # ── 发射线检测参数 ──
+            em_window_width=getenv_int("EM_WINDOW_WIDTH", 500),
+            em_window_overlap=getenv_int("EM_WINDOW_OVERLAP", 300),
+            em_delta_chi2_base=getenv_float("EM_DELTA_CHI2_BASE", 0.03),
+            em_dynamic_threshold_factor=getenv_float("EM_DYNAMIC_THRESHOLD_FACTOR", 100.0),
+            em_global_delta_chi2_threshold=getenv_float("EM_GLOBAL_DELTA_CHI2_THRESHOLD", 0.05),
+            em_sys_err_frac=getenv_float("EM_SYS_ERR_FRAC", 0.05),
+            em_fwhm_min=getenv_float("EM_FWHM_MIN", 3.0),
+            em_fwhm_max=getenv_float("EM_FWHM_MAX", 380.0),
+            smooth_sigma=getenv_float("SMOOTH_SIGMA", 160.0),
+            smooth_prominence_frac=getenv_float("SMOOTH_PROMINENCE_FRAC", 0.01),
         )
 
     # ------------------------

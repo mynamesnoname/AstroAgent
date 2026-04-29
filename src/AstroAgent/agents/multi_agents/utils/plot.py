@@ -44,21 +44,39 @@ def plot_spectrum_snr(state: SpectroState):
     """
     wavelength = state['spectrum']['new_wavelength']
     flux = state['spectrum']['weighted_flux']
-    flux_top = state['spectrum']['max_unresolved_flux']
-    flux_bottom = state['spectrum']['min_unresolved_flux']
-    effective_snr = state['spectrum']['effective_snr']
+    flux_top = state['spectrum'].get('max_unresolved_flux')
+    flux_bottom = state['spectrum'].get('min_unresolved_flux')
+    effective_snr = state['spectrum'].get('effective_snr')
+    ivar = state['spectrum'].get('ivar')
 
     h, w = _get_figsize(state)
 
     fig, axs = plt.subplots(2, 1, figsize=(h, 2*w))
 
+    # 上方：光谱 flux
+    if flux_top is not None and flux_bottom is not None:
+        axs[0].fill_between(wavelength, flux_bottom, flux_top, alpha=0.4, color='gray', 
+                           label='information lossed in Opencv processing')
     axs[0].plot(wavelength, flux, color='b', label=r'$\bar F$: signal extracted from picture')
-    axs[0].fill_between(wavelength, flux_top, flux_bottom, alpha=0.4, color='gray', label='information lossed in Opencv processing')
     axs[0].set_ylabel('flux')
     axs[0].set_xlabel('wavelength')
     axs[0].legend()
 
-    axs[1].plot(wavelength, effective_snr, c='orange', label=r'$SNR=\frac{{\bar F}_i}{\sigma_{i,j}}$')
+    # 下方：SNR
+    if effective_snr is not None:
+        # 确保 effective_snr 是 numpy 数组
+        effective_snr = np.asarray(effective_snr, dtype=np.float64)
+        axs[1].plot(wavelength, effective_snr, c='orange', label=r'$SNR=\frac{{\bar F}_i}{\sigma_{i,j}}$')
+    elif ivar is not None:
+        # 从 ivar 计算 SNR
+        ivar = np.asarray(ivar, dtype=np.float64)
+        flux_arr = np.asarray(flux, dtype=np.float64)
+        ivar_safe = np.maximum(ivar, 1e-10)
+        snr_from_ivar = flux_arr * np.sqrt(ivar_safe)
+        axs[1].plot(wavelength, snr_from_ivar, c='orange', label='SNR from IVAR')
+    else:
+        axs[1].text(0.5, 0.5, 'SNR data not available', ha='center', va='center', 
+                    transform=axs[1].transAxes, fontsize=14)
     axs[1].set_ylabel('Effective SNR')
     axs[1].set_xlabel('wavelength')
     axs[1].legend(fontsize=15)
@@ -175,78 +193,145 @@ def plot_masked_spectrum(state: SpectroState):
     return fig
 
 
-def plot_cleaned_features(state: SpectroState, sigma_list: List, wavelength_label: bool=False):
+def plot_features(state: SpectroState, wavelength_label: bool = True):
     """
-    绘制清洗后的峰谷特征图。
-    包含原始光谱、不同 sigma 平滑曲线、峰值和谷值标记线。
+    绘制三行子图：光谱与连续谱、残差与吸收线、残差与发射线。
     保存为 {file_name}_features.png。
+    
+    Parameters
+    ----------
+    state : SpectroState
+        状态字典，需包含 'spectrum', 'continuum', 'peaks', 'troughs'
+    wavelength_label : bool
+        是否标注特征的中心波长
+    
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
     """
-    h, w = _get_figsize(state)
-
-    fig = plt.figure(figsize=(h, w))
+    from AstroAgent.agents.multi_agents.utils.feature_finder_precise import SIGMA_TO_FWHM
+    
+    # 获取数据
     spec = state["spectrum"]
     wavelengths = np.array(spec["new_wavelength"])
     flux = np.array(spec["weighted_flux"])
-
-    # 首先绘制 overlap_regions（最底层）
-    overlap_regions = state.get('overlap_regions')
-    if overlap_regions:
-        y_min, y_max = np.min(flux), np.max(flux)
-        for region_name, (left, right) in overlap_regions.items():
-            plt.axvspan(left, right, color='gray', alpha=0.2, zorder=0)
-        # 添加一个虚拟的 patch 用于 legend
-        from matplotlib.patches import Patch
-        overlap_patch = Patch(color='gray', alpha=0.2, label='overlapped arms')
-
-    plt.plot(wavelengths, flux, label='original', c='k', alpha=0.7, zorder=1)
-
-    for sigma in sigma_list:
-        sigma_smooth = gaussian_filter1d(state['spectrum']['weighted_flux'], sigma=sigma)
-        plt.plot(state['spectrum']['new_wavelength'], sigma_smooth, alpha=0.7, label=rf'$\sigma={sigma}$', zorder=1)
-
+    
+    # 获取连续谱
+    continuum = state.get('continuum', {})
+    continuum_wavelength = np.array(continuum.get('wavelength', []))
+    continuum_flux = np.array(continuum.get('flux', []))
+    
+    # 计算残差（光谱 - 连续谱）
+    if len(continuum_wavelength) > 0:
+        # 确保 continuum 和 spectrum 的波长对齐
+        residual = flux - continuum_flux
+    else:
+        residual = flux.copy()
+    
+    # 创建三行子图，共享x轴
+    fig, axes = plt.subplots(3, 1, figsize=(16, 12), sharex=True)
+    
+    # ===========================================================================
+    # 子图1：原始光谱 + 连续谱
+    # ===========================================================================
+    ax1 = axes[0]
+    ax1.plot(wavelengths, flux, 'k-', lw=0.8, alpha=0.75, label='Spectrum')
+    if len(continuum_wavelength) > 0:
+        ax1.plot(continuum_wavelength, continuum_flux, 'r--', lw=1.5, alpha=0.9, label='Continuum')
+    ax1.set_ylabel('flux')
+    ax1.legend(fontsize=9, loc='upper right')
+    ax1.grid(True, alpha=0.25)
+    
+    # ===========================================================================
+    # 子图2：残差 + 吸收线（troughs）
+    # ===========================================================================
+    ax2 = axes[1]
+    ax2.plot(wavelengths, residual, color='steelblue', lw=0.7, alpha=0.75, label='Residual')
+    ax2.axhline(0, color='gray', linestyle='-', linewidth=0.5, alpha=0.5)
+    
     # 获取 y 轴范围用于文本定位
-    y_min, y_max = plt.ylim()
-    text_y_position = y_max * 0.7  # 在顶部 98% 位置
-
-    # 绘制 cleaned_peaks（红色实线）
-    for peak_ in state.get('cleaned_peaks', []):
-        plt.axvline(peak_['wavelength'], linestyle='-', c='red', alpha=0.5, zorder=2)
+    residual_y_min, residual_y_max = np.min(residual), np.max(residual)
+    text_y_position = residual_y_max * 0.92
+    
+    # 绘制吸收线（troughs，用番茄红色）
+    troughs = state.get('troughs', [])
+    n_troughs = 0
+    for trough in troughs:
+        center = trough.get('wavelength')
+        if center is None or center <= 0:
+            continue
+        n_troughs += 1
+        
+        fwhm = trough.get('FWHM_A', trough.get('FWHM(Å)', 10.0))
+        amplitude = trough.get('amplitude', trough.get('深度', 0))
+        
+        # 绘制倒高斯拟合曲线
+        if amplitude > 0 and fwhm > 0:
+            sigma = fwhm / SIGMA_TO_FWHM
+            wave_local = np.linspace(center - 3.5*sigma, center + 3.5*sigma, 200)
+            gaussian_profile = -amplitude * np.exp(-0.5 * ((wave_local - center) / sigma) ** 2)
+            ax2.plot(wave_local, gaussian_profile, color='tomato', linewidth=1.8, alpha=0.85)
+        
+        # 绘制特征位置垂直线
+        ax2.axvline(center, color='tomato', linestyle='--', linewidth=0.8, alpha=0.4)
+        
+        # 标注中心波长
         if wavelength_label:
-            plt.text(peak_['wavelength'], text_y_position, f'{peak_["wavelength"]:.2f}',
-                     rotation=90, verticalalignment='top', horizontalalignment='center')
+            ax2.text(center, text_y_position, f'{center:.1f}',
+                     rotation=90, verticalalignment='top', horizontalalignment='center',
+                     fontsize=7, color='tomato', alpha=0.8)
+    
+    ax2.set_ylabel('flux')
+    ax2.legend(fontsize=9, loc='upper right')
+    ax2.grid(True, alpha=0.25)
+    
+    # ===========================================================================
+    # 子图3：残差 + 发射线（peaks）
+    # ===========================================================================
+    ax3 = axes[2]
+    ax3.plot(wavelengths, residual, color='steelblue', lw=0.7, alpha=0.75, label='Residual')
+    ax3.axhline(0, color='gray', linestyle='-', linewidth=0.5, alpha=0.5)
+    
+    # 绘制发射线（peaks，用深橙色）
+    peaks = state.get('peaks', [])
+    n_peaks = 0
+    for peak in peaks:
+        center = peak.get('wavelength')
+        if center is None:
+            continue
+        n_peaks += 1
+        
+        fwhm = peak.get('FWHM_A', peak.get('FWHM(Å)', 10.0))
+        amplitude = peak.get('amplitude', peak.get('幅度', 0))
+        
+        # 绘制高斯拟合曲线
+        if amplitude > 0 and fwhm > 0:
+            sigma = fwhm / SIGMA_TO_FWHM
+            wave_local = np.linspace(center - 3.5*sigma, center + 3.5*sigma, 200)
+            gaussian_profile = amplitude * np.exp(-0.5 * ((wave_local - center) / sigma) ** 2)
+            ax3.plot(wave_local, gaussian_profile, color='darkorange', linewidth=1.8, alpha=0.85)
+        
+        # 绘制特征位置垂直线
+        ax3.axvline(center, color='darkorange', linestyle='--', linewidth=0.8, alpha=0.4)
+        
+        # 标注中心波长
+        if wavelength_label:
+            ax3.text(center, text_y_position, f'{center:.1f}',
+                     rotation=90, verticalalignment='top', horizontalalignment='center',
+                     fontsize=7, color='darkorange', alpha=0.8)
+    
+    ax3.set_xlabel('wavelength')
+    ax3.set_ylabel('flux')
+    ax3.legend(fontsize=9, loc='upper right')
+    ax3.grid(True, alpha=0.25)
+    
+    plt.tight_layout()
+    
+    n_peaks_valid = len([p for p in peaks if p.get('wavelength') is not None])
+    n_troughs_valid = len([t for t in troughs if t.get('wavelength') is not None and t.get('wavelength') > 0])
+    print(f"Plot {n_peaks_valid} peaks, {n_troughs_valid} troughs.")
 
-    # 绘制 cleaned_troughs（蓝色实线）
-    for trough_ in state.get('troughs', []):
-        if trough_['wavelength'] > 0:
-            plt.axvline(trough_['wavelength'], linestyle='-', c='blue', alpha=0.5, zorder=2)
-            if wavelength_label:
-                plt.text(trough_['wavelength'], text_y_position, f'{trough_["wavelength"]:.2f}',
-                         rotation=90, verticalalignment='top', horizontalalignment='center')
-
-    # 绘制 wiped_peaks（红色虚线）
-    for peak_ in state.get('wiped_peaks', []):
-        plt.axvline(peak_['wavelength'], linestyle='--', c='red', alpha=0.3, zorder=2)
-
-    # 绘制 wiped_troughs（蓝色虚线）
-    for trough_ in state.get('wiped_troughs', []):
-        if trough_['wavelength'] > 0:
-            plt.axvline(trough_['wavelength'], linestyle='--', c='blue', alpha=0.3, zorder=2)
-
-    # 添加 legend 条目
-    plt.plot([], [], linestyle='-', c='red', alpha=0.5, label='peaks')
-    plt.plot([], [], linestyle='-', c='blue', alpha=0.5, label='troughs')
-    if state.get('wiped_peaks') or state.get('wiped_troughs'):
-        plt.plot([], [], linestyle='--', c='red', alpha=0.3, label='supposed peaks')
-        plt.plot([], [], linestyle='--', c='blue', alpha=0.3, label='supposed troughs')
-    if overlap_regions:
-        plt.plot([], [], color='gray', alpha=0.2, linewidth=10, label='overlapped arms')
-
-    plt.ylabel('flux')
-    plt.xlabel('wavelength')
-    plt.legend(ncol=2)
-    print(f"Plot {len(state.get('cleaned_peaks', []))} peaks, {len(state.get('cleaned_troughs', []))} troughs, "
-          f"{len(state.get('wiped_peaks', []))} supposed peaks, {len(state.get('wiped_troughs', []))} supposed troughs.")
-
-    fig.savefig(os.path.join(state['output_dir'], f"{state['file_name']}_features.png"), dpi=150, bbox_inches='tight')
+    fig.savefig(os.path.join(state['output_dir'], f"{state['file_name']}_features.png"), 
+                dpi=150, bbox_inches='tight')
     plt.close(fig)
     return fig

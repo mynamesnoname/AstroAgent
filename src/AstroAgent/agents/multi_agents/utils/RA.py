@@ -64,9 +64,3 @@ def get_Ly_alpha_candidates(state, peak_list):
 
     state['Lyalpha_candidates'] = Lyalpha_candidate
 
-
-def calculate_magnitude(state):
-    pass
-
-def calculate_color(state):
-    pass

@@ -1,5 +1,6 @@
 # core/prompt.py
 
+import json
 import os
 from typing import Dict, Any, List, Tuple
 
@@ -34,6 +35,15 @@ class PromptManager:
             trim_blocks=True,
             lstrip_blocks=True,
         )
+
+        # Override the default tojson filter to preserve Unicode characters
+        # (e.g. Chinese text, Å symbol) instead of escaping them to \uXXXX.
+        # Also accepts an optional `indent` keyword argument so that templates
+        # can call {{ value | tojson(indent=2) }} for pretty-printed output.
+        def _tojson_filter(value, indent=None):
+            return json.dumps(value, ensure_ascii=False, indent=indent)
+
+        self.env.filters["tojson"] = _tojson_filter
 
     def load(
         self,

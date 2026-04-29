@@ -2,6 +2,7 @@
 # Data & outputs (RECURSIVE)
 # ====================
 data/
+test_set/
 
 # Logs
 log/
