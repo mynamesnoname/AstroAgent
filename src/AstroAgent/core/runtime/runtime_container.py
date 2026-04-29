@@ -1,3 +1,5 @@
+import logging
+
 from dotenv import load_dotenv
 
 from AstroAgent.manager.runtime.prompt_manager import PromptManager
@@ -26,6 +28,12 @@ class RuntimeContainer:
             self._mcp = await manager.create_mcp_client(
                 self.configs.mcp
             )
+
+    async def reset_mcp(self) -> None:
+        """断网重联时调用：清除缓存的 MCP 连接和工具列表，下次 get_tools() 时自动重建。"""
+        logging.warning("🔄 重置 MCP 连接缓存，等待重新连接...")
+        self._tools = None
+        self._mcp = None
 
     async def get_tools(self):
         if self._tools is None:

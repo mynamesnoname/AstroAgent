@@ -55,9 +55,13 @@ class SpectroState(MessagesState):
     # ROI_troughs: Optional[List[Dict[str, float]]] = None
     # merged_peaks: Optional[List[Dict[str, float]]] = None
     # merged_troughs: Optional[List[Dict[str, float]]] = None
-    cleaned_peaks: Optional[List[Dict[str, float]]] = None
-    wiped_peaks: Optional[List[Dict[str, float]]] = None
-    cleaned_troughs: Optional[List[Dict[str, float]]] = None
+    # cleaned_peaks: Optional[List[Dict[str, float]]] = None
+    # wiped_peaks: Optional[List[Dict[str, float]]] = None
+    # cleaned_troughs: Optional[List[Dict[str, float]]] = None
+    brute_force_matching_qso_elg: Optional[List[Dict[str, Any]]] = None
+    brute_force_matching_lrg_bgs: Optional[List[Dict[str, Any]]] = None
+    absorption_records: Optional[List[Dict[str, Any]]] = None
+    emission_records: Optional[List[Dict[str, Any]]] = None
     overlap_regions: Optional[Dict[str, List[float]]] = None
     # ===========================
     # 🔹 可视化对象
@@ -75,7 +79,18 @@ class SpectroState(MessagesState):
     preliminary_classification_monkey: Optional[str] = None
     possible_object: Optional[List] = field(default=None)
     Lyalpha_candidate: Optional[List] = field(default=None)
-    rule_analysis_QSO: Optional[List] = field(default_factory=list)
+    rule_analysis_QSO: Optional[Dict[str, Any]] = field(default_factory=dict)
+    rule_analysis_ELG: Optional[Dict[str, Any]] = field(default_factory=dict)
+    rule_analysis_LRG: Optional[Dict[str, Any]] = field(default_factory=dict)
+    extract_QSO: Optional[Dict[str, Any]] = field(default_factory=dict)
+    extract_ELG: Optional[Dict[str, Any]] = field(default_factory=dict)
+    extract_LRG: Optional[Dict[str, Any]] = field(default_factory=dict)
+    verdict: Optional[str] = None                         # AnalysisAuditor auditing_verdict output
+    verdict_extract: Optional[List[Dict[str, Any]]] = None  # AnalysisAuditor verdict_extract output
+    critique: Optional[str] = None                        # AnalysisAuditor auditing_critique output
+    patched_verdict: Optional[str] = None                 # RefinementAssistant refining_patch output
+    final_report: Optional[str] = None                    # RefinementAssistant refining_final output
+    synthesis_QSO: Optional[str] = None
     rule_analysis_galaxy: Optional[List] = field(default_factory=list)
     # other Analysts
     auditing_history_QSO: Optional[List] = field(default_factory=list)
@@ -88,4 +103,4 @@ class SpectroState(MessagesState):
     # auditing_history: Optional[List] = field(default_factory=list)
     # refine_history: Optional[List] = field(default_factory=list)
     summary: Optional[str] = None
-    in_brief: Optional[Dict[str, float]] = None
+    in_brief: Optional[Dict[str, Any]] = None

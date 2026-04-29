@@ -29,6 +29,7 @@ class ModelConfig(BaseModel):
             "model": os.getenv("LLM_MODEL"),
             "temperature": getenv_float("LLM_TEMPERATURE", 0.1),
             "max_tokens": parse_max_tokens(os.getenv("LLM_MAX_TOKENS")),
+            "thinking": os.getenv("LLM_THINKING", "disabled"),
         }
         vlm={
             "api_key": os.getenv("VLM_API_KEY"),
@@ -36,6 +37,7 @@ class ModelConfig(BaseModel):
             "model": os.getenv("VLM_MODEL"),
             "temperature": getenv_float("VLM_TEMPERATURE", 0.1),
             "max_tokens": parse_max_tokens(os.getenv("VLM_MAX_TOKENS")),
+            "thinking": os.getenv("VLM_THINKING", "disabled"),
         }
 
         if not all([llm['api_key'], llm['model'], llm["base_url"], vlm['api_key'], vlm['model'], vlm["base_url"]]):

@@ -6,6 +6,43 @@ import logging
 
 from langchain.agents import create_agent
 from AstroAgent.manager.runtime.message_manager import create_message
+from AstroAgent.core.llm import _detect_vendor, _build_thinking_extra_body
+
+# ── 网络层错误关键字，断网/重联时会触发重试 ──
+_NETWORK_ERROR_KEYWORDS = (
+    "connectionerror",
+    "connecttimeout",
+    "connection reset",
+    "connection refused",
+    "remotedisconnected",
+    "clientconnectorerror",
+    "apiconnectionerror",
+    "connect error",
+    "network",
+    "timed out",
+    "timeout",
+    "broken pipe",
+    "eof occurred",
+    "ssl",
+)
+
+# ── API 限速/配额错误关键字 ──
+_RATE_LIMIT_KEYWORDS = (
+    "rate limit",
+    "insufficient_quota",
+    "invalid_parameter_error",
+    "function.arguments",
+)
+
+
+def _is_network_error(error_msg: str) -> bool:
+    """判断是否为网络层错误（断网、超时、连接失败等）。"""
+    return any(kw in error_msg for kw in _NETWORK_ERROR_KEYWORDS)
+
+
+def _is_retryable_error(error_msg: str) -> bool:
+    """判断是否为可重试错误（网络错误 + 限速错误）。"""
+    return _is_network_error(error_msg) or any(kw in error_msg for kw in _RATE_LIMIT_KEYWORDS)
 
 
 class BaseAgent:
@@ -21,17 +58,42 @@ class BaseAgent:
         self._text_model = runtime.get_model("llm")
         self._vis_model = runtime.get_model("vlm")
 
+        # thinking 模式配置（从 model_config 读取，'none' 表示不支持该参数）
+        self._llm_thinking = runtime.configs.model.llm.get('thinking', 'disabled')
+        self._vlm_thinking = runtime.configs.model.vlm.get('thinking', 'none')
+
+        # 根据 base_url 自动检测厂商（用于构建正确的 thinking extra_body 格式）
+        self._llm_vendor = _detect_vendor(runtime.configs.model.llm.get('base_url', ''))
+        self._vlm_vendor = _detect_vendor(runtime.configs.model.vlm.get('base_url', ''))
+
     # --------------------------
     # Lazy agent creation
     # --------------------------
 
+    def _apply_thinking(self, model, thinking_cfg: str, vendor: str, want_tools: bool):
+        """Return a model with appropriate thinking extra_body bound.
+
+        Base model already has the configured thinking state baked in.
+        We only need to override when want_tools=True but thinking=enabled:
+        force disabled to avoid reasoning_content passback issue in LangGraph.
+        """
+        if thinking_cfg == 'none' or vendor == 'unknown':
+            return model
+        if want_tools and thinking_cfg == 'enabled':
+            # Override to disabled — multi-turn tool calls can't pass back reasoning_content
+            extra_body = _build_thinking_extra_body('disabled', vendor)
+            return model.bind(extra_body=extra_body)
+        return model
+
     async def _ensure_text_agent(self, tools):
         if self._text_agent is None:
-            self._text_agent = create_agent(self._text_model, tools)
+            llm = self._apply_thinking(self._text_model, self._llm_thinking, self._llm_vendor, want_tools=True)
+            self._text_agent = create_agent(llm, tools)
 
     async def _ensure_vis_agent(self, tools):
         if self._vis_agent is None:
-            self._vis_agent = create_agent(self._vis_model, tools)
+            llm = self._apply_thinking(self._vis_model, self._vlm_thinking, self._vlm_vendor, want_tools=True)
+            self._vis_agent = create_agent(llm, tools)
 
     # --------------------------
     # Call
@@ -71,13 +133,10 @@ class BaseAgent:
                         )
                         raw_content = response["messages"][-1].content
                     else:
-                        tools = []
-                        await self._ensure_vis_agent(tools)
-                        response = await self._vis_agent.ainvoke(
-                            {"messages": messages},
-                            config={"recursion_limit": 300},
-                        )
-                        raw_content = response["messages"][-1].content
+                        # want_tools=False: call VLM directly (stateless)
+                        vlm = self._apply_thinking(self._vis_model, self._vlm_thinking, self._vlm_vendor, want_tools=False)
+                        response = await vlm.ainvoke(messages)
+                        raw_content = response.content
                 else:
                     if want_tools:
                         tools = await self.runtime.get_tools()
@@ -88,13 +147,10 @@ class BaseAgent:
                         )
                         raw_content = response["messages"][-1].content
                     else:
-                        tools = []
-                        await self._ensure_text_agent(tools)
-                        response = await self._text_agent.ainvoke(
-                            {"messages": messages},
-                            config={"recursion_limit": 125},
-                        )
-                        raw_content = response["messages"][-1].content
+                        # want_tools=False: call LLM directly (stateless)
+                        llm = self._apply_thinking(self._text_model, self._llm_thinking, self._llm_vendor, want_tools=False)
+                        response = await llm.ainvoke(messages)
+                        raw_content = response.content
 
                 # ---------------- JSON parse ----------------
 
@@ -117,15 +173,22 @@ class BaseAgent:
 
                 error_msg = str(e).lower()
 
-                if (
-                    attempt < max_retries
-                    and ("rate limit" in error_msg
-                         or "insufficient_quota" in error_msg)
-                ):
-                    logging.warning(
-                        f"⏳ {description}遇到限制，{retry_delay}秒后重试..."
-                        f" (尝试 {attempt + 1}/{max_retries})"
-                    )
+                if attempt < max_retries and _is_retryable_error(error_msg):
+                    if _is_network_error(error_msg):
+                        # 网络错误：重置 agent 实例和 MCP 连接，让下次调用重建
+                        logging.warning(
+                            f"🌐 {description}遇到网络错误，重置连接后重试..."
+                            f" (尝试 {attempt + 1}/{max_retries}): {str(e)}"
+                        )
+                        self._text_agent = None
+                        self._vis_agent = None
+                        await self.runtime.reset_mcp()
+                    else:
+                        # 限速/配额错误：等待后重试，不需要重置连接
+                        logging.warning(
+                            f"⏳ {description}遇到限制，{retry_delay}秒后重试..."
+                            f" (尝试 {attempt + 1}/{max_retries})"
+                        )
                     await asyncio.sleep(retry_delay)
                 else:
                     logging.error(f"❌ {description}失败: {str(e)}")

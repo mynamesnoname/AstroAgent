@@ -1,5 +1,6 @@
 import json
 import os
+import asyncio
 import numpy as np
 import matplotlib.pyplot as plt
 import logging
@@ -8,6 +9,7 @@ from scipy.ndimage import gaussian_filter1d
 
 from AstroAgent.agents.common.state import SpectroState
 from AstroAgent.agents.common.base_agent import BaseAgent
+from AstroAgent.agents.common.result_writer import ResultWriter
 from AstroAgent.core.runtime.runtime_container import RuntimeContainer
 
 
@@ -29,177 +31,37 @@ class RuleAnalyst(BaseAgent):
 
     def __init__(self, runtime: RuntimeContainer):
         super().__init__(runtime)
+        self._writer = ResultWriter()
 
     async def run(self, state: SpectroState) -> SpectroState:
         await self.qualitative_analysis(state)
-        if state['preliminary_classification']['type']=='QSO':
-            await self.quantitative_analysis(state)
+        await self.quantitative_analysis(state)
 
-            q = state['rule_analysis_QSO']
-            out_path = os.path.join(state['output_dir'], f'{state["file_name"]}_rule_analysis_QSO.txt')
-            with open(out_path, 'w', encoding='utf-8') as f:
-                f.write('\n'.join(q))
         return state
 
 
     async def qualitative_analysis(self, state: SpectroState) -> SpectroState:
-        # await self._check_arm_noise(state)
-        # await self._cleaning(state)
-        await self._describe_continuum(state)
         await self._describe_lines(state)
-        await self._describe_quality(state)
-
-        qualitative_analysis_path = os.path.join(state['output_dir'], f'{state['file_name']}_qualitative_analysis.txt')
-        with open(qualitative_analysis_path, 'w', encoding='utf-8') as f:
-            json_str = json.dumps(state['qualitative_analysis'], indent=2, ensure_ascii=False)
-            f.write(json_str)
+        self._writer.write_qualitative_analysis(state)
 
         await self._preliminary_classification(state)
-        await self._preliminary_classification_with_absention(state)
-        await self._preliminary_classification_with_absention_monkey(state)
-        
+        await self._preliminary_classification_monkey(state)
+        self._writer.write_preliminary_classification(state)
+
         return state
-    
-    # async def _check_arm_noise(self, state: SpectroState) -> SpectroState:
-    #     """
-    #     使用 LLM 检测光谱中是否存在因为仪器的 arm 接缝导致的噪声。
-    #     Use LLM to detect whether there is arm noise in the spectrum caused by the arm seam of the instrument.
-    #     """
-    #     function_name = "check_arm_noise"
 
-    #     arm_name = self.runtime.configs.params.arm_name
-    #     if arm_name:
-    #         arm_wavelength_range = self.runtime.configs.params.arm_wavelength_range
-    #         # Find the overlap region, output nearby infos (2*len(overlap region)) to make LLMs 
-    #         # have a better understanding of the spectrum.
-    #         overlap_regions = get_overlap_window(state, arm_name, arm_wavelength_range)
-    #         system_prompt, user_prompt = self.runtime.prompt_manager.load(
-    #             state=state,
-    #             agent_name=self.agent_name,
-    #             function_name=function_name,
-    #             arm_name = arm_name, 
-    #             overlap_regions = overlap_regions
-    #         )
-    #         # print('check_arm_noise:')
-    #         # print(system_prompt)
-    #         # print(user_prompt)
-    #         result = await self.call_llm_with_context(
-    #             system_prompt=system_prompt,
-    #             user_prompt=user_prompt,
-    #             parse_json=True,
-    #             description="arm noise",
-    #             want_tools=False
-    #         )
-    #     else:
-    #         result = {
-    #                 "arm_noise": 'false',
-    #                 "arm_noise_wavelength": None
-    #             }
-    #     state['qualitative_analysis']['arm_noise'] = result
-    #     return state
-
-    # async def _cleaning(self, state: SpectroState) -> SpectroState:
-    #     """
-    #     根据 _check_arm_noise 的结果，把收到噪声影响的峰和谷过滤出去。
-    #     Filter out the peaks and valleys affected by noise according to the result of _check_arm_noise.
-    #     """
-    #     arm_noise_analysis = state['qualitative_analysis']['arm_noise']
-    #     if not safe_to_bool(arm_noise_analysis.get('arm_noise', False)):
-    #         # No arm noise detected, no need to filter
-    #         state['cleaned_peaks'] = state['peaks']
-    #         state['cleaned_troughs'] = state['troughs']
-    #     else:
-    #         # Extract the noise position given by LLM
-    #         arm_noise_wl = arm_noise_analysis.get('arm_noise_wavelength', [])
-    #         arm_noise_wl = np.array(arm_noise_wl)
-
-    #         wavelength = np.array(state['spectrum']['new_wavelength'])
-    #         # peaks
-    #         peaks = state['peaks']
-    #         cleaned_peaks = []
-    #         wiped_peaks = []
-    #         for p in peaks:
-    #             wl = p['wavelength']
-    #             width = p['width']
-
-    #             distance = abs(wl - arm_noise_wl)
-    #             # If any distance is less than or equal to width, it is considered to be in the noise region
-    #             if np.any(distance <= width):
-    #                 is_artifact = True
-    #             else:
-    #                 is_artifact = False
-    #             if not is_artifact:
-    #                 if width is not None and wl > wavelength[0]: # Use p['wavelength'] > wavelength[0] to prevent issues at the sequence start (such as border not cleared properly leading to non-physical values at the sequence start)
-    #                     if width > 2000:
-    #                         p['describe'] = 'Broad line'
-    #                     elif width < 1000:
-    #                         p['describe'] = 'Narrow line'
-    #                     else:
-    #                         p['describe'] = 'Medium-width line'
-    #                     cleaned_peaks.append(p)
-    #             else:
-    #                 wiped_peaks.append(p)
-    #         state['cleaned_peaks'] = cleaned_peaks
-    #         state['wiped_peaks'] = wiped_peaks
-    #         # troughs
-    #         cleaned_troughs = []
-    #         for t in state['troughs']:
-    #             wl = t['wavelength']
-    #             distance = abs(wl - arm_noise_wl)
-    #             if np.any(distance <= width):
-    #                 is_artifact = True
-    #             else:
-    #                 is_artifact = False
-    #             if not is_artifact:
-    #                 if width is not None and wl > wavelength[0]:
-    #                     if width > 2000:
-    #                         t['describe'] = 'Broad valley'
-    #                     elif width < 1000:
-    #                         t['describe'] = 'Narrow valley'
-    #                     else:
-    #                         t['describe'] = 'Medium-width valley'
-    #                 else:
-    #                     t['describe'] = 'Unprocessed'
-    #                 cleaned_troughs.append(t)
-    #         state['cleaned_troughs'] = cleaned_troughs
-    #     return state
-
-    async def _describe_continuum(self, state: SpectroState) -> SpectroState:
-        function_name = 'describe_continuum'
-
-        system_prompt, user_prompt = self.runtime.prompt_manager.load(
-            state=state,
-            agent_name=self.agent_name,
-            function_name=function_name
-        )
-        # print('describe_continuum')
-        # print(system_prompt)
-        # print(user_prompt)
-        result = await self.call_llm_with_context(
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            image_path=state['continuum_path'],
-            parse_json=True,
-            description="Describe continuum",
-            want_tools=False
-        )
-        state['qualitative_analysis']['continuum'] = result
-        return state
-        
     async def _describe_lines(self, state: SpectroState) -> SpectroState:
         function_name = 'describe_lines'
 
-        # num_peaks = self.runtime.configs.params.num_peaks
-        # num_troughs = self.runtime.configs.params.num_troughs
-        cleaned_peaks = state['cleaned_peaks']
-        cleaned_troughs = state['cleaned_troughs']
+        peaks = state['peaks']
+        troughs = state['troughs']
 
         system_prompt, user_prompt = self.runtime.prompt_manager.load(
             state=state,
             agent_name=self.agent_name,
             function_name=function_name,
-            cleaned_peaks=cleaned_peaks,
-            cleaned_troughs=cleaned_troughs
+            peaks=peaks,
+            troughs=troughs
         )
         # print('describe_lines')
         # print(system_prompt)
@@ -207,47 +69,36 @@ class RuleAnalyst(BaseAgent):
         result = await self.call_llm_with_context(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
-            image_path=state['spec_extract_path'],
             parse_json=True,
             description="Describe lines",
             want_tools=False
         )
+
+        statement = """
+        
+**Statement: This description is based on the qualitative output of a preliminary Gaussian-model peak-finding routine and is intended solely as a reference outline for subsequent processing. It does not constitute precise measurement results. The routine may introduce false peaks/valleys due to noise fitting or overfitting. The central wavelengths, widths, and amplitudes of certain peaks/valleys may deviate from actual values. Double-peak structures should be rigorously verified through quantitative analysis in conjunction with theoretical line ratios and redshift consistency. Final redshift determination and line identification must be based on standard line lists, with quantitative analysis taking precedence.**        
+"""
+        result = result + statement
         state['qualitative_analysis']['lines'] = result
+        print(f"lines: \n{state['qualitative_analysis']['lines']}")
         return state
 
-    async def _describe_quality(self, state: SpectroState) -> SpectroState:
-        function_name = 'describe_quality'
-
-        system_prompt, user_prompt = self.runtime.prompt_manager.load(
-            state=state,
-            agent_name=self.agent_name,
-            function_name=function_name,
-        )
-        # print('describe_quality')
-        # print(system_prompt)
-        # print(user_prompt)
-        result = await self.call_llm_with_context(
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            # image_path=state['spec_extract_path'],
-            image_path=os.path.join(state['output_dir'], f'{state["file_name"]}_spectrum.png'),
-            parse_json=True,
-            description="Describe quality",
-            want_tools=False
-        )
-        state['qualitative_analysis']['quality'] = result
-        return state
-    
     async def _preliminary_classification(self, state: SpectroState) -> SpectroState:
         function_name = 'preliminary_classification'
-        continuum_description = state['qualitative_analysis']['continuum']
-        dataset = self.runtime.configs.params.dataset
+        continuum_description = state['continuum']['description']
+        feature_description = state['qualitative_analysis']['lines']
+        peaks = state['peaks']
+        troughs = state['troughs']
+
+        # dataset = self.runtime.configs.params.dataset
         system_prompt, user_prompt = self.runtime.prompt_manager.load(
             state=state,
             agent_name=self.agent_name,
             function_name=function_name,
-            dataset=dataset,
-            continuum_description=continuum_description
+            continuum_description=continuum_description,
+            feature_description=feature_description,
+            peaks=peaks,
+            troughs=troughs,
         )
         # print('preliminary_classification')
         # print(system_prompt)
@@ -261,67 +112,12 @@ class RuleAnalyst(BaseAgent):
             want_tools=False
         )
         state['preliminary_classification'] = result
+        print(f"preliminary_classification: \n{state['preliminary_classification']}")
         return state
 
-    async def _preliminary_classification_with_absention(self, state: SpectroState) -> SpectroState:
-        function_name = 'preliminary_classification_with_absention'
-        continuum_description = state['qualitative_analysis']['continuum']
-        dataset = self.runtime.configs.params.dataset
-
-        arm_name = self.runtime.configs.params.arm_name
-        arm_wavelength_range = self.runtime.configs.params.arm_wavelength_range
-        wavelength = np.array(state['spectrum']['new_wavelength'])
-        if arm_name and arm_wavelength_range:
-            overlap = find_overlap_regions(arm_name, arm_wavelength_range)
-        else:
-            overlap = None
-        if overlap:
-            mask = np.zeros_like(wavelength, dtype=bool)
-            for key, interval in overlap.items():
-                a, b = interval
-                band_mask = (wavelength >= a) & (wavelength <= b)            
-            mask = mask | band_mask
-            mask = ~mask
-        else:
-            mask = np.ones_like(wavelength, dtype=bool)
-        snr = np.array(state['spectrum']['effective_snr'])
-        mask_ = ~np.isinf(snr)  # Exclude positive and negative infinite values
-        mask_[0] = False  # Also exclude the first value
-        mask_[-1] = False  # Also exclude the last value
-        mask = mask & mask_
-        snr_ok = np.abs(snr[mask])
-        snr_max = np.max(snr_ok)
-
-        snr_threshold_upper = self.runtime.configs.params.snr_threshold_upper
-        snr_threshold_lower = self.runtime.configs.params.snr_threshold_lower
-
-        system_prompt, user_prompt = self.runtime.prompt_manager.load(
-            state=state,
-            agent_name=self.agent_name,
-            function_name=function_name,
-            dataset=dataset,
-            continuum_description=continuum_description,
-            snr_max=snr_max,
-            snr_threshold_upper=snr_threshold_upper,
-            snr_threshold_lower=snr_threshold_lower
-        )
-        # print('preliminary_classification_with_absention')
-        # print(system_prompt)
-        # print(user_prompt)
-        result = await self.call_llm_with_context(
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            image_path=None,
-            parse_json=True,
-            description="Preliminary classification_with_absention",
-            want_tools=False
-        )
-        state['preliminary_classification_with_absention'] = result
-        return state
-
-    async def _preliminary_classification_with_absention_monkey(self, state: SpectroState) -> SpectroState:
-        function_name = 'preliminary_classification_with_absention_monkey'
-        preliminary_classification_with_absention = state['preliminary_classification_with_absention']
+    async def _preliminary_classification_monkey(self, state: SpectroState) -> SpectroState:
+        function_name = 'preliminary_classification_monkey'
+        preliminary_classification_with_absention = state['preliminary_classification']
         system_prompt, user_prompt = self.runtime.prompt_manager.load(
             state=state,
             agent_name=self.agent_name,
@@ -336,200 +132,714 @@ class RuleAnalyst(BaseAgent):
             user_prompt=user_prompt,
             image_path=None,
             parse_json=True,
-            description="Preliminary classification_with_absention_monkey",
+            description="Preliminary classification monkey",
             want_tools=False
         )
+        # Normalise: LLM may return a single dict instead of a list
+        if isinstance(result, dict):
+            result = [result]
         state['preliminary_classification_monkey'] = result
-        print(f"preliminary_classification_monkey: {result}")
+        print(f"preliminary_classification_monkey: {state['preliminary_classification_monkey']}")
         return state
+
 
     async def quantitative_analysis(self, state: SpectroState) -> SpectroState:
-        """QSO spectrum analysis"""
+        """ spectrum analysis
 
-        num_peaks = self.runtime.configs.params.num_peaks
-        num_troughs = self.runtime.configs.params.num_troughs
+        QSO Scheduling:
+        - step_0 (one-shot) and step_x (host-AGN) run concurrently — they are
+          independent and write to separate dict keys.
+        - step_F_pipeline starts only after both finish, so its LLM calls can
+          benefit from any prefix-cache warm-up from step_0/step_x.
+        """
 
-        # We offer a limited number of features to LLM
-        peak_list = [
-            {
-                "wavelength": pe.get('wavelength'),
-                "flux": pe.get('mean_flux'),
-                "width": pe.get('width'),
-                "width_in_km_s": pe.get('width_in_km_s'),
-                "prominance": pe.get('max_prominence'),
-                "seen_in_max_global_smoothing_scale_sigma": pe.get('max_global_sigma_seen', None),
-                "seen_in_max_local_smoothing_scale_sigma": pe.get('max_roi_sigma_seen', None),
-                "describe": pe.get('describe')
-            }
-            for pe in state.get('cleaned_peaks', [])[:num_peaks]
-        ]
-        trough_list = [
-            {
-                "wavelength": tr.get('wavelength'),
-                "flux": tr.get('mean_flux'),
-                "width": tr.get('width'),
-                "seen_in_scales_of_sigma": tr.get('seen_in_scales_of_sigma')
-            }
-            for tr in state.get('cleaned_troughs', [])[:num_troughs]
-        ]
+        prelim = state.get('preliminary_classification_monkey', [])
+        _is_qso = any(i['Category'] == 'QSO'     for i in prelim)
+        _is_elg = any(i['Category'] == 'ELG'     for i in prelim)
+        _is_lrg = any(i['Category'] == 'LRG/BGS' for i in prelim)
 
-        get_Ly_alpha_candidates(state, peak_list)
+        # QSO/ELG 依赖 default 模式匹配结果；LRG/BGS 依赖 lrg_bgs 模式匹配结果
+        # 各自独立检查，无结果时写入占位信息并跳过对应分支
+        _has_qso_elg = bool(state.get('brute_force_matching_qso_elg'))
+        _has_lrg_bgs = bool(state.get('brute_force_matching_lrg_bgs'))
 
-        await self.step_1_QSO(state, peak_list, trough_list)
-        await self.step_2_QSO(state, peak_list, trough_list)
-        await self.step_3_QSO(state, peak_list, trough_list)
-        await self.step_4_QSO(state, peak_list, trough_list)
+        def _no_match_placeholder():
+            if not state.get('peaks'):
+                return (
+                    "No spectral peaks detected in this spectrum. "
+                    "Quantitative analysis skipped."
+                )
+            return (
+                "Spectral peaks were detected but no reliable line matches survived "
+                "the validity filter (all candidates had fewer than 2 independent "
+                "wavelength-line constraints). Quantitative analysis skipped."
+            )
+
+        if (_is_qso or _is_elg) and not _has_qso_elg:
+            if _is_qso:
+                state.setdefault('rule_analysis_QSO', {})['step_F'] = _no_match_placeholder()
+            if _is_elg:
+                state.setdefault('rule_analysis_ELG', {})['step_F'] = _no_match_placeholder()
+
+        if _is_lrg and not _has_lrg_bgs:
+            state.setdefault('rule_analysis_LRG', {})['step_F'] = _no_match_placeholder()
+
+        # 若所有匹配均为空，无需继续
+        if not _has_qso_elg and not _has_lrg_bgs:
+            return state
+
+        peaks = state['peaks']
+        troughs = state['troughs']
+
+        if _is_qso and _has_qso_elg:
+            await self.QSO_step_F_pipeline(state, peaks, troughs)
+            await self.QSO_generic_extract(state, source_step="step_F")
+            self._writer.write_rule_analysis_qso(state)
+
+        if _is_elg and _has_qso_elg:
+            await self.ELG_step_F_pipeline(state, peaks, troughs)
+            await self.ELG_generic_extract(state, source_step="step_F")
+            self._writer.write_rule_analysis_elg(state)
+
+        if _is_lrg and _has_lrg_bgs:
+            await self.LRG_step_F_pipeline(state, peaks, troughs)
+            await self.LRG_generic_extract(state, source_step="step_F")
+            self._writer.write_rule_analysis_lrg(state)
 
         return state
 
-    async def step_1_QSO(self, state: SpectroState, peak_list, trough_list) -> SpectroState:
-        function_name = "step_1_QSO"
+    async def QSO_step_F_pipeline(self, state: SpectroState, peaks, troughs) -> SpectroState:
+        """QSO Step F map-reduce pipeline: F_a (per-hypothesis) → extract → F_b (synthesis)
 
-        qualitative_analysis = state.get('qualitative_analysis', [])
+        Scheduling strategy:
+        - The first hypothesis is always run serially so the shared prompt prefix
+          is written into the provider's KV-cache before subsequent requests fire.
+        - Remaining hypotheses are dispatched concurrently (bounded by
+          STEP_F_CONCURRENCY) to reduce wall-clock time while still benefiting
+          from the prefix-cache warm-up done by the first call.
+        - F_a and F_extract are pipelined per hypothesis (extract waits for its
+          own F_a), but all remaining pairs run in parallel with each other.
+        - F_b runs serially after all summaries are collected.
+        """
+
+        brute_force_matching = state.get('brute_force_matching_qso_elg', [])
+        if not brute_force_matching:
+            return state
+
+        concurrency = self.runtime.configs.params.step_f_concurrency
+        total = len(brute_force_matching)
+
+        # ── Helper: run F_a + extract for one hypothesis ───────────────────
+        async def _run_one(match: dict, idx: int) -> dict:
+            f_a_text = await self.QSO_step_F_a(
+                state, peaks, troughs,
+                match=match,
+                hypothesis_index=idx + 1,
+                hypothesis_total=total,
+            )
+            summary = await self.QSO_step_F_extract(
+                state,
+                f_a_text=f_a_text,
+                hypothesis=match.get('Hypothesis', ''),
+            )
+            # print(f"QSO Step F-a [{idx+1}/{total}] extracted: {summary}")
+            return summary
+
+        # ── Step 1: First hypothesis — serial (warm up prefix cache) ───────
+        summary_0 = await _run_one(brute_force_matching[0], 0)
+        f_a_summaries = [summary_0]
+
+        # ── Step 2: Remaining hypotheses — bounded concurrent ───────────────
+        if total > 1:
+            # concurrency=1 → fully serial fallback; >1 → parallel
+            sem = asyncio.Semaphore(max(1, concurrency - 1))
+
+            async def _bounded(match: dict, idx: int) -> dict:
+                async with sem:
+                    return await _run_one(match, idx)
+
+            rest_summaries = await asyncio.gather(*[
+                _bounded(m, i)
+                for i, m in enumerate(brute_force_matching[1:], start=1)
+            ])
+            f_a_summaries.extend(rest_summaries)
+        self._writer.write_f_a_summaries(state, f_a_summaries, label="QSO")
+
+        # ── Step F-b: Synthesis — serial (needs all summaries) ─────────────
+        result = await self.QSO_step_F_b(
+            state, peaks, troughs,
+            f_a_summaries=f_a_summaries,
+        )
+        state['rule_analysis_QSO']['step_F'] = result
+        # print(f"QSO Step F-b (synthesis): {result}")
+        return state
+
+    async def QSO_step_F_a(
+        self, state: SpectroState, peaks, troughs,
+        match: dict, hypothesis_index: int, hypothesis_total: int,
+    ) -> str:
+        """QSO Step F-a: analyse a single brute-force hypothesis (returns raw LLM text)"""
+
+        function_name = "QSO_step_F"   # 复用 step_F 目录的 prompt
+
+        continuum_description = state['continuum']['description']
+        feature_description = state['qualitative_analysis']['lines']
         wl_left = state['spectrum']['new_wavelength'][0]
         wl_right = state['spectrum']['new_wavelength'][-1]
-        sigma_list = self.runtime.configs.params.sigma_list
-        tol_wavelength = self.runtime.configs.params.tol_wavelength
-        lyalpha_candidates = state['Lyalpha_candidates']
+        tol_wavelength = self.runtime.configs.params.tol_wavelength_qso_elg
+        for i in state['preliminary_classification_monkey']:
+            if i['Category'] == 'QSO':
+                preliminary_classification = i
 
         system_prompt, user_prompt = self.runtime.prompt_manager.load(
             state=state,
             agent_name=self.agent_name,
             function_name=function_name,
-            qualitative_analysis=qualitative_analysis,
-            peak_list=peak_list,
-            trough_list=trough_list,
+            continuum_description=continuum_description,
+            feature_description=feature_description,
+            peaks=peaks,
+            troughs=troughs,
             wl_left=wl_left,
             wl_right=wl_right,
-            sigma_list=sigma_list,
             tol_wavelength=tol_wavelength,
-            lyalpha_candidates=lyalpha_candidates
+            preliminary_classification=preliminary_classification,
+            match=match,
+            hypothesis_index=hypothesis_index,
+            hypothesis_total=hypothesis_total,
         )
 
         result = await self.call_llm_with_context(
-            system_prompt, 
-            user_prompt, 
-            parse_json=True, 
-            description="Step 1",
-            want_tools=True
+            system_prompt,
+            user_prompt,
+            parse_json=False,
+            description=f"QSO Step F-a [{hypothesis_index}/{hypothesis_total}]",
+            want_tools=False,
         )
+        return result
 
-        state['rule_analysis_QSO'].append(result)
-        return state
-    
-    async def step_2_QSO(self, state: SpectroState, peak_list, trough_list):
-        function_name = "step_2_QSO"
+    async def QSO_step_F_extract(
+        self, state: SpectroState,
+        f_a_text: str, hypothesis: str,
+    ) -> dict:
+        """QSO Step F-extract: parse F-3 conclusion from F-a reasoning text into JSON"""
 
-        qualitative_analysis = state.get('qualitative_analysis', [])
-        wl_left = state['spectrum']['new_wavelength'][0]
-        wl_right = state['spectrum']['new_wavelength'][-1]
-        sigma_list = self.runtime.configs.params.sigma_list
-        tol_wavelength = self.runtime.configs.params.tol_wavelength
-
-        arm_name = self.runtime.configs.params.arm_name
-        arm_wavelength_range = self.runtime.configs.params.arm_wavelength_range
-
-        if arm_name: 
-            overlap_regions = find_overlap_regions(arm_name, arm_wavelength_range)
-            wiped_peaks = get_wiped_lines(state, overlap_regions)
-
-        history = state['rule_analysis_QSO']
+        function_name = "QSO_step_F_extract"
 
         system_prompt, user_prompt = self.runtime.prompt_manager.load(
             state=state,
             agent_name=self.agent_name,
             function_name=function_name,
-            history=history,
-            tol_wavelength=tol_wavelength,
-            wiped_peaks=wiped_peaks if arm_name else None,
-            overlap_regions=overlap_regions if arm_name else None,
-            qualitative_analysis=qualitative_analysis,
-            peak_list=peak_list,
-            trough_list=trough_list,
-            wl_left=wl_left,
-            wl_right=wl_right,
-            sigma_list=sigma_list,
+            f_a_text=f_a_text,
+            hypothesis=hypothesis,
         )
 
         result = await self.call_llm_with_context(
-            system_prompt, 
-            user_prompt, 
-            parse_json=True, 
-            description="Step 2",
-            want_tools=True
+            system_prompt,
+            user_prompt,
+            parse_json=True,
+            description="QSO Step F-extract",
+            want_tools=False,
         )
+        # 若解析失败，保留原始文本以免中断流程
+        if not isinstance(result, dict):
+            result = {"hypothesis": hypothesis, "raw": result}
+        return result
 
-        state['rule_analysis_QSO'].append(result)
-        return state
+    async def QSO_step_F_b(
+        self, state: SpectroState, peaks, troughs,
+        f_a_summaries: list,
+    ) -> str:
+        """QSO Step F-b: synthesise all per-hypothesis summaries and give final verdict"""
 
-    async def step_3_QSO(self, state: SpectroState, peak_list, trough_list):
-        function_name = "step_3_QSO"
+        function_name = "QSO_step_F_b"
 
-        qualitative_analysis = state.get('qualitative_analysis', [])
+        continuum_description = state['continuum']['description']
+        feature_description = state['qualitative_analysis']['lines']
         wl_left = state['spectrum']['new_wavelength'][0]
         wl_right = state['spectrum']['new_wavelength'][-1]
-        sigma_list = self.runtime.configs.params.sigma_list
-        tol_wavelength = self.runtime.configs.params.tol_wavelength
-
-        history = state['rule_analysis_QSO']
+        tol_wavelength = self.runtime.configs.params.tol_wavelength_qso_elg
+        for i in state['preliminary_classification_monkey']:
+            if i['Category'] == 'QSO':
+                preliminary_classification = i
+        brute_force_matching = state.get('brute_force_matching_qso_elg', [])
 
         system_prompt, user_prompt = self.runtime.prompt_manager.load(
             state=state,
             agent_name=self.agent_name,
             function_name=function_name,
-            history=history,
-            tol_wavelength=tol_wavelength,
-            qualitative_analysis=qualitative_analysis,
-            peak_list=peak_list,
-            trough_list=trough_list,
+            continuum_description=continuum_description,
+            feature_description=feature_description,
+            peaks=peaks,
+            troughs=troughs,
             wl_left=wl_left,
             wl_right=wl_right,
-            sigma_list=sigma_list,
+            tol_wavelength=tol_wavelength,
+            preliminary_classification=preliminary_classification,
+            brute_force_matching=brute_force_matching,
+            f_a_summaries=f_a_summaries,
         )
+
+        # print(f"QSO Step F-b (user prompt): {user_prompt}")
 
         result = await self.call_llm_with_context(
-            system_prompt, 
-            user_prompt, 
-            parse_json=True, 
-            description="Step 3",
-            want_tools=True
+            system_prompt,
+            user_prompt,
+            parse_json=False,
+            description="QSO Step F-b (synthesis)",
+            want_tools=False,
         )
+        return result
 
-        state['rule_analysis_QSO'].append(result)
-        return state
+    async def QSO_generic_extract(self, state: SpectroState, source_step: str) -> SpectroState:
+        """Extract structured summary from any step's raw analysis text using a common schema."""
 
-    async def step_4_QSO(self, state: SpectroState, peak_list, trough_list):
-        function_name = "step_4_QSO"
+        function_name = "step_generic_extract"
 
-        qualitative_analysis = state.get('qualitative_analysis', [])
-        wl_left = state['spectrum']['new_wavelength'][0]
-        wl_right = state['spectrum']['new_wavelength'][-1]
-        sigma_list = self.runtime.configs.params.sigma_list
-        tol_wavelength = self.runtime.configs.params.tol_wavelength
+        raw_text = state['rule_analysis_QSO'].get(source_step)
+        if not raw_text:
+            print(f"QSO generic_extract: no content for {source_step}, skipping")
+            return state
 
-        history = state['rule_analysis_QSO']
+        # Convert dict/list results to string for extraction
+        if not isinstance(raw_text, str):
+            raw_text = json.dumps(raw_text, indent=2, ensure_ascii=False)
 
         system_prompt, user_prompt = self.runtime.prompt_manager.load(
             state=state,
             agent_name=self.agent_name,
             function_name=function_name,
-            history=history,
-            tol_wavelength=tol_wavelength,
-            qualitative_analysis=qualitative_analysis,
-            peak_list=peak_list,
-            trough_list=trough_list,
-            wl_left=wl_left,
-            wl_right=wl_right,
-            sigma_list=sigma_list,
+            source_step=source_step,
+            analysis_text=raw_text,
         )
 
         result = await self.call_llm_with_context(
-            system_prompt, 
-            user_prompt, 
-            parse_json=True, 
-            description="Step 3",
-            want_tools=True
+            system_prompt,
+            user_prompt,
+            parse_json=True,
+            description=f"QSO generic_extract ({source_step})",
+            want_tools=False,
         )
 
-        state['rule_analysis_QSO'].append(result)
+        state.setdefault('extract_QSO', {})[source_step] = result
+        # print(f"QSO generic_extract [{source_step}]: {result}")
+        return state
+
+    async def ELG_step_F_pipeline(self, state: SpectroState, peaks, troughs) -> SpectroState:
+        """ELG Step F map-reduce pipeline: F_a (per-hypothesis) → extract → F_b (synthesis)
+
+        Scheduling strategy (mirrors QSO_step_F_pipeline exactly):
+        - The first hypothesis is always run serially so the shared prompt prefix
+          is written into the provider's KV-cache before subsequent requests fire.
+        - Remaining hypotheses are dispatched concurrently (bounded by
+          STEP_F_CONCURRENCY) to reduce wall-clock time while still benefiting
+          from the prefix-cache warm-up done by the first call.
+        - F_a and F_extract are pipelined per hypothesis (extract waits for its
+          own F_a), but all remaining pairs run in parallel with each other.
+        - F_b runs serially after all summaries are collected.
+        """
+
+        brute_force_matching = state.get('brute_force_matching_qso_elg', [])
+        if not brute_force_matching:
+            return state
+
+        concurrency = self.runtime.configs.params.step_f_concurrency
+        total = len(brute_force_matching)
+
+        # ── Helper: run F_a + extract for one hypothesis ───────────────────
+        async def _run_one(match: dict, idx: int) -> dict:
+            f_a_text = await self.ELG_step_F_a(
+                state, peaks, troughs,
+                match=match,
+                hypothesis_index=idx + 1,
+                hypothesis_total=total,
+            )
+            summary = await self.ELG_step_F_extract(
+                state,
+                f_a_text=f_a_text,
+                hypothesis=match.get('Hypothesis', ''),
+            )
+            # print(f"ELG Step F-a [{idx+1}/{total}] extracted: {summary}")
+            return summary
+
+        # ── Step 1: First hypothesis — serial (warm up prefix cache) ───────
+        summary_0 = await _run_one(brute_force_matching[0], 0)
+        f_a_summaries = [summary_0]
+
+        # ── Step 2: Remaining hypotheses — bounded concurrent ───────────────
+        if total > 1:
+            # concurrency=1 → fully serial fallback; >1 → parallel
+            sem = asyncio.Semaphore(max(1, concurrency - 1))
+
+            async def _bounded(match: dict, idx: int) -> dict:
+                async with sem:
+                    return await _run_one(match, idx)
+
+            rest_summaries = await asyncio.gather(*[
+                _bounded(m, i)
+                for i, m in enumerate(brute_force_matching[1:], start=1)
+            ])
+            f_a_summaries.extend(rest_summaries)
+        self._writer.write_f_a_summaries(state, f_a_summaries, label="ELG")
+
+        # ── Step F-b: Synthesis — serial (needs all summaries) ─────────────
+        result = await self.ELG_step_F_b(
+            state, peaks, troughs,
+            f_a_summaries=f_a_summaries,
+        )
+        state['rule_analysis_ELG']['step_F'] = result
+        # print(f"ELG Step F-b (synthesis): {result}")
+        return state
+
+    async def ELG_step_F_a(
+        self, state: SpectroState, peaks, troughs,
+        match: dict, hypothesis_index: int, hypothesis_total: int,
+    ) -> str:
+        """ELG Step F-a: analyse a single brute-force hypothesis (returns raw LLM text)"""
+
+        function_name = "ELG_step_F"
+
+        continuum_description = state['continuum']['description']
+        feature_description = state['qualitative_analysis']['lines']
+        wl_left = state['spectrum']['new_wavelength'][0]
+        wl_right = state['spectrum']['new_wavelength'][-1]
+        tol_wavelength = self.runtime.configs.params.tol_wavelength_qso_elg
+        for i in state['preliminary_classification_monkey']:
+            if i['Category'] == 'ELG':
+                preliminary_classification = i
+
+        system_prompt, user_prompt = self.runtime.prompt_manager.load(
+            state=state,
+            agent_name=self.agent_name,
+            function_name=function_name,
+            continuum_description=continuum_description,
+            feature_description=feature_description,
+            peaks=peaks,
+            troughs=troughs,
+            wl_left=wl_left,
+            wl_right=wl_right,
+            tol_wavelength=tol_wavelength,
+            preliminary_classification=preliminary_classification,
+            match=match,
+            hypothesis_index=hypothesis_index,
+            hypothesis_total=hypothesis_total,
+        )
+
+        result = await self.call_llm_with_context(
+            system_prompt,
+            user_prompt,
+            parse_json=False,
+            description=f"ELG Step F-a [{hypothesis_index}/{hypothesis_total}]",
+            want_tools=False,
+        )
+        return result
+
+    async def ELG_step_F_extract(
+        self, state: SpectroState,
+        f_a_text: str, hypothesis: str,
+    ) -> dict:
+        """ELG Step F-extract: parse F-a conclusion into structured JSON"""
+
+        function_name = "ELG_step_F_extract"
+
+        system_prompt, user_prompt = self.runtime.prompt_manager.load(
+            state=state,
+            agent_name=self.agent_name,
+            function_name=function_name,
+            f_a_text=f_a_text,
+            hypothesis=hypothesis,
+        )
+
+        result = await self.call_llm_with_context(
+            system_prompt,
+            user_prompt,
+            parse_json=True,
+            description="ELG Step F-extract",
+            want_tools=False,
+        )
+        # 若解析失败，保留原始文本以免中断流程
+        if not isinstance(result, dict):
+            result = {"hypothesis": hypothesis, "raw": result}
+        return result
+
+    async def ELG_step_F_b(
+        self, state: SpectroState, peaks, troughs,
+        f_a_summaries: list,
+    ) -> str:
+        """ELG Step F-b: synthesise all per-hypothesis summaries and give final verdict"""
+
+        function_name = "ELG_step_F_b"
+
+        continuum_description = state['continuum']['description']
+        feature_description = state['qualitative_analysis']['lines']
+        wl_left = state['spectrum']['new_wavelength'][0]
+        wl_right = state['spectrum']['new_wavelength'][-1]
+        tol_wavelength = self.runtime.configs.params.tol_wavelength_qso_elg
+        for i in state['preliminary_classification_monkey']:
+            if i['Category'] == 'ELG':
+                preliminary_classification = i
+        brute_force_matching = state.get('brute_force_matching_qso_elg', [])
+
+        system_prompt, user_prompt = self.runtime.prompt_manager.load(
+            state=state,
+            agent_name=self.agent_name,
+            function_name=function_name,
+            continuum_description=continuum_description,
+            feature_description=feature_description,
+            peaks=peaks,
+            troughs=troughs,
+            wl_left=wl_left,
+            wl_right=wl_right,
+            tol_wavelength=tol_wavelength,
+            preliminary_classification=preliminary_classification,
+            brute_force_matching=brute_force_matching,
+            f_a_summaries=f_a_summaries,
+        )
+
+        result = await self.call_llm_with_context(
+            system_prompt,
+            user_prompt,
+            parse_json=False,
+            description="ELG Step F-b (synthesis)",
+            want_tools=False,
+        )
+        return result
+
+    async def ELG_generic_extract(self, state: SpectroState, source_step: str) -> SpectroState:
+        """Extract structured summary from ELG step_F raw text using ELG-specific schema."""
+
+        function_name = "ELG_step_generic_extract"
+
+        raw_text = state['rule_analysis_ELG'].get(source_step)
+        if not raw_text:
+            print(f"ELG generic_extract: no content for {source_step}, skipping")
+            return state
+
+        if not isinstance(raw_text, str):
+            raw_text = json.dumps(raw_text, indent=2, ensure_ascii=False)
+
+        system_prompt, user_prompt = self.runtime.prompt_manager.load(
+            state=state,
+            agent_name=self.agent_name,
+            function_name=function_name,
+            source_step=source_step,
+            analysis_text=raw_text,
+        )
+
+        result = await self.call_llm_with_context(
+            system_prompt,
+            user_prompt,
+            parse_json=True,
+            description=f"ELG generic_extract ({source_step})",
+            want_tools=False,
+        )
+
+        state.setdefault('extract_ELG', {})[source_step] = result
+        # print(f"ELG generic_extract [{source_step}]: {result}")
+        return state
+
+    # ══════════════════════════════════════════════════════════════
+    #  LRG / BGS  Step-F pipeline
+    # ══════════════════════════════════════════════════════════════
+
+    async def LRG_step_F_pipeline(self, state: SpectroState, peaks, troughs) -> SpectroState:
+        """LRG/BGS Step F map-reduce pipeline: F_a (per-hypothesis) → extract → F_b (synthesis)
+
+        Scheduling strategy mirrors QSO/ELG_step_F_pipeline exactly.
+        """
+
+        brute_force_matching = state.get('brute_force_matching_lrg_bgs', [])
+        if not brute_force_matching:
+            return state
+
+        concurrency = self.runtime.configs.params.step_f_concurrency
+        total = len(brute_force_matching)
+
+        # ── Helper: run F_a + extract for one hypothesis ───────────────────
+        async def _run_one(match: dict, idx: int) -> dict:
+            f_a_text = await self.LRG_step_F_a(
+                state, peaks, troughs,
+                match=match,
+                hypothesis_index=idx + 1,
+                hypothesis_total=total,
+            )
+            summary = await self.LRG_step_F_extract(
+                state,
+                f_a_text=f_a_text,
+                hypothesis=match.get('Hypothesis', ''),
+            )
+            # print(f"LRG Step F-a [{idx+1}/{total}] extracted: {summary}")
+            return summary
+
+        # ── Step 1: First hypothesis — serial (warm up prefix cache) ───────
+        summary_0 = await _run_one(brute_force_matching[0], 0)
+        f_a_summaries = [summary_0]
+
+        # ── Step 2: Remaining hypotheses — bounded concurrent ───────────────
+        if total > 1:
+            sem = asyncio.Semaphore(max(1, concurrency - 1))
+
+            async def _bounded(match: dict, idx: int) -> dict:
+                async with sem:
+                    return await _run_one(match, idx)
+
+            rest_summaries = await asyncio.gather(*[
+                _bounded(m, i)
+                for i, m in enumerate(brute_force_matching[1:], start=1)
+            ])
+            f_a_summaries.extend(rest_summaries)
+        self._writer.write_f_a_summaries(state, f_a_summaries, label="LRG_BGS")
+
+        # ── Step F-b: Synthesis — serial (needs all summaries) ─────────────
+        result = await self.LRG_step_F_b(
+            state, peaks, troughs,
+            f_a_summaries=f_a_summaries,
+        )
+        state['rule_analysis_LRG']['step_F'] = result
+        # print(f"LRG Step F-b (synthesis): {result}")
+        return state
+
+    async def LRG_step_F_a(
+        self, state: SpectroState, peaks, troughs,
+        match: dict, hypothesis_index: int, hypothesis_total: int,
+    ) -> str:
+        """LRG/BGS Step F-a: analyse a single brute-force hypothesis (returns raw LLM text)"""
+
+        function_name = "LRG_step_F"
+
+        continuum_description = state['continuum']['description']
+        feature_description = state['qualitative_analysis']['lines']
+        wl_left = state['spectrum']['new_wavelength'][0]
+        wl_right = state['spectrum']['new_wavelength'][-1]
+        tol_wavelength = self.runtime.configs.params.tol_wavelength_lrg_bgs
+        for i in state['preliminary_classification_monkey']:
+            if i['Category'] == 'LRG/BGS':
+                preliminary_classification = i
+
+        system_prompt, user_prompt = self.runtime.prompt_manager.load(
+            state=state,
+            agent_name=self.agent_name,
+            function_name=function_name,
+            continuum_description=continuum_description,
+            feature_description=feature_description,
+            peaks=peaks,
+            troughs=troughs,
+            wl_left=wl_left,
+            wl_right=wl_right,
+            tol_wavelength=tol_wavelength,
+            preliminary_classification=preliminary_classification,
+            match=match,
+            hypothesis_index=hypothesis_index,
+            hypothesis_total=hypothesis_total,
+        )
+
+        result = await self.call_llm_with_context(
+            system_prompt,
+            user_prompt,
+            parse_json=False,
+            description=f"LRG Step F-a [{hypothesis_index}/{hypothesis_total}]",
+            want_tools=False,
+        )
+        return result
+
+    async def LRG_step_F_extract(
+        self, state: SpectroState,
+        f_a_text: str, hypothesis: str,
+    ) -> dict:
+        """LRG/BGS Step F-extract: parse F-a conclusion into structured JSON"""
+
+        function_name = "LRG_step_F_extract"
+
+        system_prompt, user_prompt = self.runtime.prompt_manager.load(
+            state=state,
+            agent_name=self.agent_name,
+            function_name=function_name,
+            f_a_text=f_a_text,
+            hypothesis=hypothesis,
+        )
+
+        result = await self.call_llm_with_context(
+            system_prompt,
+            user_prompt,
+            parse_json=True,
+            description="LRG Step F-extract",
+            want_tools=False,
+        )
+        if not isinstance(result, dict):
+            result = {"hypothesis": hypothesis, "raw": result}
+        return result
+
+    async def LRG_step_F_b(
+        self, state: SpectroState, peaks, troughs,
+        f_a_summaries: list,
+    ) -> str:
+        """LRG/BGS Step F-b: synthesise all per-hypothesis summaries and give final verdict"""
+
+        function_name = "LRG_step_F_b"
+
+        continuum_description = state['continuum']['description']
+        feature_description = state['qualitative_analysis']['lines']
+        wl_left = state['spectrum']['new_wavelength'][0]
+        wl_right = state['spectrum']['new_wavelength'][-1]
+        tol_wavelength = self.runtime.configs.params.tol_wavelength_lrg_bgs
+        for i in state['preliminary_classification_monkey']:
+            if i['Category'] == 'LRG/BGS':
+                preliminary_classification = i
+        brute_force_matching = state.get('brute_force_matching_lrg_bgs', [])
+
+        system_prompt, user_prompt = self.runtime.prompt_manager.load(
+            state=state,
+            agent_name=self.agent_name,
+            function_name=function_name,
+            continuum_description=continuum_description,
+            feature_description=feature_description,
+            peaks=peaks,
+            troughs=troughs,
+            wl_left=wl_left,
+            wl_right=wl_right,
+            tol_wavelength=tol_wavelength,
+            preliminary_classification=preliminary_classification,
+            brute_force_matching=brute_force_matching,
+            f_a_summaries=f_a_summaries,
+        )
+
+        result = await self.call_llm_with_context(
+            system_prompt,
+            user_prompt,
+            parse_json=False,
+            description="LRG Step F-b (synthesis)",
+            want_tools=False,
+        )
+        return result
+
+    async def LRG_generic_extract(self, state: SpectroState, source_step: str) -> SpectroState:
+        """Extract structured summary from LRG/BGS step_F raw text using LRG-specific schema."""
+
+        function_name = "LRG_step_generic_extract"
+
+        raw_text = state['rule_analysis_LRG'].get(source_step)
+        if not raw_text:
+            print(f"LRG generic_extract: no content for {source_step}, skipping")
+            return state
+
+        if not isinstance(raw_text, str):
+            raw_text = json.dumps(raw_text, indent=2, ensure_ascii=False)
+
+        system_prompt, user_prompt = self.runtime.prompt_manager.load(
+            state=state,
+            agent_name=self.agent_name,
+            function_name=function_name,
+            source_step=source_step,
+            analysis_text=raw_text,
+        )
+
+        result = await self.call_llm_with_context(
+            system_prompt,
+            user_prompt,
+            parse_json=True,
+            description=f"LRG generic_extract ({source_step})",
+            want_tools=False,
+        )
+
+        state.setdefault('extract_LRG', {})[source_step] = result
+        # print(f"LRG generic_extract [{source_step}]: {result}")
         return state

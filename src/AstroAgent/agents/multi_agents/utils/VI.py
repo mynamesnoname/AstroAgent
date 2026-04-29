@@ -6,16 +6,13 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import pytesseract
+from collections import defaultdict
 from paddleocr import PaddleOCR
 from typing import List, Dict, Any
 from scipy.optimize import curve_fit
-from scipy.ndimage import gaussian_filter1d
 from scipy.stats import mode
 
 from AstroAgent.agents.common.state import SpectroState
-from AstroAgent.agents.common.feature_finder import _peak_trough_detection
-from AstroAgent.agents.common.feature_masker import generate_clean_flux_mask
-from AstroAgent.agents.multi_agents.utils.usage import find_overlap_regions
 
 
 # ===========================================================
@@ -322,17 +319,21 @@ def average_flux_by_wavelength(wavelength, flux):
     return unique_wavelength, mean_flux.to_numpy()
 
 
-def _convert_to_spectrum(crop_path, axis_fitting_info):
+def _convert_to_spectrum(crop_path, axis_fitting_info, band_names=None, band_wavelengths=None):
     """
     从裁剪后的图像中提取曲线并转换为波长（wavelength）和光谱强度（flux）。
 
     输入：
     - crop_path: 裁剪后的图像路径
     - axis_fitting_info: 包含 x/y 轴拟合系数的字典
+    - band_names: 波段名称列表（可选），用于计算并去除波段重叠区域
+    - band_wavelengths: 波段波长范围列表（可选），每个元素为 [start, end]
 
     输出：
     - spectrum_dict: 包含转换后的波长、flux 和平均后的波长与flux的字典
     """
+    from AstroAgent.agents.multi_agents.utils.usage import find_overlap_regions
+
     # Step 1: 提取曲线像素点
     points, gray = _process_and_extract_curve_points(crop_path)
 
@@ -349,6 +350,20 @@ def _convert_to_spectrum(crop_path, axis_fitting_info):
     a_x = axis_fitting_info['x']['a']
     b_x = axis_fitting_info['x']['b']
     wavelength = a_x * xs + b_x
+
+    # Step 2.5: 去除波段重叠区域（若提供了波段信息）
+    if band_names is not None and band_wavelengths is not None:
+        overlap_regions = find_overlap_regions(band_names, band_wavelengths)
+        if overlap_regions:
+            print(f"检测到 {len(overlap_regions)} 个重叠区域，将从光谱中移除: {overlap_regions}")
+            # 构建原始点的 mask：True 表示保留
+            keep_mask = np.ones(len(wavelength), dtype=bool)
+            for region_name, (ov_start, ov_end) in overlap_regions.items():
+                in_overlap = (wavelength >= ov_start) & (wavelength <= ov_end)
+                keep_mask &= ~in_overlap
+                print(f"  移除重叠区域 '{region_name}': [{ov_start}, {ov_end}]，共 {in_overlap.sum()} 个点")
+            wavelength = wavelength[keep_mask]
+            flux = flux[keep_mask]
 
     # 计算每个波长的平均flux
     unique_wavelength, mean_flux = average_flux_by_wavelength(wavelength, flux)
@@ -408,267 +423,1380 @@ def _convert_to_spectrum(crop_path, axis_fitting_info):
 # ===========================================================
 
 
-def group_features_for_llm(group: List[Dict[str, Any]], max_candidates: int = 20) -> Dict[str, Any]:
-    """
-    将 peak / trough group 整理为适合 LLM 判断的结构
+# def group_features_for_llm(group: List[Dict[str, Any]], max_candidates: int = 20) -> Dict[str, Any]:
+#     """
+#     将 peak / trough group 整理为适合 LLM 判断的结构
     
-    Args:
-        group: 特征组列表
-        max_candidates: 最多返回的候选条目数，默认20
-    """
+#     Args:
+#         group: 特征组列表
+#         max_candidates: 最多返回的候选条目数，默认20
+#     """
 
-    candidates = {}
+#     candidates = {}
 
-    # 判断是否包含 trough 信息
-    has_depth = any("depth" in g for g in group)
-    has_ew = any("equivalent_width_pixels" in g for g in group)
+#     # 判断是否包含 trough 信息
+#     has_depth = any("depth" in g for g in group)
+#     has_ew = any("equivalent_width_pixels" in g for g in group)
 
-    for item in group:
+#     for item in group:
 
-        idx = item["index"]
+#         idx = item["index"]
 
-        if idx not in candidates:
-            candidates[idx] = {
-                "index": idx,
-                "wavelength": float(item["wavelength"]),
-                "flux": float(item["flux"]),
-                "evidence": {
-                    "global": [],
-                    "local": []
-                }
-            }
+#         if idx not in candidates:
+#             candidates[idx] = {
+#                 "index": idx,
+#                 "wavelength": float(item["wavelength"]),
+#                 "flux": float(item["flux"]),
+#                 "evidence": {
+#                     "global": [],
+#                     "local": []
+#                 }
+#             }
 
-        source = item.get("source", "global")
+#         source = item.get("source", "global")
 
-        sigma = item.get("global_sigma") if source == "global" else item.get("local_sigma")
+#         sigma = item.get("global_sigma") if source == "global" else item.get("local_sigma")
 
-        ev = {
-            "sigma": sigma,
-            "prominence": float(item["prominence"]),
-            "width": float(item["width_wavelength"]),
-        }
+#         ev = {
+#             "sigma": sigma,
+#             "prominence": float(item["prominence"]),
+#             "width": float(item["width_wavelength"]),
+#         }
 
-        if has_depth and "depth" in item:
-            ev['prominence'] = -ev['prominence']
-            ev["depth"] = float(item["depth"])
+#         if has_depth and "depth" in item:
+#             ev['prominence'] = -ev['prominence']
+#             ev["depth"] = float(item["depth"])
 
-        if has_ew and "equivalent_width_pixels" in item:
-            ev["equivalent_width"] = float(item["equivalent_width_pixels"])
+#         if has_ew and "equivalent_width_pixels" in item:
+#             ev["equivalent_width"] = float(item["equivalent_width_pixels"])
 
-        candidates[idx]["evidence"][source].append(ev)
+#         candidates[idx]["evidence"][source].append(ev)
 
-    candidates_list = list(candidates.values())
+#     candidates_list = list(candidates.values())
 
-    # ---------- 智能筛选：如果超过 max_candidates，优先保留重要特征 ----------
-    if len(candidates_list) > max_candidates:
-        # 为每个 candidate 计算优先级分数
-        # 优先级：大 sigma > 高 prominence
-        def get_priority_score(c):
-            all_ev = c["evidence"]["global"] + c["evidence"]["local"]
-            if not all_ev:
-                return (0, 0)
-            # 最大 sigma（优先保留大 sigma）
-            max_sigma = max(e.get("sigma", 0) or 0 for e in all_ev)
-            # 最大 prominence（在 sigma 相同时，优先保留高 prominence）
-            max_prom = max(abs(e.get("prominence", 0) or 0) for e in all_ev)
-            # 是否有 global 证据（优先保留有 global 的）
-            has_global = len(c["evidence"]["global"]) > 0
-            # 返回排序键：(是否有global, 最大sigma, 最大prominence)
-            return (has_global, max_sigma, max_prom)
+#     # ---------- 智能筛选：如果超过 max_candidates，优先保留重要特征 ----------
+#     if len(candidates_list) > max_candidates:
+#         # 为每个 candidate 计算优先级分数
+#         # 优先级：大 sigma > 高 prominence
+#         def get_priority_score(c):
+#             all_ev = c["evidence"]["global"] + c["evidence"]["local"]
+#             if not all_ev:
+#                 return (0, 0)
+#             # 最大 sigma（优先保留大 sigma）
+#             max_sigma = max(e.get("sigma", 0) or 0 for e in all_ev)
+#             # 最大 prominence（在 sigma 相同时，优先保留高 prominence）
+#             max_prom = max(abs(e.get("prominence", 0) or 0) for e in all_ev)
+#             # 是否有 global 证据（优先保留有 global 的）
+#             has_global = len(c["evidence"]["global"]) > 0
+#             # 返回排序键：(是否有global, 最大sigma, 最大prominence)
+#             return (has_global, max_sigma, max_prom)
         
-        # 按优先级降序排序
-        candidates_list.sort(key=get_priority_score, reverse=True)
-        # 截取前 max_candidates 个
-        candidates_list = candidates_list[:max_candidates]
+#         # 按优先级降序排序
+#         candidates_list.sort(key=get_priority_score, reverse=True)
+#         # 截取前 max_candidates 个
+#         candidates_list = candidates_list[:max_candidates]
 
-    # ---------- group center ----------
-    wavelengths = [c["wavelength"] for c in candidates_list]
-    group_center = float(np.mean(wavelengths))
+#     # ---------- group center ----------
+#     wavelengths = [c["wavelength"] for c in candidates_list]
+#     group_center = float(np.mean(wavelengths))
 
-    # ---------- summary ----------
-    for c in candidates_list:
+#     # ---------- summary ----------
+#     for c in candidates_list:
 
-        global_ev = c["evidence"]["global"]
-        local_ev = c["evidence"]["local"]
+#         global_ev = c["evidence"]["global"]
+#         local_ev = c["evidence"]["local"]
 
-        all_ev = global_ev + local_ev
+#         all_ev = global_ev + local_ev
 
-        prominences = [e["prominence"] for e in all_ev]
-        widths = [e["width"] for e in all_ev]
+#         prominences = [e["prominence"] for e in all_ev]
+#         widths = [e["width"] for e in all_ev]
 
-        summary = {
-            "n_global": len(global_ev),
-            "n_local": len(local_ev),
-            "max_prominence": float(np.max(prominences)) if prominences else None,
-            "mean_width": float(np.mean(widths)) if widths else None
-        }
+#         summary = {
+#             "n_global": len(global_ev),
+#             "n_local": len(local_ev),
+#             "max_prominence": float(np.max(prominences)) if prominences else None,
+#             "mean_width": float(np.mean(widths)) if widths else None
+#         }
 
-        if has_depth:
-            depths = [e.get("depth") for e in all_ev if "depth" in e]
-            if depths:
-                summary["max_depth"] = float(np.max(depths))
+#         if has_depth:
+#             depths = [e.get("depth") for e in all_ev if "depth" in e]
+#             if depths:
+#                 summary["max_depth"] = float(np.max(depths))
 
-        if has_ew:
-            ews = [e.get("equivalent_width") for e in all_ev if "equivalent_width" in e]
-            if ews:
-                summary["max_equivalent_width"] = float(np.max(ews))
+#         if has_ew:
+#             ews = [e.get("equivalent_width") for e in all_ev if "equivalent_width" in e]
+#             if ews:
+#                 summary["max_equivalent_width"] = float(np.max(ews))
 
-        c["summary"] = summary
+#         c["summary"] = summary
 
-        c["distance_to_group_center"] = abs(c["wavelength"] - group_center)
+#         c["distance_to_group_center"] = abs(c["wavelength"] - group_center)
 
-    # 按波长排序
-    candidates_list.sort(key=lambda x: x["wavelength"])
+#     # 按波长排序
+#     candidates_list.sort(key=lambda x: x["wavelength"])
 
-    return {
-        "group_center": group_center,
-        "candidates": candidates_list
-    }
+#     return {
+#         "group_center": group_center,
+#         "candidates": candidates_list
+#     }
 
-
-# ===========================================================
-# Step 1.9 / 1.11: Peak & Trough Detection Wrapper
-# ===========================================================
-
-def run_peak_trough_detection(state, wavelengths, flux, sigma_list, tol_wavelength, prom_peaks, prom_troughs):
-    """
-    调用 _peak_trough_detection 并更新 state 中的 peak_groups / trough_groups。
-    """
-    result = _peak_trough_detection(
-        wavelengths, flux, state,
-        sigma_list=sigma_list,
-        tol_wavelength=tol_wavelength,
-        prom_peaks=prom_peaks,
-        prom_troughs=prom_troughs,
-        local_size=500
-    )
-    state["peak_groups"] = result["peak_groups"]
-    state["trough_groups"] = result["trough_groups"]
-    return state
 
 
 # ===========================================================
-# Step 1.10a: Mask Peaks & Troughs
+# Step 1.10b: Continuum Fitting (Chebyshev)
 # ===========================================================
 
-def run_mask_peaks_and_troughs(state, num_peaks, num_troughs):
+def run_continuum_fitting(state, chebyshev_degree=None, chebyshev_min_degree=1, chebyshev_max_degree=10, verbose=False):
     """
-    根据 peak/trough groups 对光谱进行 mask，只使用前 num_peaks 个 peak groups
-    和前 num_troughs 个 trough groups。
+    使用切比雪夫多项式拟合 continuum，并计算残差光谱。
+    
+    Parameters
+    ----------
+    state : SpectroState
+        状态字典，需包含 'spectrum' 键
+    chebyshev_degree : int or None
+        指定切比雪夫多项式阶数；若为 None 则自动选择
+    chebyshev_min_degree : int
+        自动选择时的最小阶数
+    chebyshev_max_degree : int
+        自动选择时的最大阶数
+    verbose : bool
+        是否输出详细信息
+    
+    Returns
+    -------
+    state : SpectroState
+        更新后的状态，包含 'continuum' 和 'residual_spectrum'
     """
-    spec = state.get("spectrum", {})
-    wavelengths = spec.get("new_wavelength", [])
-    flux = spec.get("weighted_flux", [])
+    from specutils.fitting import fit_generic_continuum
+    from specutils import Spectrum
+    from astropy.modeling import models
+    import astropy.units as u
+    import warnings
+    
+    from AstroAgent.agents.multi_agents.utils.feature_finder_precise import select_chebyshev_degree
+    
+    spec = state['spectrum']
+    wavelengths = np.array(spec['new_wavelength'], dtype=np.float64)
+    flux = np.array(spec['weighted_flux'], dtype=np.float64)
+    
+    # 构建 specutils Spectrum 对象
+    sp = Spectrum(flux=flux * u.Jy, spectral_axis=wavelengths * u.AA)
+    
+    # 自动选择或使用指定阶数
+    if chebyshev_degree is None:
+        chebyshev_degree = select_chebyshev_degree(
+            sp, min_degree=chebyshev_min_degree, max_degree=chebyshev_max_degree,
+            verbose=verbose
+        )
+    
+    print(f'Continuum: Chebyshev degree={chebyshev_degree}')
+    
+    # 拟合 continuum
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        cf = fit_generic_continuum(sp, model=models.Chebyshev1D(degree=chebyshev_degree))
+    continuum_flux = cf(sp.spectral_axis).value
 
-    peak_groups = state.get("peak_groups", [])[:num_peaks]
-    trough_groups = state.get("trough_groups", [])[:num_troughs]
+    # 计算对数导数 dlnF/dλ = (dF/dλ) / |F|
+    # 除以 |F| 可放大低信噪比 continuum 的增减性；用 abs 保护避免除零且不引入 sign(F)
+    # （若用带符号的 F 作除数，负值区域增减性会被翻转）
+    continuum_flux_safe = np.maximum(np.abs(continuum_flux), 1e-10)
+    continuum_log_derivative = np.gradient(continuum_flux, wavelengths) / continuum_flux_safe
+    # 根据对数导数的符号划分单调区间
+    monotonic_regions = np.where(np.diff(np.sign(continuum_log_derivative)))[0]
+    # 生成连续谱的自然语言描述
+    continuum_description = generate_continuum_description(wavelengths, continuum_flux, monotonic_regions)
+    
+    print(continuum_description)
 
-    if not wavelengths or not flux:
-        logging.warning("No spectrum data available for masking")
-        return state
-
-    result = generate_clean_flux_mask(
-        wavelengths=wavelengths,
-        flux=flux,
-        peak_groups=peak_groups,
-        trough_groups=trough_groups,
-        extend_ratio=0.6,
-        min_width=200
-    )
-
-    state["cleaned_spectrum"] = {
-        "wavelength": result["cleaned_wavelength"],
-        "flux": result["cleaned_flux"]
-    }
-    state["masked_regions"] = result["masked_regions"]
-
-    logging.info(
-        f"Masked {len(peak_groups)} peak groups and "
-        f"{len(trough_groups)} trough groups"
-    )
-    return state
-
-
-# ===========================================================
-# Step 1.10b: Continuum Fitting
-# ===========================================================
-
-def run_continuum_fitting(state, arm_name, arm_wavelength_range, sigma_continuum):
-    """
-    简单的 continuum 拟合：高斯平滑 + 残差光谱计算。
-    """
-    spec = state['cleaned_spectrum']
-    wavelengths = np.array(spec['wavelength'])
-    flux = np.array(spec['flux'])
-
-    if arm_name:
-        overlap_regions = find_overlap_regions(arm_name, arm_wavelength_range)
-        arm_mask = np.zeros_like(wavelengths, dtype=bool)
-        for key in overlap_regions:
-            low, high = overlap_regions[key]
-            region_mask = (wavelengths >= low) & (wavelengths <= high)
-            arm_mask = arm_mask | region_mask
-        # 使用线性插值填充 arm overlap 区域
-        if np.any(arm_mask):
-            unmasked_indices = np.where(~arm_mask)[0]
-            if len(unmasked_indices) > 1:
-                flux[arm_mask] = np.interp(
-                    wavelengths[arm_mask],
-                    wavelengths[unmasked_indices],
-                    flux[unmasked_indices]
-                )
-
-    if not sigma_continuum:
-        logging.error("CONTINUUM_SMOOTHING_SIGMA is not set, using 100")
-        sigma_continuum = 100
-
-    print(f'CONTINUUM_SMOOTHING_SIGMA: {sigma_continuum}')
-
-    continuum_flux = gaussian_filter1d(flux, sigma=sigma_continuum)
     state['continuum'] = {
         'wavelength': wavelengths.tolist(),
-        'flux': continuum_flux.tolist()
+        'flux': continuum_flux.tolist(),
+        'chebyshev_degree': chebyshev_degree,
+        'description': continuum_description
     }
-
-    residual_flux = np.array(state['spectrum']["weighted_flux"]) - np.array(state['continuum']["flux"])
-    state["residual_spectrum"] = {
-        "wavelength": wavelengths.tolist(),
-        "flux": residual_flux.tolist()
+    
+    # 计算残差光谱
+    residual_flux = flux - continuum_flux
+    state['residual_spectrum'] = {
+        'wavelength': wavelengths.tolist(),
+        'flux': residual_flux.tolist()
     }
+    
     return state
+
+
+def generate_continuum_description(
+    wavelengths: np.ndarray,
+    continuum_flux: np.ndarray,
+    monotonic_regions: np.ndarray
+) -> str:
+    """
+    Generate a natural language description of the continuum based on monotonic intervals.
+    
+    Parameters
+    ----------
+    wavelengths : np.ndarray
+        Wavelength array
+    continuum_flux : np.ndarray
+        Continuum flux array
+    monotonic_regions : np.ndarray
+        Indices where monotonicity changes (from np.where(np.diff(np.sign(...))))
+    
+    Returns
+    -------
+    description : str
+        Natural language description of the continuum, e.g.:
+        "The continuum has a value of 2.027 at 4000.0 Å, monotonically increases
+         from 4000.0 Å to 5010.1 Å, reaching 3.499 at 5010.1 Å; ..."
+    """
+    # monotonic_regions already computed by the caller (run_continuum_fitting);
+    # derive per-segment sign directly from flux endpoints to avoid recomputing the derivative.
+    # sign > 0: increasing, sign < 0: decreasing, == 0: flat
+    boundaries = np.concatenate([[0], monotonic_regions + 1, [len(wavelengths) - 1]])
+    segment_signs = np.sign(
+        continuum_flux[boundaries[1:]] - continuum_flux[boundaries[:-1]]
+    )
+    
+    # Generate descriptions
+    descriptions = []
+    
+    for i in range(len(boundaries) - 1):
+        start_idx = boundaries[i]
+        end_idx = boundaries[i + 1]
+        
+        # Get wavelength and flux at interval endpoints
+        lambda_start = wavelengths[start_idx]
+        lambda_end = wavelengths[end_idx]
+        flux_start = continuum_flux[start_idx]
+        flux_end = continuum_flux[end_idx]
+        
+        # Determine monotonicity from segment sign
+        seg_sign = segment_signs[i]
+        if seg_sign > 0:
+            monotonic_str = 'monotonically increases'
+        elif seg_sign < 0:
+            monotonic_str = 'monotonically decreases'
+        else:
+            monotonic_str = 'remains approximately flat'
+        
+        # Build description sentence
+        if start_idx == 0:
+            # First interval
+            desc = f'The continuum has a value of {flux_start:.3f} at {lambda_start:.1f} Å, '
+            desc += f'{monotonic_str} from {lambda_start:.1f} Å to {lambda_end:.1f} Å, '
+            desc += f'reaching {flux_end:.3f} at {lambda_end:.1f} Å'
+        else:
+            # Subsequent intervals
+            desc = f'{monotonic_str} from {lambda_start:.1f} Å to {lambda_end:.1f} Å, '
+            desc += f'reaching {flux_end:.3f} at {lambda_end:.1f} Å'
+        
+        descriptions.append(desc)
+    
+    # Join into full description
+    full_description = '; '.join(descriptions) + '.'
+    
+    return full_description
 
 
 # ===========================================================
 # File I/O Helpers
 # ===========================================================
 
-def save_peak_trough_groups(state):
-    """将 peak/trough groups 保存到文本文件。"""
-    peak_path = os.path.join(state["output_dir"], f"{state['file_name']}_peak_g.txt")
-    trough_path = os.path.join(state["output_dir"], f"{state['file_name']}_trough_g.txt")
-    with open(peak_path, "w") as f:
-        f.write("Peak Groups:\n")
-        for i in state['peak_groups']:
-            f.write("---------------\n")
-            for j in i:
-                f.write(f"{j}\n")
-    with open(trough_path, "w") as f:
-        f.write("Trough Groups:\n")
-        for i in state['trough_groups']:
-            f.write("---------------\n")
-            for j in i:
-                f.write(f"{j}\n")
+def run_continuum_fitting_masked(
+    state,
+    peaks=None,
+    troughs=None,
+    chebyshev_degree=None,
+    chebyshev_min_degree=1,
+    chebyshev_max_degree=10,
+    verbose=False,
+):
+    """
+    在将外检测到的峰/谷区域（中心 ±3σ）mask 掉后，对剩余光谱做切比雪夫拟合。
+    拟合完成后用完整波长数组插値，将结果写入 state['continuum'] 和
+    state['residual_spectrum']，格式与原 run_continuum_fitting 完全相同。
+
+    Parameters
+    ----------
+    state : SpectroState
+        状态字典，需包含 'spectrum' 键
+    peaks : list of dict, optional
+        发射线检测结果（records 格式），包含 'wavelength' 和 'FWHM_A' 字段
+    troughs : list of dict, optional
+        吸收线检测结果（records 格式），包含 'wavelength' 和 'FWHM_A' 字段
+    chebyshev_degree : int or None
+        指定切比雪夫多项式阶数；若为 None 则自动选择
+    chebyshev_min_degree : int
+    chebyshev_max_degree : int
+    verbose : bool
+
+    Returns
+    -------
+    state : SpectroState
+        更新后的状态
+    """
+    from specutils.fitting import fit_generic_continuum
+    from specutils import Spectrum
+    from astropy.modeling import models
+    import astropy.units as u
+    import warnings
+
+    from AstroAgent.agents.multi_agents.utils.feature_finder_precise import (
+        select_chebyshev_degree, SIGMA_TO_FWHM
+    )
+
+    spec = state['spectrum']
+    wavelengths = np.array(spec['new_wavelength'], dtype=np.float64)
+    flux = np.array(spec['weighted_flux'], dtype=np.float64)
+
+    # ── 构建特征区域 mask：中心 ±3σ 的点均被排除 ───────────────
+    # 与迭代检测内部的 mask 逻辑保持一致：中心 ±3σ，其中 σ = FWHM_A / SIGMA_TO_FWHM
+    fit_mask = np.ones(len(wavelengths), dtype=bool)  # True = 参与拟合
+
+    all_features = []
+    if peaks:
+        all_features.extend(peaks)
+    if troughs:
+        all_features.extend(troughs)
+
+    n_masked_pts = 0
+    for feat in all_features:
+        wl_center = feat.get('wavelength')
+        fwhm_a = feat.get('FWHM_A')
+        if wl_center is None or fwhm_a is None:
+            continue
+        sigma = fwhm_a / SIGMA_TO_FWHM
+        lo, hi = wl_center - 3 * sigma, wl_center + 3 * sigma
+        in_region = (wavelengths >= lo) & (wavelengths <= hi)
+        n_masked_pts += int(in_region.sum())
+        fit_mask &= ~in_region
+
+    n_fit_pts = int(fit_mask.sum())
+    print(f'[Continuum masked] 共 {len(all_features)} 个特征，'
+          f'mask掉 {n_masked_pts} 个数据点，'
+          f'参与拟合点数: {n_fit_pts}/{len(wavelengths)}')
+
+    # 少于 20 个点时回退到未掉点的拟合
+    if n_fit_pts < 20:
+        print('[Continuum masked] 可用点数不足 20，回退为全谱拟合')
+        fit_mask = np.ones(len(wavelengths), dtype=bool)
+
+    wave_fit = wavelengths[fit_mask]
+    flux_fit = flux[fit_mask]
+
+    # ── 在 mask 后的子光谱上自动选阶和拟合 ────────────────────────
+    sp_fit = Spectrum(flux=flux_fit * u.Jy, spectral_axis=wave_fit * u.AA)
+
+    if chebyshev_degree is None:
+        chebyshev_degree = select_chebyshev_degree(
+            sp_fit, min_degree=chebyshev_min_degree, max_degree=chebyshev_max_degree,
+            verbose=verbose
+        )
+
+    print(f'[Continuum masked] Chebyshev degree={chebyshev_degree}')
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        cf = fit_generic_continuum(sp_fit, model=models.Chebyshev1D(degree=chebyshev_degree))
+
+    # 在完整波长数组上求値（包括被 mask 的点）
+    continuum_flux = cf(wavelengths * u.AA).value
+
+    # ── 计算单调区间和自然语言描述 ───────────────────────────────
+    continuum_flux_safe = np.maximum(np.abs(continuum_flux), 1e-10)
+    continuum_log_derivative = np.gradient(continuum_flux, wavelengths) / continuum_flux_safe
+    monotonic_regions = np.where(np.diff(np.sign(continuum_log_derivative)))[0]
+    continuum_description = generate_continuum_description(wavelengths, continuum_flux, monotonic_regions)
+    print(continuum_description)
+
+    state['continuum'] = {
+        'wavelength': wavelengths.tolist(),
+        'flux': continuum_flux.tolist(),
+        'chebyshev_degree': chebyshev_degree,
+        'description': continuum_description,
+        'n_masked_features': len(all_features),
+        'n_masked_points': n_masked_pts,
+    }
+
+    residual_flux = flux - continuum_flux
+    state['residual_spectrum'] = {
+        'wavelength': wavelengths.tolist(),
+        'flux': residual_flux.tolist()
+    }
+
+    return state
 
 
-def save_resolved_features(state, resolved_peaks, resolved_troughs):
-    """将 resolved peaks/troughs 保存到 JSON 文件。"""
-    with open(os.path.join(state['output_dir'], f"{state['file_name']}_resolved_peaks.txt"), "w") as f:
+def save_features_catalog(
+    output_dir: str,
+    file_name: str,
+    df_features,
+    feature_type: str = 'emission'
+) -> str:
+    """
+    将特征目录保存为 CSV 文件。
+    
+    Parameters
+    ----------
+    output_dir : str
+        输出目录路径
+    file_name : str
+        文件名前缀
+    df_features : DataFrame
+        新格式特征 DataFrame
+    feature_type : str
+        'emission' 或 'absorption'
+    
+    Returns
+    -------
+    filepath : str
+        保存的文件路径
+    """
+    if len(df_features) == 0:
+        return None
+    
+    from AstroAgent.agents.multi_agents.utils.feature_finder_precise import save_catalog_csv
+    
+    suffix = 'emission' if feature_type == 'emission' else 'absorption'
+    filepath = os.path.join(output_dir, f"{file_name}_{suffix}.csv")
+    return save_catalog_csv(df_features, filepath, feature_type)
+
+
+# ===========================================================
+# Iterative Feature Detection
+# ===========================================================
+
+def run_iterative_feature_detection(
+    output_dir: str,
+    file_name: str,
+    wavelength,
+    flux,
+    ivar=None,
+    effective_snr=None,
+    n_iterations: int = 3,
+    absorption_detection_params: dict = None,
+    emission_detection_params: dict = None,
+    verbose: bool = True
+) -> dict:
+    """
+    执行迭代特征检测：先检测吸收线，再在吸收线 mask 后的光谱上检测发射线。
+    
+    Parameters
+    ----------
+    output_dir : str
+        输出目录路径
+    file_name : str
+        文件名前缀
+    wavelength : array-like
+        波长数组
+    flux : array-like
+        流量数组
+    ivar : array-like, optional
+        逆方差数组（优先于 effective_snr 使用）；由函数内部统一分发，无需在
+        absorption_detection_params / emission_detection_params 中重复传入
+    effective_snr : float or array-like, optional
+        有效信噪比（仅当 ivar 为 None 时使用）；同上，由函数内部统一分发
+    n_iterations : int
+        迭代次数（默认 3）
+    absorption_detection_params : dict, optional
+        吸收线检测参数，覆盖 find_absorption_lines 内部默认值。
+        可用键（见 iterative_absorption_detection 默认值）：
+          chebyshev_degree, chebyshev_min_degree, chebyshev_max_degree,
+          window_width, window_overlap,
+          delta_chi2_base, dynamic_threshold_factor, global_delta_chi2_threshold,
+          fwhm_min, fwhm_max,
+          enable_density_presift, density_presift_threshold, density_presift_topk,
+          blend_k, snr_depth_threshold,
+          local_continuum_degree, local_continuum_n_iter, local_continuum_sigma_clip,
+          narrow_sigma_shrink, narrow_sigma_expand,
+          broad_sigma_shrink, broad_sigma_expand,
+          amp_floor_frac, center_max_shift,
+          smooth_sigma_trough, smooth_prominence_frac_trough
+    emission_detection_params : dict, optional
+        发射线检测参数，覆盖 find_emission_lines 内部默认值。
+        可用键（见 iterative_emission_detection 默认值）：
+          chebyshev_degree, chebyshev_min_degree, chebyshev_max_degree,
+          window_width, window_overlap,
+          delta_chi2_base, dynamic_threshold_factor, global_delta_chi2_threshold,
+          fwhm_min, fwhm_max,
+          enable_density_presift, density_presift_threshold, density_presift_topk,
+          blend_k,
+          narrow_sigma_shrink, narrow_sigma_expand,
+          broad_sigma_shrink, broad_sigma_expand,
+          amp_floor_frac, center_max_shift
+    verbose : bool
+        是否输出详细信息
+    
+    Returns
+    -------
+    result : dict
+        包含以下键：
+        - df_absorption : DataFrame, 吸收线结果（按波长升序排列，含 amplitude_rank）
+        - df_emission : DataFrame, 发射线结果（按波长升序排列，含 amplitude_rank）
+        - records_absorption : list, 吸收线记录列表
+        - records_emission : list, 发射线记录列表
+        - wave_remaining : array, mask 后剩余波长
+        - flux_remaining : array, mask 后剩余流量
+    """
+    from AstroAgent.agents.multi_agents.utils.feature_finder_precise import (
+        iterative_absorption_detection,
+        iterative_emission_detection,
+        save_catalog_csv,
+    )
+    
+    wavelength = np.asarray(wavelength, dtype=np.float64)
+    flux = np.asarray(flux, dtype=np.float64)
+    
+    # ── ivar / effective_snr 统一预处理 ──────────────────────────
+    # ivar 和 effective_snr 由顶层统一传入，函数内部负责分发，
+    # absorption_detection_params / emission_detection_params 中不应包含这两个键
+    if ivar is not None:
+        ivar = np.asarray(ivar, dtype=np.float64)
+        effective_snr = None
+    elif effective_snr is None:
+        effective_snr = 7.0
+    
+    if effective_snr is not None:
+        if np.isscalar(effective_snr):
+            effective_snr = np.full_like(flux, effective_snr, dtype=np.float64)
+        else:
+            effective_snr = np.asarray(effective_snr, dtype=np.float64)
+    
+    # ── 构建吸收线检测参数：将 ivar/snr 注入，再合并用户自定义参数 ──
+    abs_params = {}
+    if ivar is not None:
+        abs_params['ivar'] = ivar
+    elif effective_snr is not None:
+        abs_params['effective_snr'] = effective_snr
+    if absorption_detection_params:
+        abs_params.update(absorption_detection_params)
+
+    # ── Step 1: 迭代吸收线检测 ───────────────────────────────────
+    if verbose:
+        print("\n" + "="*70)
+        print("开始迭代吸收线检测")
+        print("="*70)
+    
+    df_abs, records_abs, wave_after_abs, flux_after_abs = iterative_absorption_detection(
+        wavelength=wavelength,
+        flux=flux,
+        n_iterations=n_iterations,
+        detection_params=abs_params,
+        verbose=verbose,
+        output_format='new',
+    )
+    
+    if verbose:
+        print(f"\n检测到 {len(df_abs)} 条吸收线")
+    
+    # ── Step 1.5: 将 ivar/snr 同步到吸收线 mask 后的波长网格 ──────
+    # iterative_absorption_detection 内部会逐迭代 mask 波长数组，
+    # 发射线检测需要与 wave_after_abs 长度一致的 ivar/snr
+    if ivar is not None:
+        if len(ivar) != len(wave_after_abs):
+            keep_mask = np.isin(wavelength, wave_after_abs)
+            if keep_mask.sum() == len(wave_after_abs):
+                ivar_for_em = ivar[keep_mask]
+            else:
+                ivar_for_em = np.interp(wave_after_abs, wavelength, ivar)
+        else:
+            ivar_for_em = ivar
+        em_ivar_snr = {'ivar': ivar_for_em}
+    else:
+        snr = effective_snr
+        if snr is not None and not np.isscalar(snr) and len(snr) != len(wave_after_abs):
+            keep_mask = np.isin(wavelength, wave_after_abs)
+            if keep_mask.sum() == len(wave_after_abs):
+                snr_for_em = snr[keep_mask]
+            else:
+                snr_for_em = np.interp(wave_after_abs, wavelength, snr)
+        else:
+            snr_for_em = snr
+        em_ivar_snr = {'effective_snr': snr_for_em} if snr_for_em is not None else {}
+    
+    # ── 构建发射线检测参数：注入同步后的 ivar/snr，再合并用户自定义参数 ──
+    em_params = {}
+    em_params.update(em_ivar_snr)
+    if emission_detection_params:
+        em_params.update(emission_detection_params)
+    
+    # ── Step 2: 迭代发射线检测（在吸收线已 mask 的光谱上）──────
+    if verbose:
+        print("\n" + "="*70)
+        print("在吸收线已 mask 的光谱上执行发射线检测")
+        print("="*70)
+    
+    df_em, records_em, wave_remaining, flux_remaining = iterative_emission_detection(
+        wavelength=wave_after_abs,
+        flux=flux_after_abs,
+        n_iterations=n_iterations,
+        detection_params=em_params,
+        verbose=verbose,
+        output_format='new',
+        df_troughs=df_abs,  # 用于伪峰标注
+    )
+    
+    if verbose:
+        print(f"\n检测到 {len(df_em)} 条发射线")
+    
+    # ── Step 2.5: 添加近邻信息 ────────────────────────────────────
+    records_abs = _add_neighbor_info(records_abs)
+    records_em = _add_neighbor_info(records_em)
+        
+    # 更新 DataFrame 中的邻居信息
+    if len(df_abs) > 0:
+        df_abs['left_neighbor'] = [r.get('left_neighbor', 'None') for r in records_abs]
+        df_abs['right_neighbor'] = [r.get('right_neighbor', 'None') for r in records_abs]
+    if len(df_em) > 0:
+        df_em['left_neighbor'] = [r.get('left_neighbor', 'None') for r in records_em]
+        df_em['right_neighbor'] = [r.get('right_neighbor', 'None') for r in records_em]
+    
+    # ── Step 2.6: 按波长排序并添加 amplitude_rank ───────────────────────────────
+    # amplitude_rank: 发射线按幅度（峰高）从高到低排名；吸收线按深度（幅度绝对值）从深到浅排名
+        
+    # 吸收线：按波长排序，添加 amplitude_rank
+    if len(df_abs) > 0:
+        # 先按 amplitude 计算排名（幅度越大，排名越靠前）
+        df_abs['amplitude_rank'] = df_abs['amplitude'].abs().rank(ascending=False, method='min').astype(int)
+        # 按波长排序
+        df_abs = df_abs.sort_values('wavelength', ascending=True).reset_index(drop=True)
+        # 同步更新 records_abs
+        records_abs = _update_records_with_rank_and_sort(df_abs, records_abs, 'absorption')
+        
+    # 发射线：按波长排序，添加 amplitude_rank
+    if len(df_em) > 0:
+        # 按 amplitude 计算排名（幅度越大，排名越靠前）
+        df_em['amplitude_rank'] = df_em['amplitude'].rank(ascending=False, method='min').astype(int)
+        # 按波长排序
+        df_em = df_em.sort_values('wavelength', ascending=True).reset_index(drop=True)
+        # 同步更新 records_em
+        records_em = _update_records_with_rank_and_sort(df_em, records_em, 'emission')
+    
+    # ── Step 3: 保存结果 ──────────────────────────────────────────
+    if len(df_abs) > 0:
+        abs_path = os.path.join(output_dir, f"{file_name}_absorption.csv")
+        save_catalog_csv(df_abs, abs_path, 'absorption')
+    
+    if len(df_em) > 0:
+        em_path = os.path.join(output_dir, f"{file_name}_emission.csv")
+        save_catalog_csv(df_em, em_path, 'emission')
+    
+    return {
+        'df_absorption': df_abs,
+        'df_emission': df_em,
+        'records_absorption': records_abs,
+        'records_emission': records_em,
+        'wave_remaining': wave_remaining,
+        'flux_remaining': flux_remaining,
+    }
+
+
+def _add_neighbor_info(records: list) -> list:
+    """
+    为谱线记录添加近邻信息（同类型谱线内查找）。
+    
+    Parameters
+    ----------
+    records : list of dict
+        谱线记录列表，每条记录需包含 'wavelength' 字段
+    
+    Returns
+    -------
+    records : list of dict
+        添加了 'left_neighbor' 和 'right_neighbor' 字段的记录
+        格式："Left neighbor: {wavelength:.1f} Å, distance: {distance:.1f} Å"
+              "Left neighbor: None, distance: None"
+    """
+    if not records:
+        return records
+    
+    # 按波长排序
+    sorted_records = sorted(records, key=lambda x: x.get('wavelength', 0))
+    
+    for i, rec in enumerate(sorted_records):
+        current_wl = rec.get('wavelength', 0)
+        
+        # 左邻居（波长更小的最近邻）
+        if i > 0:
+            left_wl = sorted_records[i - 1].get('wavelength', 0)
+            left_dist = current_wl - left_wl
+            rec['left_neighbor'] = f"Left neighbor: {left_wl:.1f} Å, distance: {left_dist:.1f} Å"
+        else:
+            rec['left_neighbor'] = "Left neighbor: None, distance: None"
+        
+        # 右邻居（波长更大的最近邻）
+        if i < len(sorted_records) - 1:
+            right_wl = sorted_records[i + 1].get('wavelength', 0)
+            right_dist = right_wl - current_wl
+            rec['right_neighbor'] = f"Right neighbor: {right_wl:.1f} Å, distance: {right_dist:.1f} Å"
+        else:
+            rec['right_neighbor'] = "Right neighbor: None, distance: None"
+    
+    return sorted_records
+
+
+def _update_records_with_rank_and_sort(df, records, feature_type):
+    """
+    根据 DataFrame 的排序和排名更新 records 列表。
+    
+    Parameters
+    ----------
+    df : DataFrame
+        已排序且包含 amplitude_rank 列的 DataFrame
+    records : list of dict
+        原始记录列表
+    feature_type : str
+        'emission' 或 'absorption'
+    
+    Returns
+    -------
+    updated_records : list of dict
+        按波长排序并添加了 amplitude_rank 的记录列表
+    """
+    if len(df) == 0 or not records:
+        return records
+    
+    # 创建波长到记录的映射
+    wavelength_to_record = {rec['wavelength']: rec.copy() for rec in records}
+    
+    updated_records = []
+    for _, row in df.iterrows():
+        wl = row['wavelength']
+        if wl in wavelength_to_record:
+            rec = wavelength_to_record[wl]
+            rec['amplitude_rank'] = int(row['amplitude_rank'])
+            updated_records.append(rec)
+    
+    return updated_records
+
+
+def save_resolved_features(
+    output_dir: str,
+    file_name: str,
+    resolved_peaks,
+    resolved_troughs
+) -> None:
+    """
+    将 resolved peaks/troughs 保存到 JSON 文件。
+    
+    Parameters
+    ----------
+    output_dir : str
+        输出目录路径
+    file_name : str
+        文件名前缀
+    resolved_peaks : list
+        已解析的峰列表
+    resolved_troughs : list
+        已解析的谷列表
+    """
+    with open(os.path.join(output_dir, f"{file_name}_resolved_peaks.txt"), "w") as f:
         json.dump(resolved_peaks, f, ensure_ascii=False, indent=4)
-    with open(os.path.join(state['output_dir'], f"{state['file_name']}_resolved_troughs.txt"), "w") as f:
+    with open(os.path.join(output_dir, f"{file_name}_resolved_troughs.txt"), "w") as f:
         json.dump(resolved_troughs, f, ensure_ascii=False, indent=4)
 
-def save_cleaned_features(state, cleaned_peaks, cleaned_troughs):
-    with open(os.path.join(state['output_dir'], f"{state['file_name']}_cleaned_peaks.txt"), "w") as f:
-        json.dump(cleaned_peaks, f, ensure_ascii=False, indent=4)
-    with open(os.path.join(state['output_dir'], f"{state['file_name']}_cleaned_troughs.txt"), "w") as f:
-        json.dump(cleaned_troughs, f, ensure_ascii=False, indent=4)
+
+# ===========================================================
+# Brute-Force Line Matching
+# ============================================================
+
+# 静止系谱线表
+EMISSION_LINES = {
+    # 高电离 / AGN 特征线
+    "Lyα":       1216.0,
+    "C IV":      1549.0,
+    "He II":     1640.4,
+    "C III]":    1909.0,
+    "Mg II":     2800.0,
+    "Ne [V]":    3426.0,
+    "O [II]":    3727.0,
+    # Balmer 系列
+    "Hε":        3970.1,
+    "Hδ":        4102.9,
+    "Hγ":        4341.7,
+    "Hβ":        4862.7,
+    # 窄线区
+    "O [III]a":  4960.3,
+    "O [III]b":  5008.2,
+    "N [II]a":   6549.8,
+    "Hα":        6564.6,
+    "N [II]b":   6585.3,
+    "S [II]a":   6718.3,
+    "S [II]b":   6732.7,
+}
+
+# 发射线宽窄分类：broad = 宽线区 (BLR) 允许的宽线，narrow = 窄线区 (NLR) 典型窄线
+# both = BLR+NLR 均可产生，宽窄皆合理（Balmer 系在 QSO 中有 broad+narrow 叠加，
+#        在 galaxy 中仅 narrow），宽度校验对 both 类跳过
+# 用于匹配时检查寻峰宽度与物理期望是否一致
+EMISSION_LINE_WIDTHS = {
+    # BLR 宽线
+    "Lyα":       "broad",
+    "C IV":      "broad",
+    "C III]":    "broad",
+    "He II":     "both", # 在 QSO 中可以表现为 BLR 宽线，在低电离 AGN 或 Galaxy 中也可以是较窄的线
+    "Mg II":     "broad",
+    # Balmer 系列：QSO 中 broad+narrow 叠加，galaxy 中仅 narrow
+    "Hε":        "both",
+    "Hδ":        "both",
+    "Hγ":        "both",
+    "Hβ":        "both",
+    "Hα":        "both",
+    # NLR 窄线
+    "Ne [V]":    "narrow",
+    "O [II]":    "narrow",
+    "O [III]a":  "narrow",
+    "O [III]b":  "narrow",
+    "N [II]a":   "narrow",
+    "N [II]b":   "narrow",
+    "S [II]a":   "narrow",
+    "S [II]b":   "narrow",
+}
+
+ABSORPTION_LINES = {
+    "Ca K_abs":      3934.8,
+    "Ca H_abs":      3969.6,
+    "G-band_abs":    4305.6,
+    "Mg_abs":        5176.7,
+    "Mg II_abs":     2800.0,
+    "Na D_abs":      5895.6,
+    "CaT1_abs":      8498.0,
+    "CaT2_abs":      8542.0,
+    "CaT3_abs":      8662.0,
+    # Balmer 吸收
+    "Hε_abs":    3970.1,
+    "Hδ_abs":    4102.9,
+    "Hγ_abs":    4341.7,
+    "Hβ_abs":    4862.7,
+    "Hα_abs":    6564.6,
+}
+
+# 锚定时只用发射线假设
+# Mg II 2800 / H 系列既可发射也可吸收，但锚定时统一按发射线处理
+ANCHOR_EMISSION_LINES = EMISSION_LINES
+
+# LRG/BGS 专用锚定谱线表：排除 BLR 宽线（broad），保留窄线和 Balmer both 类
+# 派生自 EMISSION_LINE_WIDTHS，EMISSION_LINE_WIDTHS 是唯一宽窄分类来源，改一处全部生效
+LRG_ANCHOR_EMISSION_LINES = {
+    k: v for k, v in EMISSION_LINES.items()
+    if EMISSION_LINE_WIDTHS.get(k) != 'broad'
+}
+
+
+def _compute_dn4000(obs_wavelength, obs_flux, z):
+    """
+    将观测系光谱转换到静止系，计算 D_n(4000) 指标及三段线性斜率。
+
+    Parameters
+    ----------
+    obs_wavelength : array-like
+        观测系波长数组（Å），对应 state['spectrum']['new_wavelength']
+    obs_flux : array-like
+        对应流量数组，对应 state['spectrum']['weighted_flux']
+    z : float
+        红移值，用于将观测系转换为静止系
+
+    Returns
+    -------
+    dict with keys:
+        Dn4000           : float | None  — D_n(4000) 值
+        strength         : str           — "weak" / "moderate" / "strong" / "insufficient data"
+        mean_flux_3850_3950 : float | None
+        mean_flux_4000_4100 : float | None
+        slope_3850_3950  : float | None  — 线性斜率（flux/Å，静止系）
+        slope_3950_4000  : float | None
+        slope_4000_4100  : float | None
+        n_points_3850_3950 : int
+        n_points_4000_4100 : int
+    """
+    obs_wavelength = np.asarray(obs_wavelength, dtype=np.float64)
+    obs_flux = np.asarray(obs_flux, dtype=np.float64)
+
+    # 转换到静止系
+    rest_wavelength = obs_wavelength / (1.0 + z)
+
+    def _window_stats(wl_lo, wl_hi):
+        """返回窗口内的 (wavelength, flux) 子集"""
+        mask = (rest_wavelength >= wl_lo) & (rest_wavelength <= wl_hi)
+        return rest_wavelength[mask], obs_flux[mask]
+
+    def _linear_slope(wl_arr, flux_arr):
+        """用 numpy.polyfit 拟合一阶多项式，返回斜率；点数 < 2 时返回 None"""
+        if len(wl_arr) < 2:
+            return None
+        coeffs = np.polyfit(wl_arr, flux_arr, 1)
+        return float(coeffs[0])  # 斜率，单位 flux/Å
+
+    wl_a, fl_a = _window_stats(3850.0, 3950.0)  # 蓝侧参考窗口
+    wl_b, fl_b = _window_stats(3950.0, 4000.0)  # break 过渡段
+    wl_c, fl_c = _window_stats(4000.0, 4100.0)  # 红侧 break 窗口
+
+    mean_a = float(np.mean(fl_a)) if len(fl_a) > 0 else None
+    mean_c = float(np.mean(fl_c)) if len(fl_c) > 0 else None
+
+    # D_n(4000) = mean_flux(4000-4100) / mean_flux(3850-3950)
+    if mean_a is not None and mean_c is not None and mean_a != 0:
+        dn4000 = mean_c / mean_a
+        if dn4000 < 1.0:
+            strength = "unphysical (Dn4000 < 1.0)"
+        elif dn4000 < 1.3:
+            strength = "weak"
+        elif dn4000 > 1.5:
+            strength = "strong"
+        else:
+            strength = "moderate"
+    else:
+        dn4000 = None
+        strength = "insufficient data"
+
+    return {
+        "Dn4000":              round(dn4000, 4) if dn4000 is not None else None,
+        "strength":            strength,
+        "mean_flux_3850_3950": round(mean_a, 6) if mean_a is not None else None,
+        "mean_flux_4000_4100": round(mean_c, 6) if mean_c is not None else None,
+        "slope_3850_3950":     (lambda s: round(s, 6) if s is not None else None)(_linear_slope(wl_a, fl_a)),
+        "slope_3950_4000":     (lambda s: round(s, 6) if s is not None else None)(_linear_slope(wl_b, fl_b)),
+        "slope_4000_4100":     (lambda s: round(s, 6) if s is not None else None)(_linear_slope(wl_c, fl_c)),
+        "n_points_3850_3950":  int(len(fl_a)),
+        "n_points_4000_4100":  int(len(fl_c)),
+    }
+
+
+def brute_force_line_matching(state, tol_wavelength=None,
+                              min_qso_redshift=float('-inf'),
+                              min_galaxy_redshift=float('-inf'),
+                              mode='qso_elg'):
+    """
+    暴力破解：对每个峰假设其为某条发射线，计算红移，
+    再用该红移预测所有其他谱线位置，匹配峰列表和谷列表。
+    最后按 (波长, 线名) 对做 Union-Find 去重，合并属于同一物理场景的假设。
+
+    参数
+    ----
+    state : dict
+        必须包含 state['peaks'] 和 state['troughs']，
+        每个元素需有 'wavelength' 键。
+    tol_wavelength : float, optional
+        匹配容差 (Å)。若为 None 则使用
+        runtime.configs.params.tol_wavelength。
+    min_qso_redshift : float, optional
+        QSO 最小红移阈值，默认 -inf。
+    min_galaxy_redshift : float, optional
+        Galaxy 最小红移阈值，默认 -inf。
+
+    返回
+    ----
+    list[dict] : 去重后的匹配结果，每个元素对应一个物理场景：
+        {
+            "Hypothesis": "3788.0-Lyα, 4840.0-C IV, ...",
+            "z_max": 2.1246,
+            "z_min": 2.1031,
+            "z_spread": 0.0215,
+            "Emission matches": [
+                "3717.900 Å (Amp=0.850, W=45.200Å/3200.000 km/s, broad) → Lyα (z=2.063)",
+                ...
+            ],
+            "Absorption matches": [
+                "8679.800 Å (Amp=-0.120, W=12.500Å/430.000 km/s, narrow) → Mg II (z=2.100)",
+            ],
+            "N_emission": 6,
+            "N_absorption": 1,
+            "Redshift warning": "z too low for QSO" | None,
+            "Missing emission lines": [
+                "C IV (1549.0 Å rest) → 4760.123–4762.456 Å obs [in range, not matched]",
+                "Ne [V] (3426.0 Å rest) → ~10521.234 Å obs [possibly in range]",
+            ],
+        }
+        结果按 N_emission + N_absorption 降序排列。
+    """
+
+    if tol_wavelength is None:
+        try:
+            tol_wavelength = state.get('_runtime', {}).configs.params.tol_wavelength
+        except Exception:
+            tol_wavelength = 10.0
+
+    # ── mode 分支：lrg_bgs 模式下过滤宽峰，使用窄线专用锚定表 ──
+    # lrg_bgs：LRG/BGS 光谱中连续谱伪峰多为宽峰，排除后仅用窄线/both类谱线锚定
+    if mode == 'lrg_bgs':
+        # active_peaks = [p for p in state['peaks'] if p.get('width_class') != 'broad']
+        active_peaks = [p for p in state['peaks'] if p.get('width_class') == 'narrow']
+        active_anchor_lines = LRG_ANCHOR_EMISSION_LINES
+        active_emission_lines = LRG_ANCHOR_EMISSION_LINES
+    else:
+        active_peaks = state['peaks']
+        active_anchor_lines = ANCHOR_EMISSION_LINES
+        active_emission_lines = EMISSION_LINES
+
+    peak_wavelengths = [p['wavelength'] for p in active_peaks]
+    trough_wavelengths = [t['wavelength'] for t in state['troughs']]
+    trough_wl_set = set(trough_wavelengths)  # 用于区分 emission/absorption
+
+    # 观测波长范围（用于 Missing Emission Lines 判断）
+    try:
+        _wl_arr = state['spectrum']['new_wavelength']
+        obs_wl_min = float(_wl_arr[0])
+        obs_wl_max = float(_wl_arr[-1])
+    except Exception:
+        obs_wl_min = None
+        obs_wl_max = None
+
+    # ── 构建波长 → 峰/谷特征信息的查找表 ────────────────────
+    peak_info = {}   # wavelength -> {amplitude, FWHM_A, FWHM_km_s, width_class}
+    for p in active_peaks:
+        peak_info[p['wavelength']] = {
+            'amplitude': p.get('amplitude'),
+            'FWHM_A': p.get('FWHM_A'),
+            'FWHM_km_s': p.get('FWHM_km_s'),
+            'width_class': p.get('width_class'),
+        }
+    trough_info = {}
+    for t in state['troughs']:
+        trough_info[t['wavelength']] = {
+            'amplitude': t.get('amplitude'),
+            'FWHM_A': t.get('FWHM_A'),
+            'FWHM_km_s': t.get('FWHM_km_s'),
+            'width_class': t.get('width_class'),
+        }
+
+    def _fmt_feature(wl, info):
+        """格式化单条峰/谷的宽高信息片段，数值保留 3 位小数"""
+        if info is None:
+            return ""
+        amp = info.get('amplitude')
+        fwhm_a = info.get('FWHM_A')
+        fwhm_kms = info.get('FWHM_km_s')
+        wc = info.get('width_class')
+        parts = []
+        if amp is not None:
+            parts.append(f"Amp={amp:.3f}")
+        if fwhm_a is not None or fwhm_kms is not None:
+            w_parts = []
+            if fwhm_a is not None:
+                w_parts.append(f"{fwhm_a:.3f}Å")
+            if fwhm_kms is not None:
+                w_parts.append(f"{fwhm_kms:.3f} km/s")
+            parts.append(f"W={'/'.join(w_parts)}")
+        if wc is not None:
+            parts.append(wc)
+        if not parts:
+            return ""
+        return f" ({', '.join(parts)})"
+
+    # ── 第一阶段：逐峰逐线暴力匹配，收集原始结果 ──────────────
+    # 每个原始假设产出一组 (wavelength, line_name, z) 三元组
+    # raw_results: [{anchor_wl, anchor_line, anchor_z, pairs: [(wl, line, z), ...]}]
+
+    raw_results = []
+
+    for peak_wl in peak_wavelengths:
+        for line_name, line_rest in active_anchor_lines.items():
+            z = peak_wl / line_rest - 1.0
+            if z < 0 or z > 10:
+                continue
+            z_rounded = round(z, 3)
+
+            pairs = []  # (obs_wavelength, line_name, z)
+
+            # 锚定线自身
+            pairs.append((peak_wl, line_name, z_rounded))
+
+            # 发射线匹配
+            for ename, erest in active_emission_lines.items():
+                if ename == line_name:
+                    continue
+                lambda_theory = erest * (1.0 + z)
+                for pwl in peak_wavelengths:
+                    delta = abs(pwl - lambda_theory)
+                    if delta <= tol_wavelength:
+                        pair_z = round(pwl / erest - 1.0, 3)
+                        pairs.append((pwl, ename, pair_z))
+
+            # 吸收线匹配
+            for aname, arest in ABSORPTION_LINES.items():
+                lambda_theory = arest * (1.0 + z)
+                for twl in trough_wavelengths:
+                    delta = abs(twl - lambda_theory)
+                    if delta <= tol_wavelength:
+                        pair_z = round(twl / arest - 1.0, 3)
+                        pairs.append((twl, aname, pair_z))
+
+            raw_results.append({
+                'anchor_wl': peak_wl,
+                'anchor_line': line_name,
+                'anchor_z': z_rounded,
+                'pairs': pairs,
+            })
+
+    # ── 第一阶段补充（lrg_bgs）：逐谷锚定 ──────────────────────
+    # LRG/BGS 以吸收线为主要特征，允许用谷做锚点生成假设
+    # 对每个谷，假设它是某条吸收线，计算红移，再验证其余谷和窄峰是否吻合
+    if mode == 'lrg_bgs':
+        for trough_wl in trough_wavelengths:
+            for aname, arest in ABSORPTION_LINES.items():
+                z = trough_wl / arest - 1.0
+                if z < 0 or z > 10:
+                    continue
+                z_rounded = round(z, 3)
+
+                pairs = []
+
+                # 锚定线自身
+                pairs.append((trough_wl, aname, z_rounded))
+
+                # 验证其余吸收谷
+                for aname2, arest2 in ABSORPTION_LINES.items():
+                    if aname2 == aname:
+                        continue
+                    lambda_theory = arest2 * (1.0 + z)
+                    for twl in trough_wavelengths:
+                        delta = abs(twl - lambda_theory)
+                        if delta <= tol_wavelength:
+                            pair_z = round(twl / arest2 - 1.0, 3)
+                            pairs.append((twl, aname2, pair_z))
+
+                # 验证窄峰（active_emission_lines）
+                for ename, erest in active_emission_lines.items():
+                    lambda_theory = erest * (1.0 + z)
+                    for pwl in peak_wavelengths:
+                        delta = abs(pwl - lambda_theory)
+                        if delta <= tol_wavelength:
+                            pair_z = round(pwl / erest - 1.0, 3)
+                            pairs.append((pwl, ename, pair_z))
+
+                raw_results.append({
+                    'anchor_wl': trough_wl,
+                    'anchor_line': aname,
+                    'anchor_z': z_rounded,
+                    'pairs': pairs,
+                })
+
+
+    # ── 第二阶段：Union-Find 去重 ─────────────────────────────
+    # 节点 = (wavelength, line_name) 对
+    # 同一假设中的所有节点互连
+
+    parent = {}
+
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]  # 路径压缩
+            x = parent[x]
+        return x
+
+    def union(a, b):
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[ra] = rb
+
+    # 收集所有节点并初始化
+    for hyp in raw_results:
+        for wl, lname, _ in hyp['pairs']:
+            node = (wl, lname)
+            if node not in parent:
+                parent[node] = node
+
+    # 同一假设内所有节点 union
+    for hyp in raw_results:
+        pair_nodes = [(wl, lname) for wl, lname, _ in hyp['pairs']]
+        if len(pair_nodes) < 2:
+            continue
+        first = pair_nodes[0]
+        for node in pair_nodes[1:]:
+            union(first, node)
+
+    # 按根节点分组
+    groups = {}  # root -> set of (wl, line_name)
+    for node in parent:
+        root = find(node)
+        groups.setdefault(root, set()).add(node)
+
+    # ── 第三阶段：每个连通分量格式化为 LLM 可读输出 ───────────
+
+    results = []
+
+    for root, node_set in groups.items():
+        # 收集组内所有 (wl, line_name, z) 信息
+        # 需要从 raw_results 中查找每个 (wl, line_name) 对应的 z
+        pair_z_map = {}  # (wl, line_name) -> z
+        for hyp in raw_results:
+            for wl, lname, z in hyp['pairs']:
+                node = (wl, lname)
+                if node in node_set:
+                    if node not in pair_z_map:
+                        pair_z_map[node] = z
+
+        # 区分发射线和吸收线：以波长来源（peak/trough）为准，
+        # 而非仅凭谱线名——Mg II 等线同时存在于发射线表与吸收线表
+        emission_nodes = []
+        absorption_nodes = []
+        for (wl, lname), z in pair_z_map.items():
+            if wl in trough_wl_set:
+                absorption_nodes.append((wl, lname, z))
+            else:
+                emission_nodes.append((wl, lname, z))
+
+        # 按波长升序排列
+        emission_nodes.sort(key=lambda x: x[0])
+        absorption_nodes.sort(key=lambda x: x[0])
+
+        # z 统计
+        all_z = list(pair_z_map.values())
+        if not all_z:
+            continue
+        z_max = max(all_z)
+        z_min = min(all_z)
+        z_spread = round(z_max - z_min, 3)
+
+        # Hypothesis：列出组内所有锚定对（从 raw_results 中找 anchor）
+        anchor_pairs = []
+        for hyp in raw_results:
+            anchor_node = (hyp['anchor_wl'], hyp['anchor_line'])
+            if anchor_node in node_set:
+                anchor_pairs.append((hyp['anchor_wl'], hyp['anchor_line']))
+        # 去重，按波长排序，同一波长的多条谱线合并为 wl-line1/line2 格式
+        anchor_pairs = sorted(set(anchor_pairs), key=lambda x: x[0])
+        # 按波长分组，将同一波长的谱线名用 / 连接；谱线名按静止系波长升序排列
+        # 静止系波长查找表：合并发射线表与吸收线表
+        _all_line_rest = {**EMISSION_LINES, **ABSORPTION_LINES}
+        _anchor_wl_lines = defaultdict(list)
+        for wl, lname in anchor_pairs:
+            if lname not in _anchor_wl_lines[wl]:
+                _anchor_wl_lines[wl].append(lname)
+        hypothesis_str = ", ".join(
+            f"{wl:.3f}-{'/'.join(sorted(lnames, key=lambda n: _all_line_rest.get(n, 0)))}"
+            for wl, lnames in sorted(_anchor_wl_lines.items())
+        )
+
+        # 格式化 Emission / Absorption matches（嵌入寻峰/寻谷的宽高信息）
+        emission_formatted = []
+        for wl, lname, z in emission_nodes:
+            feat = _fmt_feature(wl, peak_info.get(wl))
+            # 宽度不匹配检查：narrow 峰匹配 broad 线 或 broad 峰匹配 narrow 线
+            # "both" 类（Balmer 系）宽窄皆合理，跳过校验
+            width_warn = ""
+            pinfo = peak_info.get(wl)
+            if pinfo is not None:
+                pwc = pinfo.get('width_class')
+                lwc = EMISSION_LINE_WIDTHS.get(lname)
+                if (pwc is not None and lwc is not None
+                        and lwc != 'both'
+                        and pwc != 'intermediate'
+                        and pwc != lwc):
+                    width_warn = " ⚠ width mismatch"
+            emission_formatted.append(f"{wl:.3f} Å{feat} → {lname} (z={z}){width_warn}")
+
+        absorption_formatted = []
+        for wl, lname, z in absorption_nodes:
+            feat = _fmt_feature(wl, trough_info.get(wl))
+            absorption_formatted.append(f"{wl:.3f} Å{feat} → {lname} (z={z})")
+
+        # N_emission / N_absorption: min(独立峰/谷波长数, 独立线名数)
+        # 同时处理「一峰配多线」(峰少线多→取峰数) 和「一线配多峰」(线少峰多→取线数)
+        # 两种情况都会虚高朴素计数，min 保证有效独立约束数不被高估。
+        n_em = min(
+            len({wl    for wl, _, _    in emission_nodes}),   # 独立峰值波长数
+            len({lname for _, lname, _ in emission_nodes}),   # 独立发射线名数
+        )
+        n_ab = min(
+            len({wl    for wl, _, _    in absorption_nodes}),  # 独立谷值波长数
+            len({lname for _, lname, _ in absorption_nodes}),  # 独立吸收线名数
+        )
+
+        # Redshift warning（用 z_max 比较）
+        low_z_parts = []
+        if z_max < min_qso_redshift:
+            low_z_parts.append("QSO")
+        if z_max < min_galaxy_redshift:
+            low_z_parts.append("Galaxy")
+        redshift_warning = f"z too low for {' and '.join(low_z_parts)}" if low_z_parts else None
+
+        # ── Missing Emission / Absorption Lines ──────────────────────
+        # default 模式：报缺失发射线（QSO/ELG 诊断）
+        # lrg_bgs 模式：报缺失吸收线（LRG/BGS 主要诊断依据为吸收线）
+        # 逻辑相同：用 z_min / z_max 计算理论观测波长，判断是否落在观测范围内但未被匹配
+        if mode == 'lrg_bgs':
+            matched_ab_names = {lname for _, lname, _ in absorption_nodes}
+            missing_emission = []   # lrg_bgs 模式不报缺失发射线
+            missing_absorption = []
+            if obs_wl_min is not None:
+                for aname, arest in ABSORPTION_LINES.items():
+                    if aname in matched_ab_names:
+                        continue
+                    wl_at_zmin = arest * (1.0 + z_min)
+                    wl_at_zmax = arest * (1.0 + z_max)
+                    in_range_zmin = obs_wl_min <= wl_at_zmin <= obs_wl_max
+                    in_range_zmax = obs_wl_min <= wl_at_zmax <= obs_wl_max
+                    if in_range_zmin and in_range_zmax:
+                        missing_absorption.append(
+                            f"{aname} ({arest} Å rest) → "
+                            f"{wl_at_zmin:.3f}–{wl_at_zmax:.3f} Å obs [in range, not matched]"
+                        )
+                    elif in_range_zmin or in_range_zmax:
+                        wl_in = wl_at_zmin if in_range_zmin else wl_at_zmax
+                        missing_absorption.append(
+                            f"{aname} ({arest} Å rest) → "
+                            f"~{wl_in:.3f} Å obs [possibly in range]"
+                        )
+        else:
+            # default 模式：报缺失发射线
+            matched_em_names = {lname for _, lname, _ in emission_nodes}
+            missing_emission = []
+            missing_absorption = []   # default 模式不报缺失吸收线
+            if obs_wl_min is not None:
+                for ename, erest in active_emission_lines.items():
+                    if ename in matched_em_names:
+                        continue
+                    wl_at_zmin = erest * (1.0 + z_min)
+                    wl_at_zmax = erest * (1.0 + z_max)
+                    in_range_zmin = obs_wl_min <= wl_at_zmin <= obs_wl_max
+                    in_range_zmax = obs_wl_min <= wl_at_zmax <= obs_wl_max
+                    if in_range_zmin and in_range_zmax:
+                        missing_emission.append(
+                            f"{ename} ({erest} Å rest) → "
+                            f"{wl_at_zmin:.3f}–{wl_at_zmax:.3f} Å obs [in range, not matched]"
+                        )
+                    elif in_range_zmin or in_range_zmax:
+                        wl_in = wl_at_zmin if in_range_zmin else wl_at_zmax
+                        missing_emission.append(
+                            f"{ename} ({erest} Å rest) → "
+                            f"~{wl_in:.3f} Å obs [possibly in range]"
+                        )
+
+        # ── D_n(4000) 4000Å Break 指标 ────────────────────────────
+        # 分别用 z_max 和 z_min 将观测系光谱转换到静止系计算
+        _obs_wl   = state['spectrum']['new_wavelength']
+        _obs_flux = state['spectrum']['weighted_flux']
+        dn4000_at_zmax = _compute_dn4000(_obs_wl, _obs_flux, z_max)
+        dn4000_at_zmin = _compute_dn4000(_obs_wl, _obs_flux, z_min)
+
+        results.append({
+            "Hypothesis": hypothesis_str,
+            "z_max": z_max,
+            "z_min": z_min,
+            "z_spread": z_spread,
+            "Emission matches": emission_formatted,
+            "Absorption matches": absorption_formatted,
+            "N_emission": n_em,
+            "N_absorption": n_ab,
+            "Redshift warning": redshift_warning,
+            "Missing emission lines": missing_emission,
+            "Missing absorption lines": missing_absorption,
+            "Dn4000": {
+                "z_max_as_true_redshift": dn4000_at_zmax,
+                "z_min_as_true_redshift": dn4000_at_zmin,
+            },
+        })
+
+    # 按 N_emission + N_absorption 降序排列
+    results.sort(key=lambda r: r['N_emission'] + r['N_absorption'], reverse=True)
+
+
+    # 过滤掉有效独立约束数 < 2 的候选
+    # N_emission / N_absorption 已经是 min(独立波长数, 独立线名数)，
+    # 因此此处过滤同时排除「单峰多线冲突」和「单线多峰」两种无效情况。
+    results = [r for r in results if r['N_emission'] + r['N_absorption'] >= 2]
+
+    return results
