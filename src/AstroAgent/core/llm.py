@@ -75,6 +75,7 @@ class ThisIsModel(BaseLLM):
                 base_url=base_url,
                 temperature=self.model_config['temperature'],
                 max_tokens=self.model_config['max_tokens'],
+                streaming=False,
                 extra_body=extra_body,
             )
             return client
