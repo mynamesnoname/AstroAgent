@@ -491,14 +491,6 @@ class VisualInterpreter(BaseAgent):
                         state['crop_path'], state['pixel_to_value'], arm_name, arm_wavelength_range
                     )
 
-            # 保存 spectrum 到 notebooks/spectrum.csv
-            _spec = state['spectrum']
-            pd.DataFrame({
-                'new_wavelength': _spec['new_wavelength'],
-                'weighted_flux':  _spec['weighted_flux'],
-                'effective_snr':  _spec['effective_snr'],
-            }).to_csv('/home/wbc/code3/llm-spectro-agent_advance/notebooks/spectrum.csv', index=False)
-
             plot_spec_extract(state)
             plot_spectrum_snr(state)
             
