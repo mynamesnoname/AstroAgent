@@ -88,7 +88,7 @@ server = FastMCP("spectro_tools", host="127.0.0.1", port=_MCP_PORT)
 @server.tool()
 def calculate_rms_for_redshift_tool(
     wavelength_rest: float,
-    wavelength_error: int,
+    wavelength_error: float,
 ) -> dict:
     """
     Calculate RMS uncertainty of redshift measurement for spectra.
