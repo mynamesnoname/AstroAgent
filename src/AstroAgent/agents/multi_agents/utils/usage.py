@@ -1,21 +1,21 @@
-import cv2
-import os
-import pytesseract
-from paddleocr import PaddleOCR
-import json
-import base64
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-import logging
+# import cv2
+# import os
+# import pytesseract
+# from paddleocr import PaddleOCR
+# import json
+# import base64
+# import numpy as np
+# import pandas as pd
+# import matplotlib.pyplot as plt
+# import logging
 
-from typing import Any, List, Dict, Tuple, Optional, Union
-from scipy.optimize import curve_fit
-from scipy.ndimage import gaussian_filter1d, median_filter
-from scipy.signal import find_peaks, peak_widths
-from scipy.stats import mode
+# from typing import Any, List, Dict, Tuple, Optional, Union
+# from scipy.optimize import curve_fit
+# from scipy.ndimage import gaussian_filter1d, median_filter
+# from scipy.signal import find_peaks, peak_widths
+# from scipy.stats import mode
 
-from AstroAgent.agents.common.state import SpectroState
+# from AstroAgent.agents.common.state import SpectroState
 
 def safe_to_bool(value):
     """专门处理true/True相关值的转换"""
@@ -25,31 +25,31 @@ def safe_to_bool(value):
         return value.strip().lower() in ['true', '1', 't', 'yes', 'y']
     return bool(value)
 
-def parse_list(val, default):
-    if not val or not val.strip():
-        return default
-    try:
-        cleaned = val.strip().strip("[]")
-        if not cleaned:
-            return default
-        return [int(x.strip()) for x in cleaned.split(",")]
-    except Exception:
-        print(f"⚠️ SIGMA_LIST 格式错误: {val}，使用默认值 {default}")
-        return default
+# def parse_list(val, default):
+#     if not val or not val.strip():
+#         return default
+#     try:
+#         cleaned = val.strip().strip("[]")
+#         if not cleaned:
+#             return default
+#         return [int(x.strip()) for x in cleaned.split(",")]
+#     except Exception:
+#         print(f"⚠️ SIGMA_LIST 格式错误: {val}，使用默认值 {default}")
+#         return default
 
-def getenv_int(name, default):
-    val = os.getenv(name)
-    if val and val.strip():
-        try: return int(val.strip())
-        except Exception: print(f"⚠️ {name} 格式错误: {val}，使用默认值 {default}")
-    return default
+# def getenv_int(name, default):
+#     val = os.getenv(name)
+#     if val and val.strip():
+#         try: return int(val.strip())
+#         except Exception: print(f"⚠️ {name} 格式错误: {val}，使用默认值 {default}")
+#     return default
 
-def getenv_float(name, default):
-    val = os.getenv(name)
-    if val and val.strip():
-        try: return float(val.strip())
-        except Exception: print(f"⚠️ {name} 格式错误: {val}，使用默认值 {default}")
-    return default
+# def getenv_float(name, default):
+#     val = os.getenv(name)
+#     if val and val.strip():
+#         try: return float(val.strip())
+#         except Exception: print(f"⚠️ {name} 格式错误: {val}，使用默认值 {default}")
+#     return default
 
 # def _load_feature_params():
 #     """安全读取峰值/谷值检测参数"""
@@ -99,30 +99,30 @@ def find_overlap_regions(band_names, band_wavelengths):
 
     return result
 
-def get_wiped_lines(state, overlap_regions):
-    wiped_peaks = state.get('wiped_peaks', [])
-    if wiped_peaks:
-        width_means = [wp.get('width_mean') for wp in wiped_peaks[:5] if wp.get('width_mean') is not None]
-        if width_means:
-            wws = np.max(width_means)
-        else:
-            wws = 0
-    else:
-        wws = 0
+# def get_wiped_lines(state, overlap_regions):
+#     wiped_peaks = state.get('wiped_peaks', [])
+#     if wiped_peaks:
+#         width_means = [wp.get('width_mean') for wp in wiped_peaks[:5] if wp.get('width_mean') is not None]
+#         if width_means:
+#             wws = np.max(width_means)
+#         else:
+#             wws = 0
+#     else:
+#         wws = 0
 
-    for key in overlap_regions:
-        range = overlap_regions[key]
-        overlap_regions[key] = [range[0]-wws, range[1]+wws]
+#     for key in overlap_regions:
+#         range = overlap_regions[key]
+#         overlap_regions[key] = [range[0]-wws, range[1]+wws]
 
-    wiped = [
-        {
-            "wavelength": wp.get('wavelength'),
-            "flux": wp.get('mean_flux'),
-            "width": wp.get('width_mean'),
-        }
-        for wp in state.get('wiped_peaks', [])[:5]
-    ]
-    return wiped
+#     wiped = [
+#         {
+#             "wavelength": wp.get('wavelength'),
+#             "flux": wp.get('mean_flux'),
+#             "width": wp.get('width_mean'),
+#         }
+#         for wp in state.get('wiped_peaks', [])[:5]
+#     ]
+#     return wiped
 
 
 ###########################################################################3
@@ -366,378 +366,378 @@ def get_wiped_lines(state, overlap_regions):
 #     except Exception as e:
 #         return json.dumps({"error": str(e)}, ensure_ascii=False)
 
-def savefig_unique(fig, filename, **kwargs):
-    """
-    保存图片，如果文件已存在则自动添加数字后缀
-    """
-    base, ext = os.path.splitext(filename)
-    counter = 1
-    new_filename = filename
-    
-    while os.path.exists(new_filename):
-        new_filename = f"{base}_{counter}{ext}"
-        counter += 1
-    
-    fig.savefig(new_filename, bbox_inches='tight', **kwargs)
-    print(f"图片已保存为: {new_filename}")
+# def savefig_unique(fig, filename, **kwargs):
+#     """
+#     保存图片，如果文件已存在则自动添加数字后缀
+#     """
+#     base, ext = os.path.splitext(filename)
+#     counter = 1
+#     new_filename = filename
+#     
+#     while os.path.exists(new_filename):
+#         new_filename = f"{base}_{counter}{ext}"
+#         counter += 1
+#     
+#     fig.savefig(new_filename, bbox_inches='tight', **kwargs)
+#     print(f"图片已保存为: {new_filename}")
 
-def _plot_spectrum(state: SpectroState):
-    # if effective_SNR:
-    wavelength = state['spectrum']['new_wavelength']
-    flux = state['spectrum']['weighted_flux']
-    flux_top = state['spectrum']['max_unresolved_flux']
-    flux_bottom = state['spectrum']['min_unresolved_flux']
-    effective_snr = state['spectrum']['effective_snr']
-    delta_flux = state['spectrum']['delta_flux']
-    # effective_snr = np.array(flux)/(np.array(flux_top) - np.array(flux_bottom))
+# def _plot_spectrum(state: SpectroState):
+#     # if effective_SNR:
+#     wavelength = state['spectrum']['new_wavelength']
+#     flux = state['spectrum']['weighted_flux']
+#     flux_top = state['spectrum']['max_unresolved_flux']
+#     flux_bottom = state['spectrum']['min_unresolved_flux']
+#     effective_snr = state['spectrum']['effective_snr']
+#     delta_flux = state['spectrum']['delta_flux']
+#     # effective_snr = np.array(flux)/(np.array(flux_top) - np.array(flux_bottom))
+# 
+#     fig, axs = plt.subplots(2, 1, figsize=(10, 7))
+# 
+#     axs[0].plot(wavelength, flux, color='b', label=r'$\bar F$: signal extracted from picture')
+#     axs[0].fill_between(wavelength, flux_top, flux_bottom, alpha=0.4, color='gray', label='information lossed in Opencv processing')
+#     axs[0].set_ylabel('flux')
+#     axs[0].set_xlabel('wavelength')
+#     axs[0].legend()  # 设置字号为12
+# 
+#     axs[1].plot(wavelength, effective_snr, c='orange', label=r'$SNR=\frac{{\bar F}_i}{\sigma_{i,j}}$')
+#     axs[1].set_ylabel('Effective SNR')
+#     axs[1].set_xlabel('wavelength')
+#     axs[1].legend(fontsize=15)  # 设置字号为12
+# 
+#     # savefig_unique(fig, os.path.join(state['output_dir'], f'{state['file_name']}_spectrum.png'))
+#     fig.savefig(os.path.join(state['output_dir'], f'{state['file_name']}_spectrum.png'), bbox_inches='tight')
+# 
+#     # 创建 figure（可选，不创建也会自动生成）
+#     plt.figure(figsize=(10, 3))
+#     # 填充区域
+#     plt.fill_between(wavelength, flux_bottom, flux_top,
+#                     color='#FFB6A6', alpha=0.5, linewidth=0,
+#                     label='information lost in OpenCV processing (pink #FFB6A6)')
+#     # 信号曲线
+#     plt.plot(wavelength, flux, color='b', lw=1.5,
+#             label=r'$\bar{F}$: signal extracted from picture (blue)')
+#     # 坐标轴标签
+#     plt.xlabel('wavelength')
+#     plt.ylabel('flux')
+#     # 图例（字号12）
+#     plt.legend(fontsize=12)
+#     # 保存当前 figure
+#     plt.savefig(
+#         os.path.join(state['output_dir'], f"{state['file_name']}_spec_extract.png"),
+#         dpi=150,
+#         bbox_inches='tight'
+#     )
+#     # 关闭当前 figure，防止内存累积（尤其在循环中很重要）
+#     plt.close()
+# 
+#     try:
+#         plt.figure(figsize=(10, 3))
+#         # print(type(state['continuum']['wavelength']))
+#         # print(type(state['continuum']['flux']))
+#         contunuum_wavelength = np.array(state['continuum']['wavelength'])
+#         continuum_flux = np.array(state['continuum']['flux'])
+#         plt.plot(contunuum_wavelength, continuum_flux, color='orange', label='Continuum')
+#         # mask = np.isin(wavelength, contunuum_wavelength)
+#         # errorbar = abs((np.array(delta_flux)[mask]))
+#         # plt.errorbar(state['continuum']['wavelength'], state['continuum']['flux'], 
+#         #     yerr=errorbar, fmt='x', markersize=0,
+#         #     ecolor='red', 
+#         #     elinewidth=0.8,
+#         #     capsize=2,
+#         #     alpha=0.7,
+#         #     zorder=5,
+#         #     label='SNR')
+#         plt.xlabel('wavelength')
+#         plt.ylabel('flux')
+#         plt.legend(fontsize=12)
+#         plt.savefig(
+#             state['continuum_path'],
+#             dpi=150,
+#             bbox_inches='tight'
+#         )
+#         plt.close()
+#     except Exception as e:
+#         print(f"❌ plot spectrum or features terminated with error: {e}")
+#         raise
+# 
+#     # img = cv2.imread(state.crop_path)
+#     # plt.figure(figsize=(10,3))
+#     # plt.imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+#     # plt.title('Original Image')
+# 
+#     return fig
 
-    fig, axs = plt.subplots(2, 1, figsize=(10, 7))
+# def _plot_features(state: SpectroState, sigma_list=[2,4,16], feature_number=[10,15]):
+#     fig = plt.figure(figsize=(10,3))
+# 
+#     plt.plot(state['spectrum']['new_wavelength'], state['spectrum']['weighted_flux'], label='original', c='k', alpha=0.7)
+# 
+#     for sigma in sigma_list:
+#         sigma_smooth = gaussian_filter1d(state['spectrum']['weighted_flux'], sigma=sigma)
+#         plt.plot(state['spectrum']['new_wavelength'], sigma_smooth, alpha=0.7, label=rf'$\sigma={sigma}$')
+# 
+#     # 安全地绘制峰值线
+#     peaks_to_plot = min(feature_number[0], len(state['peaks']))
+#     for i in range(peaks_to_plot):
+#         plt.axvline(state['peaks'][i]['wavelength'], linestyle='-', c='red', alpha=0.5)
+#     
+#     # 安全地绘制谷值线
+#     troughs_to_plot = min(feature_number[1], len(state['troughs']))
+#     for i in range(troughs_to_plot):
+#         plt.axvline(state['troughs'][i]['wavelength'], linestyle=':', c='red', alpha=0.5)
+# 
+#     plt.plot([], [], linestyle='-', c='red', alpha=0.5, label='peaks')
+#     plt.plot([], [], linestyle=':', c='blue', alpha=0.5, label='troughs')
+#     plt.ylabel('flux')
+#     plt.xlabel('wavelength')
+#     plt.legend()
+# 
+#     print(f'Plot {peaks_to_plot} peaks and {troughs_to_plot} troughs.')
+# 
+#     # savefig_unique(fig, os.path.join(state['output_dir'], f'{state['file_name']}_features.png'))
+#     fig.savefig(os.path.join(state['output_dir'], f'{state['file_name']}_features.png'), bbox_inches='tight')
+#     return fig
 
-    axs[0].plot(wavelength, flux, color='b', label=r'$\bar F$: signal extracted from picture')
-    axs[0].fill_between(wavelength, flux_top, flux_bottom, alpha=0.4, color='gray', label='information lossed in Opencv processing')
-    axs[0].set_ylabel('flux')
-    axs[0].set_xlabel('wavelength')
-    axs[0].legend()  # 设置字号为12
+# def _ROI_features_finding(state: SpectroState):
+#     spec = state["spectrum"]
+#     wavelengths = np.array(spec["new_wavelength"])
+#     flux = np.array(spec["weighted_flux"])
+#     fig = plt.figure(figsize=(10,3))
+#     plt.plot(wavelengths, flux, label='original', c='k', alpha=0.7)
 
-    axs[1].plot(wavelength, effective_snr, c='orange', label=r'$SNR=\frac{{\bar F}_i}{\sigma_{i,j}}$')
-    axs[1].set_ylabel('Effective SNR')
-    axs[1].set_xlabel('wavelength')
-    axs[1].legend(fontsize=15)  # 设置字号为12
+#     ROI_peaks = []
+#     ROI_troughs = []
+#     sigma_list, tol_pixels, prom_peaks, prom_troughs, _, _ = _load_feature_params()
+#     state['sigma_list'] = sigma_list
+#     for roi in state['visual_interpretation']['roi']:
+#         range = roi['wave_range']
+#         mask = (wavelengths >= range[0]) & (wavelengths <= range[1])
+#         wave_cut = wavelengths[mask]
+#         flux_cut = flux[mask]
+#         if len(wave_cut) == 0:
+#             print(f"⚠️ ROI {range} out of spectrum range — skipped.")
+#             continue
 
-    # savefig_unique(fig, os.path.join(state['output_dir'], f'{state['file_name']}_spectrum.png'))
-    fig.savefig(os.path.join(state['output_dir'], f'{state['file_name']}_spectrum.png'), bbox_inches='tight')
+#         pe = _find_features_multiscale(
+#             wave_cut, flux_cut,
+#             state, feature="peak", sigma_list=sigma_list,
+#             prom=prom_peaks, tol_pixels=tol_pixels,
+#             use_continuum_for_trough=True
+#         )
+#         # print(pe)
+#         tr = _find_features_multiscale(
+#             wave_cut, flux_cut,
+#             state, feature="trough", sigma_list=sigma_list,
+#             prom=prom_troughs, tol_pixels=tol_pixels,
+#             use_continuum_for_trough=True,
+#             min_depth=0.08
+#         )
 
-    # 创建 figure（可选，不创建也会自动生成）
-    plt.figure(figsize=(10, 3))
-    # 填充区域
-    plt.fill_between(wavelength, flux_bottom, flux_top,
-                    color='#FFB6A6', alpha=0.5, linewidth=0,
-                    label='information lost in OpenCV processing (pink #FFB6A6)')
-    # 信号曲线
-    plt.plot(wavelength, flux, color='b', lw=1.5,
-            label=r'$\bar{F}$: signal extracted from picture (blue)')
-    # 坐标轴标签
-    plt.xlabel('wavelength')
-    plt.ylabel('flux')
-    # 图例（字号12）
-    plt.legend(fontsize=12)
-    # 保存当前 figure
-    plt.savefig(
-        os.path.join(state['output_dir'], f"{state['file_name']}_spec_extract.png"),
-        dpi=150,
-        bbox_inches='tight'
-    )
-    # 关闭当前 figure，防止内存累积（尤其在循环中很重要）
-    plt.close()
+#         pe_info = {
+#             'roi_range': range,
+#             'peaks': pe, 
+#             'n_peaks': len(pe)
+#         }
 
-    try:
-        plt.figure(figsize=(10, 3))
-        # print(type(state['continuum']['wavelength']))
-        # print(type(state['continuum']['flux']))
-        contunuum_wavelength = np.array(state['continuum']['wavelength'])
-        continuum_flux = np.array(state['continuum']['flux'])
-        plt.plot(contunuum_wavelength, continuum_flux, color='orange', label='Continuum')
-        # mask = np.isin(wavelength, contunuum_wavelength)
-        # errorbar = abs((np.array(delta_flux)[mask]))
-        # plt.errorbar(state['continuum']['wavelength'], state['continuum']['flux'], 
-        #     yerr=errorbar, fmt='x', markersize=0,
-        #     ecolor='red', 
-        #     elinewidth=0.8,
-        #     capsize=2,
-        #     alpha=0.7,
-        #     zorder=5,
-        #     label='SNR')
-        plt.xlabel('wavelength')
-        plt.ylabel('flux')
-        plt.legend(fontsize=12)
-        plt.savefig(
-            state['continuum_path'],
-            dpi=150,
-            bbox_inches='tight'
-        )
-        plt.close()
-    except Exception as e:
-        print(f"❌ plot spectrum or features terminated with error: {e}")
-        raise
+#         tr_info = {
+#             'roi_range': range,
+#             'troughs': tr, 
+#             'n_troughs': len(tr)
+#         }
 
-    # img = cv2.imread(state.crop_path)
-    # plt.figure(figsize=(10,3))
-    # plt.imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
-    # plt.title('Original Image')
+#         ROI_peaks.append(pe_info)
+#         ROI_troughs.append(tr_info)
 
-    return fig
-
-def _plot_features(state: SpectroState, sigma_list=[2,4,16], feature_number=[10,15]):
-    fig = plt.figure(figsize=(10,3))
-
-    plt.plot(state['spectrum']['new_wavelength'], state['spectrum']['weighted_flux'], label='original', c='k', alpha=0.7)
-
-    for sigma in sigma_list:
-        sigma_smooth = gaussian_filter1d(state['spectrum']['weighted_flux'], sigma=sigma)
-        plt.plot(state['spectrum']['new_wavelength'], sigma_smooth, alpha=0.7, label=rf'$\sigma={sigma}$')
-
-    # 安全地绘制峰值线
-    peaks_to_plot = min(feature_number[0], len(state['peaks']))
-    for i in range(peaks_to_plot):
-        plt.axvline(state['peaks'][i]['wavelength'], linestyle='-', c='red', alpha=0.5)
-    
-    # 安全地绘制谷值线
-    troughs_to_plot = min(feature_number[1], len(state['troughs']))
-    for i in range(troughs_to_plot):
-        plt.axvline(state['troughs'][i]['wavelength'], linestyle=':', c='red', alpha=0.5)
-
-    plt.plot([], [], linestyle='-', c='red', alpha=0.5, label='peaks')
-    plt.plot([], [], linestyle=':', c='blue', alpha=0.5, label='troughs')
-    plt.ylabel('flux')
-    plt.xlabel('wavelength')
-    plt.legend()
-
-    print(f'Plot {peaks_to_plot} peaks and {troughs_to_plot} troughs.')
-
-    # savefig_unique(fig, os.path.join(state['output_dir'], f'{state['file_name']}_features.png'))
-    fig.savefig(os.path.join(state['output_dir'], f'{state['file_name']}_features.png'), bbox_inches='tight')
-    return fig
-
-def _ROI_features_finding(state: SpectroState):
-    spec = state["spectrum"]
-    wavelengths = np.array(spec["new_wavelength"])
-    flux = np.array(spec["weighted_flux"])
-    fig = plt.figure(figsize=(10,3))
-    plt.plot(wavelengths, flux, label='original', c='k', alpha=0.7)
-
-    ROI_peaks = []
-    ROI_troughs = []
-    sigma_list, tol_pixels, prom_peaks, prom_troughs, _, _ = _load_feature_params()
-    state['sigma_list'] = sigma_list
-    for roi in state['visual_interpretation']['roi']:
-        range = roi['wave_range']
-        mask = (wavelengths >= range[0]) & (wavelengths <= range[1])
-        wave_cut = wavelengths[mask]
-        flux_cut = flux[mask]
-        if len(wave_cut) == 0:
-            print(f"⚠️ ROI {range} out of spectrum range — skipped.")
-            continue
-
-        pe = _find_features_multiscale(
-            wave_cut, flux_cut,
-            state, feature="peak", sigma_list=sigma_list,
-            prom=prom_peaks, tol_pixels=tol_pixels,
-            use_continuum_for_trough=True
-        )
-        # print(pe)
-        tr = _find_features_multiscale(
-            wave_cut, flux_cut,
-            state, feature="trough", sigma_list=sigma_list,
-            prom=prom_troughs, tol_pixels=tol_pixels,
-            use_continuum_for_trough=True,
-            min_depth=0.08
-        )
-
-        pe_info = {
-            'roi_range': range,
-            'peaks': pe, 
-            'n_peaks': len(pe)
-        }
-
-        tr_info = {
-            'roi_range': range,
-            'troughs': tr, 
-            'n_troughs': len(tr)
-        }
-
-        ROI_peaks.append(pe_info)
-        ROI_troughs.append(tr_info)
-
-        # 使用更Pythonic的方式遍历列表
-        for peak_ in pe_info['peaks']:
-            plt.axvline(peak_['wavelength'], linestyle='-', c='red', alpha=0.5)
+#         # 使用更Pythonic的方式遍历列表
+#         for peak_ in pe_info['peaks']:
+#             plt.axvline(peak_['wavelength'], linestyle='-', c='red', alpha=0.5)
         
-        for trough_ in tr_info['troughs']:
-            plt.axvline(trough_['wavelength'], linestyle=':', c='blue', alpha=0.5)
+#         for trough_ in tr_info['troughs']:
+#             plt.axvline(trough_['wavelength'], linestyle=':', c='blue', alpha=0.5)
 
-    plt.plot([], [], linestyle='-', c='red', alpha=0.5, label='peaks')
-    plt.plot([], [], linestyle=':', c='blue', alpha=0.5, label='troughs')  # 注意：图例颜色与实际线条颜色的一致性
-    plt.ylabel('flux')
-    plt.xlabel('wavelength')
-    plt.legend()
+#     plt.plot([], [], linestyle='-', c='red', alpha=0.5, label='peaks')
+#     plt.plot([], [], linestyle=':', c='blue', alpha=0.5, label='troughs')  # 注意：图例颜色与实际线条颜色的一致性
+#     plt.ylabel('flux')
+#     plt.xlabel('wavelength')
+#     plt.legend()
 
-    plt.savefig(os.path.join(state['output_dir'], f'{state['file_name']}_ROI.png'), bbox_inches='tight')
-    print('ROI done')
-    return ROI_peaks, ROI_troughs
+#     plt.savefig(os.path.join(state['output_dir'], f'{state['file_name']}_ROI.png'), bbox_inches='tight')
+#     print('ROI done')
+#     return ROI_peaks, ROI_troughs
 
-from copy import deepcopy
-
-
-def merge_features(wavelength, flux, global_peaks,
-                   global_troughs,
-                   ROI_peaks,
-                   ROI_troughs,
-                   tol_pixels):
-    """
-    主入口：融合 Global 和 ROI 的 peaks / troughs
-    """
-    merged_peaks = _process_feature_type(
-        wavelength, flux,
-        global_list=global_peaks,
-        roi_list=ROI_peaks,
-        tol_pixels=tol_pixels,
-        feature_type="peak"
-    )
-
-    merged_troughs = _process_feature_type(
-        wavelength, flux,
-        global_list=global_troughs,
-        roi_list=ROI_troughs,
-        tol_pixels=tol_pixels,
-        feature_type="trough"
-    )
-
-    return merged_peaks, merged_troughs
+# from copy import deepcopy
 
 
+# def merge_features(wavelength, flux, global_peaks,
+#                    global_troughs,
+#                    ROI_peaks,
+#                    ROI_troughs,
+#                    tol_pixels):
+#     """
+#     主入口：融合 Global 和 ROI 的 peaks / troughs
+#     """
+#     merged_peaks = _process_feature_type(
+#         wavelength, flux,
+#         global_list=global_peaks,
+#         roi_list=ROI_peaks,
+#         tol_pixels=tol_pixels,
+#         feature_type="peak"
+#     )
 
-def _process_feature_type(wavelength, flux, global_list, roi_list, tol_pixels, feature_type):
-    """
-    处理 peaks 或 troughs
-    按 tol_pixels 合并，拆分 global/ROI appearances，global/ROI sigma
-    """
+#     merged_troughs = _process_feature_type(
+#         wavelength, flux,
+#         global_list=global_troughs,
+#         roi_list=ROI_troughs,
+#         tol_pixels=tol_pixels,
+#         feature_type="trough"
+#     )
 
-    # ---- Step 1：把全局 + ROI 统一展开成 flat list ----
-    # 为了后续按 pixel rep_index 合并，我们需要记录 pixel 位置
-    # 假设 rep_index 就是 pixel index
-    try:
-        flat = []
+#     return merged_peaks, merged_troughs
 
-        # 全局
-        for g in global_list:
-            item = deepcopy(g)
-            item["_is_global"] = True
-            item["_global_sigma"] = item.get("max_sigma_seen", None)
-            item["_roi_sigma"] = None
-            item["_global_app"] = item.get("appearances", 0)
-            item["_roi_app"] = 0
-            item["_rep_index"] = item["rep_index"]
-            flat.append(item)
 
-        # ROI
-        for roi in roi_list:
-            # for r in roi[feature_type + "s"]:
-            item = deepcopy(roi)
-            item["_is_global"] = False
-            item["_global_sigma"] = None
-            item["_roi_sigma"] = item.get("max_sigma_seen", None)
-            item["_global_app"] = 0
-            item["_roi_app"] = item.get("appearances", 0)
-            item["_rep_index"] = item["rep_index"]
-            flat.append(item)
 
-        # ---- Step 2：按照 pixel 距离 tol_pixels 进行合并 ----
-        flat.sort(key=lambda x: x["_rep_index"])
+# def _process_feature_type(wavelength, flux, global_list, roi_list, tol_pixels, feature_type):
+#     """
+#     处理 peaks 或 troughs
+#     按 tol_pixels 合并，拆分 global/ROI appearances，global/ROI sigma
+#     """
 
-        groups = []
-        current_group = [flat[0]]
+#     # ---- Step 1：把全局 + ROI 统一展开成 flat list ----
+#     # 为了后续按 pixel rep_index 合并，我们需要记录 pixel 位置
+#     # 假设 rep_index 就是 pixel index
+#     try:
+#         flat = []
 
-        for x in flat[1:]:
-            # 检查当前元素与当前组内所有元素的差值
-            can_add_to_current_group = True
-            for item in current_group:
-                if abs(x["_rep_index"] - item["_rep_index"]) > tol_pixels:
-                    can_add_to_current_group = False
-                    break
+#         # 全局
+#         for g in global_list:
+#             item = deepcopy(g)
+#             item["_is_global"] = True
+#             item["_global_sigma"] = item.get("max_sigma_seen", None)
+#             item["_roi_sigma"] = None
+#             item["_global_app"] = item.get("appearances", 0)
+#             item["_roi_app"] = 0
+#             item["_rep_index"] = item["rep_index"]
+#             flat.append(item)
+
+#         # ROI
+#         for roi in roi_list:
+#             # for r in roi[feature_type + "s"]:
+#             item = deepcopy(roi)
+#             item["_is_global"] = False
+#             item["_global_sigma"] = None
+#             item["_roi_sigma"] = item.get("max_sigma_seen", None)
+#             item["_global_app"] = 0
+#             item["_roi_app"] = item.get("appearances", 0)
+#             item["_rep_index"] = item["rep_index"]
+#             flat.append(item)
+
+#         # ---- Step 2：按照 pixel 距离 tol_pixels 进行合并 ----
+#         flat.sort(key=lambda x: x["_rep_index"])
+
+#         groups = []
+#         current_group = [flat[0]]
+
+#         for x in flat[1:]:
+#             # 检查当前元素与当前组内所有元素的差值
+#             can_add_to_current_group = True
+#             for item in current_group:
+#                 if abs(x["_rep_index"] - item["_rep_index"]) > tol_pixels:
+#                     can_add_to_current_group = False
+#                     break
             
-            if can_add_to_current_group:
-                # 如果与当前组内所有元素的差值都不超过 tol_pixels，则加入当前组
-                current_group.append(x)
-            else:
-                # 否则，保存当前组并开始新分组
-                groups.append(current_group)
-                current_group = [x]
+#             if can_add_to_current_group:
+#                 # 如果与当前组内所有元素的差值都不超过 tol_pixels，则加入当前组
+#                 current_group.append(x)
+#             else:
+#                 # 否则，保存当前组并开始新分组
+#                 groups.append(current_group)
+#                 current_group = [x]
 
-        # 循环结束后，将最后一个分组加入结果
-        groups.append(current_group)
+#         # 循环结束后，将最后一个分组加入结果
+#         groups.append(current_group)
 
-        # ---- Step 3：对每个 group 做融合 ----
-        merged = []
-        for group in groups:
+#         # ---- Step 3：对每个 group 做融合 ----
+#         merged = []
+#         for group in groups:
 
-            # 把 group 中 global/ROI 的 sigma / appearance 分开统计
-            all_global_sigma = [x["_global_sigma"] for x in group if x["_global_sigma"] is not None]
-            all_roi_sigma =   [x["_roi_sigma"]    for x in group if x["_roi_sigma"]    is not None]
+#             # 把 group 中 global/ROI 的 sigma / appearance 分开统计
+#             all_global_sigma = [x["_global_sigma"] for x in group if x["_global_sigma"] is not None]
+#             all_roi_sigma =   [x["_roi_sigma"]    for x in group if x["_roi_sigma"]    is not None]
 
-            # appearances
-            total_global_app = sum(x["_global_app"] for x in group)
-            total_roi_app    = sum(x["_roi_app"]    for x in group)
+#             # appearances
+#             total_global_app = sum(x["_global_app"] for x in group)
+#             total_roi_app    = sum(x["_roi_app"]    for x in group)
 
-            # ---- Feature group 的代表：选 flux 最大的 wavelength ----
-            if feature_type == "peak":
-                # flux 越大越代表 peak
-                rep = max(group, key=lambda x: flux[x["_rep_index"]])
-            else:
-                # trough：flux 越小越深（负值），代表性强 → 选 mean_flux 最小的
-                rep = min(group, key=lambda x: flux[x["_rep_index"]])
+#             # ---- Feature group 的代表：选 flux 最大的 wavelength ----
+#             if feature_type == "peak":
+#                 # flux 越大越代表 peak
+#                 rep = max(group, key=lambda x: flux[x["_rep_index"]])
+#             else:
+#                 # trough：flux 越小越深（负值），代表性强 → 选 mean_flux 最小的
+#                 rep = min(group, key=lambda x: flux[x["_rep_index"]])
 
-            # ---- fusion 后的结构 ----
-            fused = {
-                "rep_index": rep["_rep_index"],
-                "wavelength": rep["wavelength"],
+#             # ---- fusion 后的结构 ----
+#             fused = {
+#                 "rep_index": rep["_rep_index"],
+#                 "wavelength": rep["wavelength"],
 
-                # --- appearances ---
-                "global_appearances": total_global_app,
-                "roi_appearances": total_roi_app,
+#                 # --- appearances ---
+#                 "global_appearances": total_global_app,
+#                 "roi_appearances": total_roi_app,
 
-                # --- sigma ---
-                "max_global_sigma_seen": max(all_global_sigma) if all_global_sigma else None,
-                "max_roi_sigma_seen":    max(all_roi_sigma)    if all_roi_sigma    else None,
-            }
+#                 # --- sigma ---
+#                 "max_global_sigma_seen": max(all_global_sigma) if all_global_sigma else None,
+#                 "max_roi_sigma_seen":    max(all_roi_sigma)    if all_roi_sigma    else None,
+#             }
 
-            # ---- feature-specific fields ----
-            if feature_type == "peak":
-                # 选择 group 中 max prominence 最大者
-                fused["max_prominence"] = max(x.get("max_prominence", 0) for x in group)
-                fused["mean_flux"] = rep["mean_flux"]
-                fused["width_mean"] = rep["width_mean"]
-                fused["width_in_km_s"] = rep["width_in_km_s"]
+#             # ---- feature-specific fields ----
+#             if feature_type == "peak":
+#                 # 选择 group 中 max prominence 最大者
+#                 fused["max_prominence"] = max(x.get("max_prominence", 0) for x in group)
+#                 fused["mean_flux"] = rep["mean_flux"]
+#                 fused["width_mean"] = rep["width_mean"]
+#                 fused["width_in_km_s"] = rep["width_in_km_s"]
 
-            else:  # trough
-                fused["max_depth"] = max(x.get("max_depth", 0) for x in group)
-                fused["max_prominence"] = max(x.get("max_prominence", 0) for x in group)
-                fused["mean_equivalent_width_pixels"] = rep["mean_equivalent_width_pixels"]
-                fused["mean_flux"] = rep["mean_flux"]
-                fused["width_mean"] = rep["width_mean"]
-                fused["width_in_km_s"] = rep["width_in_km_s"]
+#             else:  # trough
+#                 fused["max_depth"] = max(x.get("max_depth", 0) for x in group)
+#                 fused["max_prominence"] = max(x.get("max_prominence", 0) for x in group)
+#                 fused["mean_equivalent_width_pixels"] = rep["mean_equivalent_width_pixels"]
+#                 fused["mean_flux"] = rep["mean_flux"]
+#                 fused["width_mean"] = rep["width_mean"]
+#                 fused["width_in_km_s"] = rep["width_in_km_s"]
 
-            merged.append(fused)
+#             merged.append(fused)
 
-        # ---- Step 4：排序 ----
+#         # ---- Step 4：排序 ----
 
-        if feature_type == "peak":
-            merged.sort(
-                key=lambda x: (
-                    # 1. 全局 max sigma
-                    -999 if x["max_global_sigma_seen"] is None else -x["max_global_sigma_seen"],
-                    # 4. ROI sigma
-                    -999 if x["max_roi_sigma_seen"] is None else -x["max_roi_sigma_seen"],
-                    # 2. max prominence
-                    -x["max_prominence"],
-                    # 3. 全局 appearances
-                    -x["mean_flux"],
-                    # 5. max prominence again
-                    -x["max_prominence"],
-                    # 6. ROI appearances
-                    -x["roi_appearances"],
-                )
-            )
-        else:  # trough
-            merged.sort(
-                key=lambda x: (
-                    -x["max_depth"],
-                    -x["mean_equivalent_width_pixels"],
-                    -x["global_appearances"],
-                    -x["roi_appearances"],
-                )
-            )
+#         if feature_type == "peak":
+#             merged.sort(
+#                 key=lambda x: (
+#                     # 1. 全局 max sigma
+#                     -999 if x["max_global_sigma_seen"] is None else -x["max_global_sigma_seen"],
+#                     # 4. ROI sigma
+#                     -999 if x["max_roi_sigma_seen"] is None else -x["max_roi_sigma_seen"],
+#                     # 2. max prominence
+#                     -x["max_prominence"],
+#                     # 3. 全局 appearances
+#                     -x["mean_flux"],
+#                     # 5. max prominence again
+#                     -x["max_prominence"],
+#                     # 6. ROI appearances
+#                     -x["roi_appearances"],
+#                 )
+#             )
+#         else:  # trough
+#             merged.sort(
+#                 key=lambda x: (
+#                     -x["max_depth"],
+#                     -x["mean_equivalent_width_pixels"],
+#                     -x["global_appearances"],
+#                     -x["roi_appearances"],
+#                 )
+#             )
 
-        return merged
-    except Exception as e:
-        logging.error(f"Error in _process_feature_type: {e}")
+#         return merged
+#     except Exception as e:
+#         logging.error(f"Error in _process_feature_type: {e}")
 
