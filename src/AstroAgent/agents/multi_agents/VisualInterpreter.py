@@ -1,20 +1,20 @@
-import json
+# import json
 import os
 import numpy as np
-import pandas as pd
+# import pandas as pd
 import logging
 
+from astropy.io import fits
 from scipy.ndimage import gaussian_filter1d
 
 from AstroAgent.agents.common.state import SpectroState
 from AstroAgent.agents.common.base_agent import BaseAgent
 from AstroAgent.agents.common.result_writer import ResultWriter
+
 from AstroAgent.core.runtime.runtime_container import RuntimeContainer
 
+from AstroAgent.agents.multi_agents.utils.usage import find_overlap_regions
 from AstroAgent.agents.multi_agents.utils.usage import safe_to_bool
-
-# from AstroAgent.agents.multi_agents.utils.RA import get_overlap_window
-
 from AstroAgent.agents.multi_agents.utils.VI import (
     _detect_chart_border, _crop_img,
     _remap_to_cropped_canvas, _pixel_tickvalue_fitting,
@@ -23,20 +23,13 @@ from AstroAgent.agents.multi_agents.utils.VI import (
     _detect_axis_ticks_paddle,
     run_continuum_fitting_masked,
     run_iterative_feature_detection,
+    brute_force_line_matching
 )
-
-from AstroAgent.agents.multi_agents.utils.VI import brute_force_line_matching
-
-from AstroAgent.agents.multi_agents.utils.feature_finder_precise import save_catalog_csv
-
-from astropy.io import fits
-
 from AstroAgent.agents.multi_agents.utils.plot import (
     plot_spec_extract,
     plot_spectrum_snr,
     plot_continuum,
     plot_residual_spectrum,
-    # plot_masked_spectrum,
     plot_features,
 )
 
@@ -150,9 +143,7 @@ class VisualInterpreter(BaseAgent):
                 # quality_mask[i] = True 表示该像素质量良好（specmask == 0）
                 quality_mask = (specmask == 0)
                 
-                # === 引入 arm overlap mask ===
-                from AstroAgent.agents.multi_agents.utils.usage import find_overlap_regions
-                
+                # === 引入 arm overlap mask ===                
                 overlap_regions = find_overlap_regions(band_names, band_wavelengths)
                 
                 # 构建 combined mask：True 表示保留

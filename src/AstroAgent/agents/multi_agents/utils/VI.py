@@ -1,16 +1,16 @@
 import os
 import json
-import logging
+# import logging
 import cv2
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 import pytesseract
 from collections import defaultdict
 from paddleocr import PaddleOCR
-from typing import List, Dict, Any
+from typing import Dict
 from scipy.optimize import curve_fit
-from scipy.stats import mode
+# from scipy.stats import mode
 
 from AstroAgent.agents.common.state import SpectroState
 
