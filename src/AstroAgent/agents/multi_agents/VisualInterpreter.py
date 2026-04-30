@@ -140,8 +140,10 @@ class VisualInterpreter(BaseAgent):
                     logging.info("SPECMASK: All pixels are clean (mask=0)")
                 
                 # === 构建 quality mask ===
-                # quality_mask[i] = True 表示该像素质量良好（specmask == 0）
-                quality_mask = (specmask == 0)
+                # quality_mask[i] = True 表示该像素质量良好（specmask == 0 且 ivar > 0）
+                # 根据 DESI SPECMASK 文档，所有 bit 都代表质量问题，非零即不可用
+                # 同时额外检查 ivar > 0，防止 SPECMASK 漏标 ivar=0 的像素
+                quality_mask = (specmask == 0) & (ivar > 0)
                 
                 # === 引入 arm overlap mask ===                
                 overlap_regions = find_overlap_regions(band_names, band_wavelengths)
