@@ -22,7 +22,7 @@ Your tasks are:
 - Do not introduce any new hypothesis or new line pairing not present in the above materials
 - All numerical values retain 3 decimal places
 - If the output of a certain stage is empty or missing, note "No data for this stage", do not fabricate content
-- Do not change the type determined by verdict, unless the critique raises strong objections and patched_verdict outputs a corresponding valid conclusion
+- Only improve the verdict result, do not change the basis of the final conclusion (object type, redshift, etc.)
 
 ---
 
