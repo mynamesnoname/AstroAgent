@@ -178,7 +178,7 @@ The following priority rules apply to the **cross-comparison of QSO/ELG/LRG**:
 
 *   **QSO vs ELG ambiguity**: If a spectrum shows signs of both broad emission lines and a combination of narrow lines, prioritize QSO (host galaxy-dominated AGN), unless all broad lines are marked as width mismatch and there are no alternative matches. If no AGN characteristic emission lines (Ne [V], Mg II, C III]) are present, then ELG takes priority.
 *   **ELG vs LRG ambiguity**: If the O [III] doublet amplitude ratio is not close to 1:3 (5007 Å should be brighter), be cautious; if Ca K/Ca H matches are also present, prioritize LRG. If no absorption lines are present, then ELG takes priority.
-*   **QSO vs LRG ambiguity**: If the continuum is bright at the red end, the 4000 Å break is significant, and there are no broad emission lines, favor LRG; if any broad lines are present, favor QSO.
+*   **QSO vs LRG ambiguity**: If the continuum is bright at the red end, the 4000 Å break is significant, absorption lines are significant, and there are no broad emission lines, favor LRG; if any broad lines are present, favor QSO.
 *   **Host galaxy-dominated AGN vs ELG/LRG/BGS ambiguity**: If the spectrum is clearly absorption-line-dominated, favor LRG/BGS; if all line matches are narrow, favor ELG; if strong characteristic AGN emission lines (Ne [V], C III], Mg II) are present, favor host galaxy-dominated AGN.
 
 ### R3 Elimination Mechanism
