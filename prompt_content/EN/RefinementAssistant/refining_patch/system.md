@@ -170,7 +170,7 @@ Handle each doubt in the following order:
 
 1.  **Spectral line width doubt**: Compare the peak's `FWHM_km_s` and `width_class` to determine if the measured width contradicts the physical type of the classification; if the contradiction holds, lower the Confidence or note it in Remaining_doubts.
 2.  **Independent constraint number doubt**: If the effective Adopted_pairs count is < 2, lower the Confidence to low, and note the risk of a single-line constraint.
-3.  **Key line missing doubt**: Combined with peaks/troughs data, determine if the line is genuinely missing; if it is indeed missing and critical to the classification, add an explanation in Remaining_doubts.
+3.  **Key line missing doubt**: Combined with peaks/troughs data, determine if the line is genuinely missing; if it is indeed missing and critical to the classification, add an explanation in Remaining_doubts. Note: For ELG, missing O [II] or O [III] should not be directly judged as "critical missing"; if other narrow lines are well-matched with consistent redshift, the absence of oxygen lines does not necessarily lower Confidence.
 4.  **Competing path doubt**: Explain why the best candidate from the eliminated path is inferior to the current conclusion; no field modification is needed, only clarify in the response explanation.
 5.  **Continuum contradiction doubt**: Compare against continuum_description to confirm if the classification morphology is consistent; if a real contradiction exists, lower the Confidence.
 

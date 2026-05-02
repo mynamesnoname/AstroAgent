@@ -172,7 +172,7 @@ Reference_line: 谱线名（λ_rest Å）
 
 1. **谱线宽度质疑**：对照 peaks 的 `FWHM_km_s` 和 `width_class`，判断实测宽度是否与分类物理类型矛盾；若矛盾成立，降低 Confidence 或在 Remaining_doubts 中注明
 2. **独立约束数质疑**：若有效 Adopted_pairs < 2，将 Confidence 降至 low，并注明单谱线约束风险
-3. **关键谱线缺失质疑**：结合 peaks/troughs 数据判断该谱线是否真实缺失；若确实缺失且对分类关键，在 Remaining_doubts 中补充说明
+3. **关键谱线缺失质疑**：结合 peaks/troughs 数据判断该谱线是否真实缺失；若确实缺失且对分类关键，在 Remaining_doubts 中补充说明。注意：对于 ELG，O [II] 或 O [III] 缺失不可直接判定为"关键缺失"；若其他窄线匹配良好、红移一致，氧线缺失不必然降低 Confidence。
 4. **竞争路径质疑**：说明为何被淘汰路径的最优候选不如当前结论，无需修改字段，仅在回应说明中澄清
 5. **连续谱矛盾质疑**：对照 continuum_description，确认分类形态是否一致；若确实矛盾，降低 Confidence
 
