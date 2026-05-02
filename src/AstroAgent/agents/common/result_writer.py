@@ -140,10 +140,11 @@ class ResultWriter:
 
     def write_brute_force_matching(self, state: SpectroState) -> None:
         """
-        将 brute_force_matching（QSO/ELG 模式）和 brute_force_matching_lrg_bgs（LRG/BGS 模式）
-        分别写出为两个 .txt 文件。
+        将 brute_force_matching_qso（QSO）、brute_force_matching_elg（ELG）
+        和 brute_force_matching_lrg_bgs（LRG/BGS）分别写出为 .txt 文件。
         文件名格式：
-          {file_name}_brute_force_matching.txt
+          {file_name}_brute_force_matching_qso.txt
+          {file_name}_brute_force_matching_elg.txt
           {file_name}_brute_force_matching_lrg_bgs.txt
         """
         output_dir = self._resolve_output_dir(state)
@@ -151,7 +152,8 @@ class ResultWriter:
         file_name = state.get("file_name", "unknown")
 
         _matching_items = (
-            ("brute_force_matching_qso_elg",         "BRUTE FORCE MATCHING (QSO / ELG)"),
+            ("brute_force_matching_qso",     "BRUTE FORCE MATCHING (QSO)"),
+            ("brute_force_matching_elg",     "BRUTE FORCE MATCHING (ELG)"),
             ("brute_force_matching_lrg_bgs", "BRUTE FORCE MATCHING (LRG / BGS)"),
         )
         for state_key, title in _matching_items:

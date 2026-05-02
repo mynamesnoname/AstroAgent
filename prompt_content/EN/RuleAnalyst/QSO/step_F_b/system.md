@@ -44,6 +44,11 @@ The spectral classification of QSOs involves the following two main cases:
 ### R1 Judgment Priority (high → low)
 
 1.  **Physical coherence**: Whether the line combination conforms to the typical characteristics of that object type (e.g., a typical QSO should not be missing all BLR broad lines; **a host galaxy-dominated AGN should have at least one of the typical AGN emission lines**, such as Ne [V], C [III], Mg II. The O [III] doublet is the most reliable anchor for redshift inference. iI the doublet is absent, plausible narrow line matches are still effective redshift anchors.).
+
+    **Mandatory Key Diagnostic Lines Verification**: In Step F-b2 cross-validation and Step F-b3 final conclusion, you must, against each hypothesis's `Observable emission lines` list, verify the matching status of the following key diagnostic lines one by one, no omission:
+    - If the hypothesis is determined as **Typical QSO**: Lyα (1216 Å), C IV (1549 Å), C III] (1909 Å), Mg II (2800 Å)
+    - If the hypothesis is determined as **Host galaxy-dominated AGN**: Ne [V] (3426 Å), C III] (1909 Å), Mg II (2800 Å), O [III] doublet (4960/5008 Å)
+    
 2.  **Missing emission lines**: If under a hypothesis, important lines (Lyα, C IV, Mg II, O [III] doublet, etc.) are theoretically within the observed range but unmatched, the hypothesis should be questioned.
 3.  **Number of width mismatches**: Fewer width mismatches are more credible, but a small number of intermediate matching broad/narrow does not constitute a veto basis.
 4.  **Redshift warning**: Hypotheses with warnings have significantly reduced credibility, unless there is strong other supporting evidence.
@@ -118,6 +123,10 @@ Step F-b3: Final Conclusion
 - Physical_type: ... (Case 1 (Typical QSO) / Case 2 (Host galaxy-dominated AGN))
 - Suggested_redshift: ... (z value of the lowest-ionization state line, retain 3 decimal places)
 - Confidence: ... 
+- Key_lines_status:
+  Lyα: matched at XXXX.X Å (z=X.XXX) / in range but NOT matched / not in obs range
+  C IV: ...
+  ... (must list all key diagnostic lines for the physical type, no omission)
 - Adopted_pairs:
   line name → observed wavelength Å (z=...)
   ...
@@ -129,6 +138,8 @@ Step F-b3: Final Conclusion
 - Physical_type: ...
 - Suggested_redshift: ...
 - Confidence: ...
+- Key_lines_status:
+  ...
 - Adopted_pairs:
   line name → observed wavelength Å (z=...)
   ...

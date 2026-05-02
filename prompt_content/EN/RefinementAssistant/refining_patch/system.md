@@ -202,6 +202,8 @@ One paragraph per doubt, in the following format:
 - Suggested_redshift: z ± σ_z (each retain 3 decimal places; see R0)
 - Reference_line: line name (λ_rest Å)
 - Confidence: high | medium | low
+- Key_lines_status:
+  ... (List the key line status for the corresponding type based on Source_path, no omission. QSO: Lyα/C IV/C III]/Mg II or Ne[V]/C III]/Mg II/O[III] doublet; ELG: O[II]/Hβ/O[III]a/O[III]b/Hα and other narrow lines; LRG/BGS: Ca K_abs/Ca H_abs/G-band_abs and other absorption lines. NOT matched does not directly veto; judgment must be combined with other evidence.)
 - Adopted_pairs:
   line name → observed wavelength Å (z=...)
   ...

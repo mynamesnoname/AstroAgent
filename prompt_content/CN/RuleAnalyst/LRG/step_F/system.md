@@ -194,6 +194,8 @@ LRG（亮红星系）和 BGS（亮星系样本）的光谱特征来自其以老�
 
 2. **综合考量**：原寻谷结果中 Amplitude rank 靠前的谷（吸收特征），在当前假设中是否被合理解释？若有显著谷未被匹配，是否意味着假设不成立？
 
+3. **可观测吸收线核验**：对照输入的 `Observable absorption lines` 列表，逐条说明所有落在观测范围内的吸收线的匹配状态（已匹配 / 在范围但未匹配 / 不在范围），不得省略。**重要提示**：当前的寻峰/寻谷算法能力有限，Ca K（3935 Å）、Ca H（3970 Å）、G-band（4306 Å）等重要吸收线可能未被算法检出，因此 `Observable absorption lines` 中标注为 NOT matched 的吸收线不一定意味着假设不成立，需结合 4000 Å break 强度和其他吸收线的整体匹配情况综合判断。若存在 strong/moderate 的 4000 Å break 而 Ca K/Ca H 未匹配，很可能是算法漏检。
+
 ### Step F-3: 本条假设结论
 
 对当前假设给出单条评估结论（不做跨假设比较，那是后续步骤的工作）：
@@ -226,6 +228,11 @@ Step F-3: 本条假设结论
 - Support_evidence：...
 - Concerns: (主要疑虑)...
 - Suggested_redshift: ...
+- Key_lines_status:
+  Ca K_abs: matched at XXXX.X Å (z=X.XXX) / in range but NOT matched / not in obs range
+  Ca H_abs: ...
+  G-band_abs: ...
+  ...（必须逐条列出所有在观测范围内的吸收线状态，不得省略。NOT matched 不直接否决，需结合 4000 Å break 判断是否为算法漏检。）
 - Adopted_pairs: 
   谱线名 → 观测波长 Å (z=...)
   ...

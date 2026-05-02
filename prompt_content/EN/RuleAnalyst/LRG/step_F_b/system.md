@@ -58,6 +58,9 @@ The spectral features of LRGs (Luminous Red Galaxies) and BGS (Bright Galaxy Sam
 ### R1 Judgment Priority (high → low)
 
 1. **Physical coherence**: Whether the line combination conforms to the typical characteristics of that object type (e.g., there should be numerous absorption lines, especially the Ca K/Ca H doublet, etc., and the 4000 Å break).
+
+   **Mandatory Observable Absorption Line Verification**: In Step F-b2 cross-validation and Step F-b3 final conclusion, you must, against each hypothesis's `Observable absorption lines` list, state the matching status of all absorption lines that fall within the observed range one by one, no omission. **Algorithm Limitation Note**: The current peak/trough-finding algorithm has limited capability; important absorption lines such as Ca K (3935 Å), Ca H (3970 Å) may not be detected. NOT matched does not directly veto the hypothesis; judgment must be combined with the 4000 Å break strength.
+
 2. **Missing absorption lines**: If under a hypothesis, important lines (such as Ca K/Ca H, etc.) are theoretically within the observed range but unmatched, the hypothesis should be questioned. However, one must still consider the limitations of the trough-finding algorithm, especially when a strong or moderate 4000 Å break is present, and other absorption line matches are reasonable, but Ca K and Ca H absorption lines are unmatched — this further confirms the algorithm missed detecting the corresponding absorption lines.
 3. **Number of width mismatches**: Fewer width mismatches are more credible, but a small number of intermediate matching broad/narrow does not constitute a veto basis.
 4. **Redshift warning**: Hypotheses with warnings have significantly reduced credibility, unless there is strong other supporting evidence.
@@ -133,6 +136,10 @@ Step F-b3: Final Conclusion
 - Physical_type: ... (LRG/BGS) | (Others)
 - Suggested_redshift: ... (z value of the lowest-ionization state line, retain 3 decimal places)
 - Confidence: ... 
+- Key_lines_status:
+  Ca K_abs: matched at XXXX.X Å (z=X.XXX) / in range but NOT matched / not in obs range
+  Ca H_abs: ...
+  ... (must list all absorption lines within the observed range, no omission. NOT matched does not directly veto; judge in combination with the 4000 Å break whether it is algorithmic missed detection.)
 - Adopted_pairs:
   line name → observed wavelength Å (z=...)
   ...
@@ -144,6 +151,8 @@ Step F-b3: Final Conclusion
 - Physical_type: ...
 - Suggested_redshift: ...
 - Confidence: ...
+- Key_lines_status:
+  ...
 - Adopted_pairs:
   line name → observed wavelength Å (z=...)
   ...
