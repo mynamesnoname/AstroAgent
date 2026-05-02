@@ -109,7 +109,7 @@ In the peak/trough-finding algorithm:
 
 ELG emission lines are predominantly narrow, expected width classification is narrow or intermediate. If a peak matches narrow lines such as O [III], O [II], Hα, etc., but its width class is broad, it will be flagged `⚠ width mismatch` and requires close attention.
 
-1. **O [III] doublet is the preferred anchoring feature**: The doublet structure (amplitude ratio ≈ 1:3, λ₁=4959.1 Å, λ₂=5006.8 Å, λ₁ amplitude lower than λ₂) is the most reliable redshift anchor. If both lines are present and the amplitude ratio is reasonable (at least the amplitude ordering is correct), confidence increases significantly.
+1. **O [III] doublet is the preferred anchoring feature**: The doublet structure (amplitude ratio ≈ 1:3, λ₁=4959.1 Å, λ₂=5006.8 Å, λ₁ amplitude lower than λ₂) is the most reliable redshift anchor. If both lines are present and the amplitude ratio is reasonable (at least the amplitude ordering is correct), confidence increases significantly. If the O [III] doublet is absent, strictly check whether the matching of other lines is reasonable. 
 2. **O [II] 3727 Å is the secondary anchoring feature**: O [II] is one of the most common emission lines in ELGs, appearing as a single peak at low resolution. If consistent with the O [III] redshift, confidence further increases.
 3. **Hα/Hβ provide additional verification**: Balmer series lines are narrow in ELGs. If their redshifts are consistent with O [III] and O [II], this enhances the hypothesis credibility.
 4. **Broad line mismatch is a critical warning**: If an ELG has multiple broad-line matches (broad class and no narrow/intermediate alternative) with significant amplitudes, one should question the plausibility of this hypothesis.
@@ -185,7 +185,7 @@ Based on Step F-1, conduct physical semantic verification:
         - `wavelength_3 (...) → O [III]b (z=...)`
         - `wavelength_1 < wavelength_2 < wavelength_3`
         Here it is easy to disentangle: wavelength_1 → Hβ, wavelength_2 → O [III]a, wavelength_3 → O [III]b.
-    - **O [III] doublet**: Are matches corresponding to both 4960.3 Å and 5008.2 Å present? Is their amplitude ratio close to 1:3 (5007 Å brighter)? If the doublet does not appear together, which line being missing is harder to accept?
+    - **O [III] doublet**: Are matches corresponding to both 4960.3 Å and 5008.2 Å present? Is their amplitude ratio close to 1:3 (5007 Å brighter)? If the O [III] doublet is absent, strictly check whether the matching of other lines is reasonable.
     - **O [II] 3727 Å**: Does a match appear at the current redshift? Is its amplitude relatively high?
     - **Hβ 4861 Å / Hα 6563 Å**: If within the spectral range, are there corresponding matches? Are the amplitudes reasonable (Hα typically stronger than Hβ)?
     - **Missing emission lines**: Are any important narrow lines missing (O [III] doublet, O [II] 3727, etc.)? Which missing lines are acceptable (low SNR, at spectral edge, possible missed detection, or physically absent), and which are fatal?
@@ -214,6 +214,7 @@ Provide a single hypothesis assessment conclusion (no cross-hypothesis compariso
         - `wavelength_1 < wavelength_2 < wavelength_3`
         We have argued wavelength_1 → Hβ, wavelength_2 → O [III]a, wavelength_3 → O [III]b, so one can say: “wavelength_1 matches Hβ, wavelength_2 matches O [III]a, wavelength_3 matches O [III]b; the confusion here is because Hβ falls near the O [III] doublet, and the calculated observed-frame wavelengths are within the brute-force matching tolerance window.”
     - If not successfully resolved, this cannot be included.
+    - If the O [III] doublet is absent, strictly check whether the matching of other lines is reasonable.
 4. **Main Concerns**: List 1-2 critical objections or points of doubt
 5. **Suggested Redshift**: If confidence is not low, provide the suggested redshift value (take the z of the lowest-ionization line, prioritize O [II], then O [III], then Hα/Hβ); if low, fill in N/A
 6. **Final Adopted Pairs**: Based on Step F-1/F-2 reasoning, provide the finally adopted observed wavelength and z value for each matched emission line (select the best when multiple candidates exist, directly list if no multiple candidates). Format:

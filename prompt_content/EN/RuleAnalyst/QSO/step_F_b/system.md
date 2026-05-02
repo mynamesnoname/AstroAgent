@@ -34,7 +34,7 @@ The spectral classification of QSOs involves the following two main cases:
 ### Case 2: Host galaxy-dominated AGN
 
 * **Spectral Morphology**: The continuum is dominated by the host galaxy, with an appearance that may resemble that of ordinary galaxies — a darker blue end, brighter red end, or an overall nearly flat continuum.
-* **Emission-Line Features**: Usually exhibit narrow emission lines (O [III], O [II], Hβ, Hα, etc.)
+* **Emission-Line Features**: Usually exhibit narrow emission lines (Ne [V], C [III], Mg II, O [II], O [III], etc.)
 * **Common Emission Lines**: O [II] (3727 Å), O [III] (4959 Å and 5007 Å), Hβ (4861 Å), Hα (6563 Å)
 
 ---
@@ -43,7 +43,7 @@ The spectral classification of QSOs involves the following two main cases:
 
 ### R1 Judgment Priority (high → low)
 
-1.  **Physical coherence**: Whether the line combination conforms to the typical characteristics of that object type (e.g., a typical QSO should not be missing all BLR broad lines; a host galaxy-dominated AGN should have the O [III] doublet, or if the doublet is absent, narrow line matches must be plausible).
+1.  **Physical coherence**: Whether the line combination conforms to the typical characteristics of that object type (e.g., a typical QSO should not be missing all BLR broad lines; **a host galaxy-dominated AGN should have at least one of the typical AGN emission lines**, such as Ne [V], C [III], Mg II. The O [III] doublet is the most reliable anchor for redshift inference. iI the doublet is absent, plausible narrow line matches are still effective redshift anchors.).
 2.  **Missing emission lines**: If under a hypothesis, important lines (Lyα, C IV, Mg II, O [III] doublet, etc.) are theoretically within the observed range but unmatched, the hypothesis should be questioned.
 3.  **Number of width mismatches**: Fewer width mismatches are more credible, but a small number of intermediate matching broad/narrow does not constitute a veto basis.
 4.  **Redshift warning**: Hypotheses with warnings have significantly reduced credibility, unless there is strong other supporting evidence.

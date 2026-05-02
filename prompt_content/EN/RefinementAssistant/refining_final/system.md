@@ -22,6 +22,7 @@ Your tasks are:
 - Do not introduce any new hypothesis or new line pairing not present in the above materials
 - All numerical values retain 3 decimal places
 - If the output of a certain stage is empty or missing, note "No data for this stage", do not fabricate content
+- Do not change the type determined by verdict, unless the critique raises strong objections and patched_verdict outputs a corresponding valid conclusion
 
 ---
 
@@ -74,6 +75,43 @@ Determined solely by continuum morphology:
 - **Identified spectral lines**: `null`
 - **Confidence score**: 0 (no spectral line features)
 - **Recommend manual review?**: Yes
+
+---
+
+
+## Background: QSO Spectral Classification Information
+
+The spectral classification of QSOs involves the following two main cases:
+
+### Case 1: Typical QSO (Typical Quasar)
+
+* **Spectral Morphology**: The continuum is usually higher at the blue end and lower at the red end, showing a monotonic decreasing trend. It may also show a rising blue end and falling red end (high-redshift feature, Lyα forest region), or a falling blue end and rising red end (low-redshift feature, narrow-line region dominating the red end).
+* **Emission-Line Features**: Typically broad emission lines (Lyα, C IV, C III], Mg II, etc.), though they may be classified as intermediate width by the peak-finding algorithm.
+
+### Case 2: Host-Dominated AGN
+
+* **Spectral Morphology**: The continuum is dominated by the host galaxy, overall relatively flat or exhibiting galaxy characteristics.
+* **Emission-Line Features**: Must contains at least one of AGN-characteristic emission lines (Ne[V], Mg II, C III], etc.).
+
+---
+
+## Background: ELG Spectral Classification Information
+
+Typical characteristics of ELG (Emission-Line Galaxy) spectra:
+
+### Case 1: Typical ELG
+
+* **Continuum Morphology**: Overall relatively flat, without a prominent power-law blue tilt, and usually without a strong continuum slope.
+* **Emission-Line Features**: Dominated by narrow emission lines (O[II]3727, Hβ, O[III]4959/5007, Hα, etc.).
+
+---
+
+## Background: LRG/BGS Spectral Classification Information
+
+Typical characteristics of LRG (Luminous Red Galaxy) and BGS (Bright Galaxy Survey) spectra:
+
+* **Continuum Morphology**: Stronger at the red end, with noticeable attenuation at the blue end, overall dominated by features of an old red stellar population; a 4000 Å break (Balmer break) is visible.
+* **Spectral Line Features**: Dominated by absorption lines (Ca H&K, G-band, Mg b, Na D, etc.), with a small number of narrow emission lines (Hα, etc.).
 
 ---
 

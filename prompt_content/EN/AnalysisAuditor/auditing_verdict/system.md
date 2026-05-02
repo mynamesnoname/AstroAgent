@@ -36,12 +36,11 @@ The spectral classification of QSOs involves the following two main cases:
 ### Case 2: Host Galaxy-Dominated AGN
 
 * **Spectral Morphology**: The continuum is dominated by the host galaxy and the appearance may resemble ELG/LRG/BGS; however, the presence of broad-line components (especially in the Mg II region) or high-ionization narrow lines (Ne [V], C III], etc.) is a typical characteristic of AGN.
-* **Emission-Line Features**: Contains strong AGN-characteristic emission lines:
+* **Emission-Line Features**: **Must contains at least one of the strong AGN-characteristic emission lines below**:
     - Ne [V] (3426 Å) — strong AGN indicator
-    - O [III] (4959 Å and 5007 Å) — common narrow-line region doublet
     - C III] (1909 Å)
-    - O [II] (3727 Å)
     - Mg II (2800 Å) — may appear as a broad emission line superimposed on the host galaxy's narrow absorption lines
+  Otherwise, consider: Could this spectrum be an ELG?
 * **Spectral Complexity**: Broad emission lines superimposed with narrow absorption lines, especially in the Mg II region where a broad emission line is superimposed on the host galaxy's narrow absorption lines; the peak/trough-finding algorithm may identify this as a single broad line with a superimposed narrow absorption line, or misidentify it as two close broad lines, or overfit leading to spurious broad lines.
 
 ---
@@ -80,6 +79,7 @@ The spectral features of LRGs (Luminous Red Galaxies) and BGS (Bright Galaxy Sam
     - Na D 5893 Å (sodium doublet, usually appearing as a relatively broad trough)
     - Hβ 4861 Å absorption (Balmer series, usually weaker than Ca lines)
     - Hγ 4340 Å, Hδ 4102 Å (higher-order Balmer absorption, even weaker)
+    - If there are few absorption lines, be sure to consider whether this could be an ELG at the same redshift with the same line matching?
 * **Common Emission Lines**:
     - O [II] 3727 Å (star-forming region forbidden line)
     - Hε 3970 Å (Balmer series)
@@ -160,9 +160,9 @@ The following priority rules apply to the **cross-comparison of QSO/ELG/LRG**:
 
 1.  **Physical coherence**: Whether the combination of spectral lines conforms to the typical characteristics of the corresponding object type.
     *   A typical QSO should have broad emission lines (Lyα/C IV/C III]/Mg II) and should not consist entirely of narrow lines without Mg II;
-    *   A host galaxy-dominated AGN should have strong characteristic AGN emission lines (Ne [V], O [III], C III], O [II], Mg II) and may be accompanied by broad emission lines; Balmer series emission lines may be classified as narrow or intermediate, but usually have large widths.
+    *   A host galaxy-dominated AGN should have strong characteristic AGN emission lines (Ne [V], C III], Mg II) and may be accompanied by broad emission lines; Balmer series emission lines may be classified as narrow or intermediate, but usually have large widths. If there is no typical AGN emission line, be sure to consider whether this could be an ELG at the same redshift with the same line matching?
     *   An ELG should have narrow emission lines (O [III] doublet amplitude ratio approx 1:3, O [II], Hβ/Hα) and should not show genuine broad lines;
-    *   An LRG/BGS should be dominated by absorption lines (Ca K/Ca H/G-band/Mg b/Na D, etc.), preferably accompanied by a strong or moderate 4000 Å break;
+    *   An LRG/BGS should be dominated by absorption lines (Ca K/Ca H/G-band/Mg b/Na D, etc.), preferably accompanied by a strong or moderate 4000 Å break; If there are few absorption lines, be sure to consider whether this could be an ELG at the same redshift with the same line matching?
 2.  **Number of independent constraints**: The more independent lines supporting a hypothesis, the more credible it is. A single spectral line cannot form a valid physical constraint.
 3.  **Missing lines situation**: If important spectral lines theoretically fall within the observed range but are not matched, this should be questioned.
 4.  **Impact of width mismatch**: A broad peak matching a narrow line, or a narrow peak matching a broad line, should be questioned. However, an intermediate match does not constitute a veto.
@@ -176,10 +176,10 @@ The following priority rules apply to the **cross-comparison of QSO/ELG/LRG**:
 
 ### R2 Cross-Type Special Rules
 
-*   **QSO vs ELG ambiguity**: If a spectrum shows signs of both broad emission lines and a combination of narrow lines, prioritize QSO (host galaxy-dominated AGN), unless all broad lines are marked as width mismatch and there are no alternative matches.
-*   **ELG vs LRG ambiguity**: If the O [III] doublet amplitude ratio is not close to 1:3 (5007 Å should be brighter), be cautious; if Ca K/Ca H matches are also present, prioritize LRG.
+*   **QSO vs ELG ambiguity**: If a spectrum shows signs of both broad emission lines and a combination of narrow lines, prioritize QSO (host galaxy-dominated AGN), unless all broad lines are marked as width mismatch and there are no alternative matches. If no AGN characteristic emission lines (Ne [V], Mg II, C III]) are present, then ELG takes priority.
+*   **ELG vs LRG ambiguity**: If the O [III] doublet amplitude ratio is not close to 1:3 (5007 Å should be brighter), be cautious; if Ca K/Ca H matches are also present, prioritize LRG. If no absorption lines are present, then ELG takes priority.
 *   **QSO vs LRG ambiguity**: If the continuum is bright at the red end, the 4000 Å break is significant, and there are no broad emission lines, favor LRG; if any broad lines are present, favor QSO.
-*   **Host galaxy-dominated AGN vs ELG/LRG/BGS ambiguity**: If the spectrum is clearly absorption-line-dominated, favor LRG/BGS; if all line matches are narrow, favor ELG; if strong characteristic AGN emission lines (Ne [V], O [III], C III], O [II], Mg II) are present, favor host galaxy-dominated AGN.
+*   **Host galaxy-dominated AGN vs ELG/LRG/BGS ambiguity**: If the spectrum is clearly absorption-line-dominated, favor LRG/BGS; if all line matches are narrow, favor ELG; if strong characteristic AGN emission lines (Ne [V], C III], Mg II) are present, favor host galaxy-dominated AGN.
 
 ### R3 Elimination Mechanism
 
