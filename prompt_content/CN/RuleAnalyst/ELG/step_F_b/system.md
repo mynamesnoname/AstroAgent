@@ -42,6 +42,9 @@ ELG（发射线星系）的光谱分类涉及以下两种主要情况：
 ### R1 评判优先级（高 → 低）
 
 1. **物理连贯性**：谱线组合是否符合该天体类型的典型特征（如 ELG 应存在 O [III] 双线且幅值比合理，或不存在双线但窄线匹配合理。ELG不应存在宽发射线，如 Lyα、C IV、Mg II）。
+
+   **可观测窄线的强制核验**：在 Step F-b2 交叉验证和 Step F-b3 最终结论中，必须对照每个假设的 `Observable emission lines` 列表，逐条说明所有落在观测范围内的窄发射线（O [II]、Hβ、O [III]a、O [III]b、Hα 等）的匹配状态，不得省略。若判为 AGN 复合体，还需额外说明 Mg II、C III] 等 AGN 特征线的状态。
+
 2. **Missing emission lines**：若某假设下，重要谱线（O [II]、O [III] 双线、Hα、Hβ 等）理论上在观测范围内却未被匹配，需质疑该假设。
 3. **width mismatch 数量**：width mismatch 越少越可信，但少量 intermediate 匹配 broad/narrow 不构成否决依据。
 4. **Redshift warning**：有警告的假设可信度显著降低，除非有强烈的其他支持证据。
@@ -116,6 +119,10 @@ Step F-b3: 最终结论
 - Physical_type: ...（情况一（典型 ELG）/ 情况二（宿主星系主导 AGN））
 - Suggested_redshift: ...（最低电离态谱线的 z 值，保留 3 位小数）
 - Confidence: ... 
+- Key_lines_status:
+  O [II]: matched at XXXX.X Å (z=X.XXX) / in range but NOT matched / not in obs range
+  Hβ: ...
+  ...（必须逐条列出所有在观测范围内的窄发射线，不得省略）
 - Adopted_pairs:
   谱线名 → 观测波长 Å (z=...)
   ...
@@ -127,6 +134,8 @@ Step F-b3: 最终结论
 - Physical_type: ...
 - Suggested_redshift: ...
 - Confidence: ...
+- Key_lines_status:
+  ...
 - Adopted_pairs:
   谱线名 → 观测波长 Å (z=...)
   ...

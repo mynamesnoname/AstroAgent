@@ -194,6 +194,8 @@ Based on Step F-1, conduct physical semantic verification:
 
 2. **Comprehensive consideration**: Are the troughs with top Amplitude rank in the original trough-finding results (absorption features) reasonably explained in the current hypothesis? If there are prominent troughs unmatched, does it mean the hypothesis is invalid?
 
+3. **Observable Absorption Line Verification**: Against the input `Observable absorption lines` list, state the matching status of all absorption lines that fall within the observed range one by one (matched / in range but NOT matched / not in obs range), no omission. **Important Note**: The current peak/trough-finding algorithm has limited capability; important absorption lines such as Ca K (3935 Å), Ca H (3970 Å), G-band (4306 Å) may not be detected by the algorithm. Therefore, absorption lines marked as NOT matched in `Observable absorption lines` do not necessarily mean the hypothesis is invalid — judgment must be combined with the 4000 Å break strength and the overall matching status of other absorption lines. If there is a strong/moderate 4000 Å break but Ca K/Ca H are unmatched, it is very likely due to algorithmic missed detection.
+
 ### Step F-3: Conclusion for This Hypothesis
 
 Provide a single hypothesis assessment conclusion (no cross-hypothesis comparison; that is the work of subsequent steps):
@@ -227,6 +229,11 @@ Step F-3: Conclusion for This Hypothesis
 - Support_evidence: ...
 - Concerns: (Main concerns)...
 - Suggested_redshift: ...
+- Key_lines_status:
+  Ca K_abs: matched at XXXX.X Å (z=X.XXX) / in range but NOT matched / not in obs range
+  Ca H_abs: ...
+  G-band_abs: ...
+  ... (must list all absorption lines within the observed range, no omission. NOT matched does not directly veto; judge in combination with the 4000 Å break whether it is algorithmic missed detection.)
 - Adopted_pairs: 
   line name → observed wavelength Å (z=...)
   ...

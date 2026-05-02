@@ -42,6 +42,9 @@ The spectral classification of ELGs (Emission-Line Galaxies) involves the follow
 ### R1 Judgment Priority (high → low)
 
 1. **Physical coherence**: Whether the line combination matches the typical characteristics of that object type (e.g., an ELG should have O [III] doublet with reasonable amplitude ratio, or if doublet is absent, narrow-line matches should be reasonable. An ELG should not have broad emission lines such as Lyα, C IV, Mg II).
+
+   **Mandatory Observable Narrow-Line Verification**: In Step F-b2 cross-validation and Step F-b3 final conclusion, you must, against each hypothesis's `Observable emission lines` list, state the matching status of all narrow emission lines (O [II], Hβ, O [III]a, O [III]b, Hα, etc.) that fall within the observed range, no omission. If determined as AGN composite, additionally state the status of AGN characteristic lines such as Mg II, C III], etc.
+
 2. **Missing emission lines**: If under a hypothesis, important lines (O [II], O [III] doublet, Hα, Hβ, etc.) are theoretically within the observed range but unmatched, the hypothesis should be questioned.
 3. **Number of width mismatches**: Fewer width mismatches are more credible, but a small number of intermediate matching broad/narrow does not constitute a veto basis.
 4. **Redshift warning**: Hypotheses with warnings have significantly reduced credibility, unless there is strong other supporting evidence.
@@ -116,6 +119,10 @@ Step F-b3: Final Conclusion
 - Physical_type: ... (Case 1 (Typical ELG) / Case 2 (Host galaxy-dominated AGN))
 - Suggested_redshift: ... (z value of the lowest-ionization state line, retain 3 decimal places)
 - Confidence: ... 
+- Key_lines_status:
+  O [II]: matched at XXXX.X Å (z=X.XXX) / in range but NOT matched / not in obs range
+  Hβ: ...
+  ... (must list all narrow emission lines within the observed range, no omission)
 - Adopted_pairs:
   line name → observed wavelength Å (z=...)
   ...
@@ -127,6 +134,8 @@ Step F-b3: Final Conclusion
 - Physical_type: ...
 - Suggested_redshift: ...
 - Confidence: ...
+- Key_lines_status:
+  ...
 - Adopted_pairs:
   line name → observed wavelength Å (z=...)
   ...

@@ -93,6 +93,14 @@ Missing absorption lines (in obs range but not matched):
 {% else %}
   (none)
 {% endif %}
+Observable absorption lines (all absorption lines within obs range at this redshift, with matching status):
+{% if match["Observable absorption lines"] %}
+{% for ol in match["Observable absorption lines"] %}
+  {{ ol }}
+{% endfor %}
+{% else %}
+  (none)
+{% endif %}
 Dn4000 (4000 Å break strength):
   Using z_max ({{ match.z_max }}) as true redshift:
     Dn4000 = {{ match["Dn4000"]["z_max_as_true_redshift"]["Dn4000"] }}  ({{ match["Dn4000"]["z_max_as_true_redshift"]["strength"] }})

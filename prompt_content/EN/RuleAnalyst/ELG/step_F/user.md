@@ -92,6 +92,14 @@ Missing emission lines (in obs range but not matched):
 {% else %}
   (none)
 {% endif %}
+Observable emission lines (all emission lines within obs range at this redshift, with matching status):
+{% if match["Observable emission lines"] %}
+{% for ol in match["Observable emission lines"] %}
+  {{ ol }}
+{% endfor %}
+{% else %}
+  (none)
+{% endif %}
 
 ---
 

@@ -153,9 +153,10 @@ class RuleAnalyst(BaseAgent):
         _is_elg = any(i['Category'] == 'ELG'     for i in prelim)
         _is_lrg = any(i['Category'] == 'LRG/BGS' for i in prelim)
 
-        # QSO/ELG 依赖 default 模式匹配结果；LRG/BGS 依赖 lrg_bgs 模式匹配结果
-        # 各自独立检查，无结果时写入占位信息并跳过对应分支
-        _has_qso_elg = bool(state.get('brute_force_matching_qso_elg'))
+        # QSO / ELG / LRG 各自独立检查对应的暴力匹配结果
+        # 无结果时写入占位信息并跳过对应分支
+        _has_qso = bool(state.get('brute_force_matching_qso'))
+        _has_elg = bool(state.get('brute_force_matching_elg'))
         _has_lrg_bgs = bool(state.get('brute_force_matching_lrg_bgs'))
 
         def _no_match_placeholder():
@@ -170,28 +171,28 @@ class RuleAnalyst(BaseAgent):
                 "wavelength-line constraints). Quantitative analysis skipped."
             )
 
-        if (_is_qso or _is_elg) and not _has_qso_elg:
-            if _is_qso:
-                state.setdefault('rule_analysis_QSO', {})['step_F'] = _no_match_placeholder()
-            if _is_elg:
-                state.setdefault('rule_analysis_ELG', {})['step_F'] = _no_match_placeholder()
+        if _is_qso and not _has_qso:
+            state.setdefault('rule_analysis_QSO', {})['step_F'] = _no_match_placeholder()
+
+        if _is_elg and not _has_elg:
+            state.setdefault('rule_analysis_ELG', {})['step_F'] = _no_match_placeholder()
 
         if _is_lrg and not _has_lrg_bgs:
             state.setdefault('rule_analysis_LRG', {})['step_F'] = _no_match_placeholder()
 
         # 若所有匹配均为空，无需继续
-        if not _has_qso_elg and not _has_lrg_bgs:
+        if not _has_qso and not _has_elg and not _has_lrg_bgs:
             return state
 
         peaks = state['peaks']
         troughs = state['troughs']
 
-        if _is_qso and _has_qso_elg:
+        if _is_qso and _has_qso:
             await self.QSO_step_F_pipeline(state, peaks, troughs)
             await self.QSO_generic_extract(state, source_step="step_F")
             self._writer.write_rule_analysis_qso(state)
 
-        if _is_elg and _has_qso_elg:
+        if _is_elg and _has_elg:
             await self.ELG_step_F_pipeline(state, peaks, troughs)
             await self.ELG_generic_extract(state, source_step="step_F")
             self._writer.write_rule_analysis_elg(state)
@@ -217,7 +218,7 @@ class RuleAnalyst(BaseAgent):
         - F_b runs serially after all summaries are collected.
         """
 
-        brute_force_matching = state.get('brute_force_matching_qso_elg', [])
+        brute_force_matching = state.get('brute_force_matching_qso', [])
         if not brute_force_matching:
             return state
 
@@ -281,7 +282,7 @@ class RuleAnalyst(BaseAgent):
         feature_description = state['qualitative_analysis']['lines']
         wl_left = state['spectrum']['new_wavelength'][0]
         wl_right = state['spectrum']['new_wavelength'][-1]
-        tol_wavelength = self.runtime.configs.params.tol_wavelength_qso_elg
+        tol_wavelength = self.runtime.configs.params.tol_wavelength_qso
         for i in state['preliminary_classification_monkey']:
             if i['Category'] == 'QSO':
                 preliminary_classification = i
@@ -352,11 +353,11 @@ class RuleAnalyst(BaseAgent):
         feature_description = state['qualitative_analysis']['lines']
         wl_left = state['spectrum']['new_wavelength'][0]
         wl_right = state['spectrum']['new_wavelength'][-1]
-        tol_wavelength = self.runtime.configs.params.tol_wavelength_qso_elg
+        tol_wavelength = self.runtime.configs.params.tol_wavelength_qso
         for i in state['preliminary_classification_monkey']:
             if i['Category'] == 'QSO':
                 preliminary_classification = i
-        brute_force_matching = state.get('brute_force_matching_qso_elg', [])
+        brute_force_matching = state.get('brute_force_matching_qso', [])
 
         system_prompt, user_prompt = self.runtime.prompt_manager.load(
             state=state,
@@ -433,7 +434,7 @@ class RuleAnalyst(BaseAgent):
         - F_b runs serially after all summaries are collected.
         """
 
-        brute_force_matching = state.get('brute_force_matching_qso_elg', [])
+        brute_force_matching = state.get('brute_force_matching_elg', [])
         if not brute_force_matching:
             return state
 
@@ -497,7 +498,7 @@ class RuleAnalyst(BaseAgent):
         feature_description = state['qualitative_analysis']['lines']
         wl_left = state['spectrum']['new_wavelength'][0]
         wl_right = state['spectrum']['new_wavelength'][-1]
-        tol_wavelength = self.runtime.configs.params.tol_wavelength_qso_elg
+        tol_wavelength = self.runtime.configs.params.tol_wavelength_galaxy
         for i in state['preliminary_classification_monkey']:
             if i['Category'] == 'ELG':
                 preliminary_classification = i
@@ -568,11 +569,11 @@ class RuleAnalyst(BaseAgent):
         feature_description = state['qualitative_analysis']['lines']
         wl_left = state['spectrum']['new_wavelength'][0]
         wl_right = state['spectrum']['new_wavelength'][-1]
-        tol_wavelength = self.runtime.configs.params.tol_wavelength_qso_elg
+        tol_wavelength = self.runtime.configs.params.tol_wavelength_galaxy
         for i in state['preliminary_classification_monkey']:
             if i['Category'] == 'ELG':
                 preliminary_classification = i
-        brute_force_matching = state.get('brute_force_matching_qso_elg', [])
+        brute_force_matching = state.get('brute_force_matching_elg', [])
 
         system_prompt, user_prompt = self.runtime.prompt_manager.load(
             state=state,
@@ -705,7 +706,7 @@ class RuleAnalyst(BaseAgent):
         feature_description = state['qualitative_analysis']['lines']
         wl_left = state['spectrum']['new_wavelength'][0]
         wl_right = state['spectrum']['new_wavelength'][-1]
-        tol_wavelength = self.runtime.configs.params.tol_wavelength_lrg_bgs
+        tol_wavelength = self.runtime.configs.params.tol_wavelength_galaxy
         for i in state['preliminary_classification_monkey']:
             if i['Category'] == 'LRG/BGS':
                 preliminary_classification = i
@@ -775,7 +776,7 @@ class RuleAnalyst(BaseAgent):
         feature_description = state['qualitative_analysis']['lines']
         wl_left = state['spectrum']['new_wavelength'][0]
         wl_right = state['spectrum']['new_wavelength'][-1]
-        tol_wavelength = self.runtime.configs.params.tol_wavelength_lrg_bgs
+        tol_wavelength = self.runtime.configs.params.tol_wavelength_galaxy
         for i in state['preliminary_classification_monkey']:
             if i['Category'] == 'LRG/BGS':
                 preliminary_classification = i

@@ -1367,7 +1367,7 @@ def _compute_dn4000(obs_wavelength, obs_flux, z):
 def brute_force_line_matching(state, tol_wavelength=None,
                               min_qso_redshift=float('-inf'),
                               min_galaxy_redshift=float('-inf'),
-                              mode='qso_elg'):
+                              mode='qso'):
     """
     暴力破解：对每个峰假设其为某条发射线，计算红移，
     再用该红移预测所有其他谱线位置，匹配峰列表和谷列表。
@@ -1379,12 +1379,16 @@ def brute_force_line_matching(state, tol_wavelength=None,
         必须包含 state['peaks'] 和 state['troughs']，
         每个元素需有 'wavelength' 键。
     tol_wavelength : float, optional
-        匹配容差 (Å)。若为 None 则使用
-        runtime.configs.params.tol_wavelength。
+        匹配容差 (Å)。若为 None 则默认为 10.0。
     min_qso_redshift : float, optional
         QSO 最小红移阈值，默认 -inf。
     min_galaxy_redshift : float, optional
         Galaxy 最小红移阈值，默认 -inf。
+    mode : str, optional
+        匹配模式，控制峰过滤和锚定线表选择：
+        - 'qso'      ：全部峰 + 全部发射线（默认）
+        - 'elg'      ：窄峰 + 全部发射线
+        - 'lrg_bgs'  ：窄峰 + 非broad发射线 + 谷锚定
 
     返回
     ----
@@ -1413,19 +1417,22 @@ def brute_force_line_matching(state, tol_wavelength=None,
     """
 
     if tol_wavelength is None:
-        try:
-            tol_wavelength = state.get('_runtime', {}).configs.params.tol_wavelength
-        except Exception:
-            tol_wavelength = 10.0
+        tol_wavelength = 10.0
 
-    # ── mode 分支：lrg_bgs 模式下过滤宽峰，使用窄线专用锚定表 ──
-    # lrg_bgs：LRG/BGS 光谱中连续谱伪峰多为宽峰，排除后仅用窄线/both类谱线锚定
+    # ── mode 分支：控制峰过滤和锚定线表选择 ──
+    # qso      ：全部峰 + 全部发射线（BLR 宽线 + NLR 窄线均可）
+    # elg      ：窄峰 + 全部发射线（ELG 窄发射线，排除连续谱伪宽峰）
+    # lrg_bgs  ：窄峰 + 非broad发射线 + 谷锚定（LRG/BGS 吸收线为主）
     if mode == 'lrg_bgs':
         # active_peaks = [p for p in state['peaks'] if p.get('width_class') != 'broad']
         active_peaks = [p for p in state['peaks'] if p.get('width_class') == 'narrow']
         active_anchor_lines = LRG_ANCHOR_EMISSION_LINES
         active_emission_lines = LRG_ANCHOR_EMISSION_LINES
-    else:
+    elif mode == 'elg':
+        active_peaks = [p for p in state['peaks'] if p.get('width_class') == 'narrow']
+        active_anchor_lines = ANCHOR_EMISSION_LINES
+        active_emission_lines = EMISSION_LINES
+    else:  # mode == 'qso'（默认）
         active_peaks = state['peaks']
         active_anchor_lines = ANCHOR_EMISSION_LINES
         active_emission_lines = EMISSION_LINES
@@ -1714,7 +1721,7 @@ def brute_force_line_matching(state, tol_wavelength=None,
         redshift_warning = f"z too low for {' and '.join(low_z_parts)}" if low_z_parts else None
 
         # ── Missing Emission / Absorption Lines ──────────────────────
-        # default 模式：报缺失发射线（QSO/ELG 诊断）
+        # qso / elg 模式：报缺失发射线（QSO/ELG 诊断）
         # lrg_bgs 模式：报缺失吸收线（LRG/BGS 主要诊断依据为吸收线）
         # 逻辑相同：用 z_min / z_max 计算理论观测波长，判断是否落在观测范围内但未被匹配
         if mode == 'lrg_bgs':
@@ -1741,10 +1748,10 @@ def brute_force_line_matching(state, tol_wavelength=None,
                             f"~{wl_in:.3f} Å obs [possibly in range]"
                         )
         else:
-            # default 模式：报缺失发射线
+            # qso / elg 模式：报缺失发射线
             matched_em_names = {lname for _, lname, _ in emission_nodes}
             missing_emission = []
-            missing_absorption = []   # default 模式不报缺失吸收线
+            missing_absorption = []   # qso / elg 模式不报缺失吸收线
             if obs_wl_min is not None:
                 for ename, erest in active_emission_lines.items():
                     if ename in matched_em_names:
@@ -1765,6 +1772,64 @@ def brute_force_line_matching(state, tol_wavelength=None,
                             f"~{wl_in:.3f} Å obs [possibly in range]"
                         )
 
+        # ── Observable Lines (all lines within obs range with matching status) ──
+        # QSO/ELG: all emission lines; LRG/BGS: all absorption lines
+        # 供 LLM 在 Step F-a / F-b 中结构化核验关键诊断谱线，避免遗漏
+        observable_emission = []
+        observable_absorption = []
+
+        if obs_wl_min is not None:
+            if mode != 'lrg_bgs':
+                # QSO / ELG：列出所有落在观测范围内的发射线及其匹配状态
+                matched_em_map = defaultdict(list)
+                for wl, ln, _ in emission_nodes:
+                    matched_em_map[ln].append(wl)
+                for lname, lrest in active_emission_lines.items():
+                    wl_zmin = lrest * (1.0 + z_min)
+                    wl_zmax = lrest * (1.0 + z_max)
+                    in_range_zmin = obs_wl_min <= wl_zmin <= obs_wl_max
+                    in_range_zmax = obs_wl_min <= wl_zmax <= obs_wl_max
+                    if not (in_range_zmin or in_range_zmax):
+                        continue
+                    if in_range_zmin and in_range_zmax:
+                        obs_range = f"{wl_zmin:.3f}–{wl_zmax:.3f}"
+                    else:
+                        wl_in = wl_zmin if in_range_zmin else wl_zmax
+                        obs_range = f"~{wl_in:.3f}"
+                    if lname in matched_em_map:
+                        wl_str = ", ".join(f"{w:.3f}" for w in sorted(matched_em_map[lname]))
+                        status = f"matched at {wl_str} Å"
+                    else:
+                        status = "NOT matched"
+                    observable_emission.append(
+                        f"{lname} ({lrest:.1f} Å rest) → {obs_range} Å obs [{status}]"
+                    )
+            else:
+                # LRG/BGS：列出所有落在观测范围内的吸收线及其匹配状态
+                matched_ab_map = defaultdict(list)
+                for wl, ln, _ in absorption_nodes:
+                    matched_ab_map[ln].append(wl)
+                for aname, arest in ABSORPTION_LINES.items():
+                    wl_zmin = arest * (1.0 + z_min)
+                    wl_zmax = arest * (1.0 + z_max)
+                    in_range_zmin = obs_wl_min <= wl_zmin <= obs_wl_max
+                    in_range_zmax = obs_wl_min <= wl_zmax <= obs_wl_max
+                    if not (in_range_zmin or in_range_zmax):
+                        continue
+                    if in_range_zmin and in_range_zmax:
+                        obs_range = f"{wl_zmin:.3f}–{wl_zmax:.3f}"
+                    else:
+                        wl_in = wl_zmin if in_range_zmin else wl_zmax
+                        obs_range = f"~{wl_in:.3f}"
+                    if aname in matched_ab_map:
+                        wl_str = ", ".join(f"{w:.3f}" for w in sorted(matched_ab_map[aname]))
+                        status = f"matched at {wl_str} Å"
+                    else:
+                        status = "NOT matched"
+                    observable_absorption.append(
+                        f"{aname} ({arest:.1f} Å rest) → {obs_range} Å obs [{status}]"
+                    )
+
         # ── D_n(4000) 4000Å Break 指标 ────────────────────────────
         # 分别用 z_max 和 z_min 将观测系光谱转换到静止系计算
         _obs_wl   = state['spectrum']['new_wavelength']
@@ -1784,6 +1849,8 @@ def brute_force_line_matching(state, tol_wavelength=None,
             "Redshift warning": redshift_warning,
             "Missing emission lines": missing_emission,
             "Missing absorption lines": missing_absorption,
+            "Observable emission lines": observable_emission,
+            "Observable absorption lines": observable_absorption,
             "Dn4000": {
                 "z_max_as_true_redshift": dn4000_at_zmax,
                 "z_min_as_true_redshift": dn4000_at_zmin,

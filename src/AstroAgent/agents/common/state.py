@@ -58,7 +58,8 @@ class SpectroState(MessagesState):
     # cleaned_peaks: Optional[List[Dict[str, float]]] = None
     # wiped_peaks: Optional[List[Dict[str, float]]] = None
     # cleaned_troughs: Optional[List[Dict[str, float]]] = None
-    brute_force_matching_qso_elg: Optional[List[Dict[str, Any]]] = None
+    brute_force_matching_qso: Optional[List[Dict[str, Any]]] = None
+    brute_force_matching_elg: Optional[List[Dict[str, Any]]] = None
     brute_force_matching_lrg_bgs: Optional[List[Dict[str, Any]]] = None
     absorption_records: Optional[List[Dict[str, Any]]] = None
     emission_records: Optional[List[Dict[str, Any]]] = None

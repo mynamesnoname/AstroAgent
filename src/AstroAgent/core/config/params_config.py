@@ -14,8 +14,8 @@ class ParamsConfig(BaseModel):
     arm_name: Optional[List[str]]
     arm_wavelength_range: Optional[List[List[float]]]
     ocr: str
-    tol_wavelength_qso_elg: int
-    tol_wavelength_lrg_bgs: int
+    tol_wavelength_qso: int
+    tol_wavelength_galaxy: int
     num_peaks: int
     num_troughs: int
     min_qso_redshift: float
@@ -67,8 +67,8 @@ class ParamsConfig(BaseModel):
             arm_name=arm_name,
             arm_wavelength_range=arm_wavelength_range,
             ocr=os.getenv("OCR") or "paddle",
-            tol_wavelength_qso_elg=getenv_int("TOL_WAVELENGTH_QSO_ELG", 100),
-            tol_wavelength_lrg_bgs=getenv_int("TOL_WAVELENGTH_LRG_BGS", 30),            
+            tol_wavelength_qso=getenv_int("TOL_WAVELENGTH_QSO", 100),
+            tol_wavelength_galaxy=getenv_int("TOL_WAVELENGTH_GALAXY", 30),            
             num_peaks=getenv_int("PEAKS_NUMBER", 10),
             num_troughs=getenv_int("TROUGHS_NUMBER", 15),
             min_qso_redshift=getenv_optional_float("MIN_QSO_REDSHIFT") or float('-inf'),

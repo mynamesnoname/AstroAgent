@@ -44,6 +44,11 @@ QSO 的光谱分类涉及以下两种主要情况：
 ### R1 评判优先级（高 → 低）
 
 1. **物理连贯性**：谱线组合是否符合该天体类型的典型特征（如典型 QSO 不应缺失所有 BLR 宽线；**宿主星系主导 AGN 必须存在至少一条典型的 AGN 发射线特征**，如 Ne [V]、C [III]、Mg II；最可靠的红移锚点为 O [III] 双线，此外不存在 O [III] 双线但窄线匹配合理亦可）。
+
+   **关键诊断谱线的强制核验**：在 Step F-b2 逐一对比和 Step F-b3 最终裁决中，必须对照每个假设的 `Observable emission lines` 列表，逐条核验以下关键谱线的匹配状态，不得省略：
+   - 若该假设判定为**典型 QSO**：Lyα（1216 Å）、C IV（1549 Å）、C III]（1909 Å）、Mg II（2800 Å）
+   - 若该假设判定为**宿主星系主导 AGN**：Ne [V]（3426 Å）、C III]（1909 Å）、Mg II（2800 Å）、O [III] 双线（4960/5008 Å）
+   
 2. **Missing emission lines**：若某假设下，重要谱线（Lyα、C IV、Mg II、O [III] 双线等）理论上在观测范围内却未被匹配，需质疑该假设。
 3. **width mismatch 数量**：width mismatch 越少越可信，但少量 intermediate 匹配 broad/narrow 不构成否决依据。
 4. **Redshift warning**：有警告的假设可信度显著降低，除非有强烈的其他支持证据。
@@ -118,6 +123,10 @@ Step F-b3: 最终裁决
 - Physical_type: ...
 - Suggested_redshift: ...（最低电离态谱线的 z 值，保留 3 位小数）
 - Confidence: ...
+- Key_lines_status:
+  Lyα: matched at XXXX.X Å (z=X.XXX) / in range but NOT matched / not in obs range
+  C IV: ...
+  ...（必须逐条列出该物理类型对应的关键诊断谱线，不得省略）
 - Adopted_pairs:
   谱线名 → 观测波长 Å (z=...)
   ...
@@ -129,6 +138,8 @@ Step F-b3: 最终裁决
 - Physical_type: ...
 - Suggested_redshift: ...
 - Confidence: ...
+- Key_lines_status:
+  ...
 - Adopted_pairs:
   谱线名 → 观测波长 Å (z=...)
   ...

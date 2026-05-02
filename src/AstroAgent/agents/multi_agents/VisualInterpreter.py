@@ -571,18 +571,26 @@ class VisualInterpreter(BaseAgent):
             
             plot_features(state)
 
-            tol_wavelength_qso_elg = self.runtime.configs.params.tol_wavelength_qso_elg
-            brute_force_matching_qso_elg = brute_force_line_matching(
-                state, tol_wavelength_qso_elg,
+            tol_wavelength_qso = self.runtime.configs.params.tol_wavelength_qso
+            brute_force_matching_qso = brute_force_line_matching(
+                state, tol_wavelength_qso,
                 min_qso_redshift=self.runtime.configs.params.min_qso_redshift,
                 min_galaxy_redshift=self.runtime.configs.params.min_galaxy_redshift,
-                mode='qso_elg'
+                mode='qso'
             )
-            state['brute_force_matching_qso_elg'] = brute_force_matching_qso_elg
+            state['brute_force_matching_qso'] = brute_force_matching_qso
 
-            tol_wavelength_lrg_bgs = self.runtime.configs.params.tol_wavelength_lrg_bgs
+            tol_wavelength_galaxy = self.runtime.configs.params.tol_wavelength_galaxy
+            brute_force_matching_elg = brute_force_line_matching(
+                state, tol_wavelength_galaxy,
+                min_qso_redshift=self.runtime.configs.params.min_qso_redshift,
+                min_galaxy_redshift=self.runtime.configs.params.min_galaxy_redshift,
+                mode='elg'
+            )
+            state['brute_force_matching_elg'] = brute_force_matching_elg
+
             brute_force_matching_lrg_bgs = brute_force_line_matching(
-                state, tol_wavelength_lrg_bgs,
+                state, tol_wavelength_galaxy,
                 min_qso_redshift=self.runtime.configs.params.min_qso_redshift,
                 min_galaxy_redshift=self.runtime.configs.params.min_galaxy_redshift,
                 mode='lrg_bgs'

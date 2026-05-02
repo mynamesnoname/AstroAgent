@@ -57,6 +57,9 @@ LRG（亮红星系）和 BGS（亮星系样本）的光谱特征来自其以老�
 ### R1 评判优先级（高 → 低）
 
 1. **物理连贯性**：谱线组合是否符合该天体类型的典型特征（如应存在较多吸收线，尤其是 Ca K/Ca H 双线等，以及 4000 Å break）。
+
+   **可观测吸收线的强制核验**：在 Step F-b2 交叉验证和 Step F-b3 最终结论中，必须对照每个假设的 `Observable absorption lines` 列表，逐条说明所有落在观测范围内的吸收线的匹配状态，不得省略。**算法局限提示**：当前寻峰/寻谷算法能力有限，Ca K（3935 Å）、Ca H（3970 Å）等重要吸收线可能未被检出，NOT matched 不直接否决假设，需结合 4000 Å break 强度综合判断。
+
 2. **Missing absorption lines**：若某假设下，重要谱线（如 Ca K/Ca H 等）理论上在观测范围内却未被匹配，需质疑该假设。但仍需考虑寻谷算法的局限性，尤其是出现 strong 或 moderate 的 4000 Å break，同时其他吸收线匹配合理，但未匹配到 Ca K 和 Ca H 吸收线的情况，更能证实是算法漏检对应的吸收线。
 3. **width mismatch 数量**：width mismatch 越少越可信，但少量 intermediate 匹配 broad/narrow 不构成否决依据。
 4. **Redshift warning**：有警告的假设可信度显著降低，除非有强烈的其他支持证据。
@@ -132,6 +135,10 @@ Step F-b3: 最终结论
 - Physical_type: ...'典型 LRG/BGS' / '其他'
 - Suggested_redshift: ...（优先选择最低电离态谱线对应的红移。保留 3 位小数）
 - Confidence: ...
+- Key_lines_status:
+  Ca K_abs: matched at XXXX.X Å (z=X.XXX) / in range but NOT matched / not in obs range
+  Ca H_abs: ...
+  ...（必须逐条列出所有在观测范围内的吸收线状态，不得省略。NOT matched 不直接否决，需结合 4000 Å break 判断是否为算法漏检。）
 - Adopted_pairs:
   谱线名 → 观测波长 Å (z=...)
   ...
@@ -143,6 +150,8 @@ Step F-b3: 最终结论
 - Physical_type: ...
 - Suggested_redshift: ...
 - Confidence: ... | Rationale: ...
+- Key_lines_status:
+  ...
 - Adopted_pairs:
   谱线名 → 观测波长 Å (z=...)
   ...

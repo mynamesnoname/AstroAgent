@@ -204,6 +204,8 @@ Reference_line: 谱线名（λ_rest Å）
 - Suggested_redshift: z ± σ_z（各保留 3 位小数；参见 R0）
 - Reference_line: 谱线名（λ_rest Å）
 - Confidence: high | medium | low
+- Key_lines_status:
+  ...（根据 Source_path 列出对应类型的关键谱线状态，不得省略。QSO：Lyα/C IV/C III]/Mg II 或 Ne[V]/C III]/Mg II/O[III]双线；ELG：O[II]/Hβ/O[III]a/O[III]b/Hα 等窄线；LRG/BGS：Ca K_abs/Ca H_abs/G-band_abs 等吸收线。NOT matched 不直接否决，需结合其他证据综合判断。）
 - Adopted_pairs:
   谱线名 → 观测波长 Å (z=...)
   ...

@@ -202,6 +202,17 @@ Based on Step F-1, conduct physical semantic verification:
     - In the Mg II region, a broad emission line may be superimposed on the host galaxy's narrow absorption line; the peak/trough-finding algorithm may identify this as a single broad line with a superimposed narrow absorption line, or misidentify it as two close broad lines, or overfit leading to spurious broad lines. If Mg II is present, is it consistent with these phenomena?
 3. Comprehensive consideration: Are the peaks/troughs with top Amplitude rank in the original peak/trough-finding results reasonably explained in the current hypothesis? If there are prominent peaks unmatched, does it mean the hypothesis is invalid?
 
+4. **Key Diagnostic Lines Verification**: Against the input `Observable emission lines` list, and based on the physical type determined for this hypothesis, verify the status of the following key diagnostic lines one by one (must list all, no omission):
+
+    If determined as **Case 1 (Typical QSO)**, must verify:
+    - Lyα (1216 Å), C IV (1549 Å), C III] (1909 Å), Mg II (2800 Å)
+    
+    If determined as **Case 2 (Host galaxy-dominated AGN)**, must verify:
+    - Ne [V] (3426 Å), C III] (1909 Å), Mg II (2800 Å), O [III]a (4960 Å), O [III]b (5008 Å)
+    
+    For each key line, state: matched (with observed wavelength and z value) / in obs range but NOT matched / not in obs range.
+    If a key line is not in the `Observable emission lines` list, it means its redshifted position falls outside the observed range; mark as "not in obs range".
+
 ### Step F-3: Conclusion for This Hypothesis
 
 Provide a single hypothesis assessment conclusion (no cross-hypothesis comparison; that is the work of subsequent steps):
@@ -237,6 +248,10 @@ Step F-3: Conclusion for This Hypothesis
 - Support_evidence: ...
 - Concerns: (Main concerns)...
 - Suggested_redshift: ...
+- Key_lines_status:
+  Lyα: matched at XXXX.X Å (z=X.XXX) / in range but NOT matched / not in obs range
+  C IV: ...
+  ... (must list all key diagnostic lines for the physical type, no omission)
 - Adopted_pairs: 
   line name → observed wavelength Å (z=...)
   ...
