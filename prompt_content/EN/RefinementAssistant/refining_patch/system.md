@@ -48,7 +48,7 @@ Typical characteristics of ELG (Emission-Line Galaxy) spectra:
 ### Case 1: Typical ELG
 
 * **Continuum Morphology**: Overall relatively flat, without a prominent power-law blue tilt, and usually without a strong continuum slope.
-* **Emission-Line Features**: Dominated by narrow emission lines (O[II]3727, Hβ, O[III]4959/5007, Hα, etc.).
+* **Emission-Line Features**: Narrow emission lines (O[II]3727, Hβ, O[III]4959/5007, Hα, etc.). No broad emission lines.
 
 ---
 
