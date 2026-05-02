@@ -22,7 +22,8 @@ Your tasks are:
 - Do not introduce any new hypothesis or new line pairing not present in the above materials
 - All numerical values retain 3 decimal places
 - If the output of a certain stage is empty or missing, note "No data for this stage", do not fabricate content
-- Only improve the verdict result, do not change the basis of the final conclusion (object type, redshift, etc.)
+- **The hypothesis ranking (1st/2nd) in the verdict is the optimal judgment after weighing all evidence. Do not promote the 2nd to 1st just because the critique only targets the 1st and the 2nd appears "cleaner".** By design, the critique scrutinizes the top hypothesis — the 2nd not being criticized merely means it was not examined in detail, not that it is more credible than the 1st. Your job is to supplement and refine within the verdict's ranking framework (e.g., elaborate evidence, adjust wording), not to re-rank.
+- Do not overturn the verdict's core judgments (hypothesis ranking, object type, redshift, etc.)
 
 ---
 
@@ -160,7 +161,7 @@ List the title and validity judgment (valid / not valid) of each doubt in the cr
 
 **4.3 Revised Conclusion (refining_patch)**
 
-Fully present the revised adjudication conclusion (from the "Revised Adjudication Conclusion" section of patched_verdict). Base it on the verdict conclusion and supplement accordingly. The format is:
+Fully present the revised adjudication conclusion (from the "Revised Adjudication Conclusion" section of patched_verdict). The revisions only address specific issues raised in the critique (e.g., adding explanations, correcting wording, adjusting Confidence phrasing); do not change the hypothesis ranking, object type, or redshift. The format is:
 
 - Source_path: ...
 - Physical_type: ...

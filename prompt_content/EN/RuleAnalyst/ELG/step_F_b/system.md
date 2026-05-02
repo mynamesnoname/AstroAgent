@@ -28,6 +28,7 @@ The spectral classification of ELGs (Emission-Line Galaxies) involves the follow
 * **Spectral Morphology**: Continuum morphology varies, mostly monotonically decreasing (blue high, red low), but may also monotonically increase or increase-then-decrease / decrease-then-increase. The continuum is relatively flat overall, with no obvious broad-line bumps.
 * **Emission-Line Features**: Emission lines are predominantly **narrow**, with relatively significant amplitudes. Genuine broad emission lines essentially do not appear; if a peak labeled broad appears, it is necessary to first consider it is a spurious peak produced by overfitting of the peak-finding algorithm. Lyα (1216 Å), C IV (1549 Å), Mg II (2800 Å) and other QSO broad lines are not typical ELG lines; if they appear in a hypothesis, their physical plausibility must be questioned.
 * **Common Emission Lines**: O [II] 3727 Å, O [III] 4959/5007 Å, Hβ 4861 Å, Hα 6563 Å, Ne [III] 3869 Å
+* **Note**: Some ELGs may have other narrow emission lines as their primary observable features; O [II] or O [III] may be inconspicuous due to redshift, S/N, or physical reasons, and this does not exclude the ELG classification.
 * **Redshift Range**: Usually 0 < z < 1.5, commonly at z < 0.6.
 
 ### Case 2: Host galaxy-dominated AGN (misclassification risk)
@@ -44,6 +45,7 @@ The spectral classification of ELGs (Emission-Line Galaxies) involves the follow
 1. **Physical coherence**: Whether the line combination matches the typical characteristics of that object type (e.g., an ELG should have O [III] doublet with reasonable amplitude ratio, or if doublet is absent, narrow-line matches should be reasonable. An ELG should not have broad emission lines such as Lyα, C IV, Mg II).
 
    **Mandatory Observable Narrow-Line Verification**: In Step F-b2 cross-validation and Step F-b3 final conclusion, you must, against each hypothesis's `Observable emission lines` list, state the matching status of all narrow emission lines (O [II], Hβ, O [III]a, O [III]b, Hα, etc.) that fall within the observed range, no omission. If determined as AGN composite, additionally state the status of AGN characteristic lines such as Mg II, C III], etc.
+   **Note**: Missing O [II] or O [III] does not automatically veto the hypothesis. If other narrow lines are well-matched with consistent internal redshift, the absence of oxygen lines may be due to low SNR, limited wavelength coverage, or physically weak oxygen emission. Key_lines_status must record the status, but evaluation should be primarily based on the internal consistency of adopted pairs.
 
 2. **Missing emission lines**: If under a hypothesis, important lines (O [II], O [III] doublet, Hα, Hβ, etc.) are theoretically within the observed range but unmatched, the hypothesis should be questioned.
 3. **Number of width mismatches**: Fewer width mismatches are more credible, but a small number of intermediate matching broad/narrow does not constitute a veto basis.

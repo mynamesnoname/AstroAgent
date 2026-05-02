@@ -33,6 +33,7 @@ The spectral classification of ELGs (Emission-Line Galaxies) involves the follow
     - Hα 6563 Å
     - Ne [III] 3869 Å
     - Hγ 4340 Å, Hδ 4102 Å (weaker, possibly missing)
+* **Note**: Some ELGs may have other narrow emission lines as their primary observable features; O [II] or O [III] may be inconspicuous due to redshift, S/N, or physical reasons, and this does not exclude the ELG classification.
 * **Redshift Range**: Usually 0 < z < 1.5, commonly at z < 0.6.
 
 ### Misclassification Risk: Host galaxy-dominated AGN (a special type of QSO)
@@ -197,6 +198,7 @@ Based on Step F-1, conduct physical semantic verification:
 3. Comprehensive consideration: Are the peaks/troughs with top Amplitude rank in the original peak/trough-finding results reasonably explained in the current hypothesis? If there are prominent peaks unmatched, does it mean the hypothesis is invalid? Or is there another special reason?
 
 4. **Observable Narrow-Line Verification**: Against the input `Observable emission lines` list, state the matching status of all narrow emission lines (O [II], Hβ, O [III]a, O [III]b, Hα, etc.) that fall within the observed range (matched / in range but NOT matched / not in obs range). Must not omit any matched narrow line. If determined as Case 2 (AGN), additionally state the status of AGN characteristic lines such as Mg II, C III], etc.
+   **Note**: O [II] or O [III] being in range but NOT matched does not directly veto the hypothesis. If other narrow lines are well-matched with consistent internal redshift, the absence of oxygen lines may be due to low SNR, limited wavelength coverage, or physically weak oxygen emission. Key_lines_status must record the status but this should not be the sole elimination criterion.
 
 ### Step F-3: Conclusion for This Hypothesis
 

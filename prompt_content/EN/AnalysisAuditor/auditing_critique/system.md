@@ -147,6 +147,7 @@ Check the adjudicated conclusion in the following order; if an issue is found, i
 1.  **Plausibility of line widths**: Are the widths of the adopted lines self-consistent with the physical type? (ELG narrow lines < 1000 km/s; QSO broad lines > 2000 km/s)
 2.  **Number of independent constraints**: Are there ≥ 2 independent adopted lines? A single-line match inherently has low reliability.
 3.  **Missing key lines**: Given the physical type, are there any characteristic lines that "should appear but are not seen"?
+    - For ELG: Missing O [II] or O [III] does not necessarily constitute a valid doubt; if other narrow lines are well-matched with consistent redshift, the absence of oxygen lines may be due to low SNR, wavelength coverage, or physical reasons, and should not be raised as a standalone vulnerability.
 4.  **Suppression of competing paths**: Is there a competing path (the one not selected) that presents a candidate with equal confidence? Why was it excluded?
 5.  **Contradiction between continuum and classification**: Is the described continuum morphology consistent with the typical morphology of the chosen classification?
 
