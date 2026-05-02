@@ -35,10 +35,9 @@ The spectral classification of QSOs involves the following two main cases:
 * **Spectral Morphology**: The continuum is dominated by the host galaxy, and the appearance may resemble ELGs, LRGs, or BGS. The key identifying criterion is the presence of AGN-characteristic emission lines, not the continuum morphology.
 * **Emission-Line Features**: Contains strong AGN-characteristic emission lines:
     - Ne [V] (3426 Å) — strong AGN indicator
-    - O [III] (4959 Å and 5007 Å) — common narrow-line region doublet
     - C III] (1909 Å)
-    - O [II] (3727 Å)
     - Mg II (2800 Å) — may appear as a broad emission line superimposed on the host galaxy's narrow absorption lines
+    - Also may contains galaxy emisssion lines such as O [III] doublets, O [II], Balmer series, etc.
 * **Spectral Complexity**: Broad emission lines superimposed with narrow absorption lines, especially in the Mg II region where a broad emission line is superimposed on the host galaxy's narrow absorption lines; the peak/trough-finding algorithm may identify this as a single broad line with a superimposed narrow absorption line, or misidentify it as two close broad lines, or overfit leading to spurious broad lines.
 
 ---
@@ -113,8 +112,8 @@ In the peak/trough-finding algorithm:
 ### R2: Host Galaxy-Dominated AGN Analysis Notes
 
 1. **Continuum unreliable**: The continuum morphology cannot be used as an absolute criterion; one must rely on AGN-characteristic emission lines.
-2. **O [III] doublet is the preferred anchoring feature**: The doublet structure (amplitude ratio approx 1:3, wavelength_1 < wavelength_2) is the most reliable redshift anchor.
-3. **Ne [V] is a strong AGN indicator**: Non-AGN objects almost never show this line; when matched, the AGN hypothesis should be given high importance.
+2. **Ne [V], Mg II, C III] are strong AGN indicators**: Non-AGN objects almost never show any of these lines; when one of them matched, the AGN hypothesis should be given high importance.
+3. **O [III] doublet is the preferred anchoring feature**: The doublet structure (amplitude ratio approx 1:3, wavelength_1 < wavelength_2) is the most reliable redshift anchor.
 4. **Strong Balmer series lines** (Hα/Hβ/Hγ/Hδ) may be present, and attention should be paid to their potential impact on line matching.
 5. **The Mg II region requires careful interpretation**: The superposition of AGN broad Mg II + host galaxy narrow Mg II absorption can lead to overfitting; special care must be taken to avoid misidentification.
 6. **Redshift Range**: Such QSO redshifts are typically between 0 and 1; if the result is particularly close to 0 (e.g., on the order of 0.01), the hypothesis may be invalid.
@@ -188,6 +187,7 @@ Based on Step F-1, conduct physical semantic verification:
         wavelength_2 has an amplitude significantly lower than wavelength_4's Mg II, but other matches wavelength_1 and wavelength_3 satisfy the condition; this is acceptable, and indicates that wavelength_1 and wavelength_3 are better matches for C IV.
     - Are there alternatives for width mismatches?
 2. If closer to Case 2 (Host galaxy-dominated AGN):
+    - Does the hypothesis contain the typical AGN lines (Ne [V], Mg II, C III])?
     - Does the hypothesis contain the O [III] doublet? If so, is the wavelength ratio close to Amplitude_a:Amplitude_b ≈ 1:3 (wavelength_a = 4960.3 Å, wavelength_b = 5008.2 Å), or at least is the former slightly lower than the latter?
     - In the spectrum, the O [III] doublet often overlaps with Hβ; the corresponding line matching may be complex; please patiently disentangle it. For example:
         - `wavelength_1 (...) → Hβ (...)`

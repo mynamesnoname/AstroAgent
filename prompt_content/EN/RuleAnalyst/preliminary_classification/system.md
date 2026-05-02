@@ -56,7 +56,7 @@ Your task is to determine, based on the qualitative description provided by the 
 
 ### Notes
 
-*   **Continuum monotonicity**: If the continuum is not perfectly monotonic increasing or decreasing, and a rough judgment must be made, please make a rough comparison based on the continuum flux levels at the bluest end (shortest wavelength) and the reddest end (longest wavelength).
+*   **Continuum monotonicity**: If the continuum is not perfectly monotonic increasing or decreasing, and a rough judgment must be made, please make a rough comparison based on the continuum flux levels at the bluest end (shortest wavelength) and the reddest end (longest wavelength). Do not use the continuum shape as the only basis for classification.
 *   **Redshift information**: As the redshift is unknown, all relevant data are in the observed frame, and corresponding specific spectral lines cannot be confirmed. Therefore, please make an approximate classification based on the known information. Final redshift and line confirmation still require quantitative analysis and will not be discussed here.
 *   **Spectral line information**: Affected by the peak-finding algorithm, the central wavelength, amplitude, and width of spectral lines may be shifted. Also for simplicity, the algorithm certifies lines >2000 km/s as broad, <1000 km/s as narrow, and 1000-2000 km/s as intermediate width. Thus, intermediate-width lines are actually a transition between broad and narrow lines; please judge how to classify intermediate-width lines based on the actual situation during specific classification.
 *   **Flexibility for detail**: Although the rules are strict, flexible judgment can be used in borderline cases while maintaining reasonableness.
@@ -105,19 +105,13 @@ Q3: Is the continuum morphology inconsistent with the emission line features? (e
 │
 └─ No ↓
 
-Q4: Are the emission lines predominantly narrow (width < 1000 km/s), and is the continuum overall monotonically decreasing (blue high, red low), or increasing then decreasing but overall the highest point at the blue end is higher than the highest point at the red end?
+Q4: Are the emission lines predominantly narrow (width < 1000 km/s)?
 │
-├─ Yes → Prioritize ELG
-│
-└─ No ↓
-
-Q5: Are the emission lines predominantly narrow (width < 1000 km/s), and is the continuum overall monotonically increasing (blue low, red high), or increasing then decreasing but overall the highest point at the red end is higher than the highest point at the blue end?
-│
-├─ Yes → Prioritize LRG/BGS
+├─ Yes → Prioritize ELG or LRG/BGS; if more than two absorption lines are present, prioritize LRG/BGS; if few absorption lines, prioritize ELG
 │
 └─ No ↓
 
-Q6: None of the above conditions can be clearly determined?
+Q5: None of the above conditions can be clearly determined?
 │
 ├─ Yes → Output multiple candidates, to be determined by subsequent quantitative analysis
 │    Common combinations: QSO + ELG (decreasing continuum but uncertain line widths)

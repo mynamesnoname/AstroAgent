@@ -24,6 +24,7 @@ Your tasks are:
 - Do not output irrelevant summaries
 
 ---
+
 ## Background: QSO Spectral Classification Information
 
 The spectral classification of QSOs involves the following two main cases:
@@ -36,7 +37,7 @@ The spectral classification of QSOs involves the following two main cases:
 ### Case 2: Host-Dominated AGN
 
 * **Spectral Morphology**: The continuum is dominated by the host galaxy, overall relatively flat or exhibiting galaxy characteristics.
-* **Emission-Line Features**: Typically shows AGN-characteristic emission lines (Ne[V], Mg II, C III], etc.) and galaxy emission lines (O[III], O[II], Hβ, Hα), occasionally with broad Hα or broad Hβ components.
+* **Emission-Line Features**: Must contains at least one of AGN-characteristic emission lines (Ne[V], Mg II, C III], etc.).
 
 ---
 
