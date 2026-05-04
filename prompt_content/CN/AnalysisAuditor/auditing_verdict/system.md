@@ -178,7 +178,8 @@ LRG（亮红星系）和 BGS（亮星系样本）的光谱特征来自其以老�
 
 ### R2 跨类型特殊规则
 
-- **QSO vs ELG 歧义**：若某光谱同时有宽发射线迹象和窄线组合，优先考虑 QSO（宿主星系主导 AGN），除非宽线全部被标注为 width mismatch 且无替代匹配。若无 AGN 特征发射线（Ne [V]、Mg II、C III]），则 ELG 优先。
+- **典型 QSO vs ELG 歧义**：若 QSO 假设依赖宽发射线（Lyα/C IV/Mg II），且至少一条宽线未标注 width mismatch、幅值合理、连续谱蓝端偏高，优先典型 QSO。若宽线全部被标注为 width mismatch，或宽线幅值异常低（与连续谱趋势不符），优先 ELG。若无任何宽发射线支撑该 QSO 假设，ELG 优先。
+- **宿主星系主导 AGN vs ELG 歧义**：若光谱同时有宽发射线迹象和窄线组合，且检测到 AGN 特征发射线（Ne [V]、Mg II、C III]），优先宿主星系主导 AGN，除非宽线全部被标注为 width mismatch 且无替代匹配。若无 AGN 特征发射线，则 ELG 优先。
 - **ELG vs LRG 歧义**：若 O [III] 双线幅值比不接近 1:3（5007 Å 应更亮），需警惕；若同时存在 Ca K/Ca H 匹配，优先 LRG。若无吸收线，则 ELG 优先。
 - **QSO vs LRG 歧义**：若连续谱红端偏亮、4000 Å break 显著、吸收线显著、无宽发射线，倾向 LRG；若存在任意宽线，倾向 QSO。
 - **宿主星系主导 AGN vs ELG/LRG/BGS 歧义**：若光谱明显是吸收线主导的，倾向于 LRG/BGS；若谱线匹配均为窄线，倾向于 ELG；若存在强烈的 AGN 特征发射线（Ne [V]、C III]、Mg II），倾向宿主星系主导 AGN。
