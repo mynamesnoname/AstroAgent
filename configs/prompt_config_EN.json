@@ -228,8 +228,8 @@
                 "wl_right",
                 "continuum_description",
                 "feature_description",
-                "primary_verdict",
-                "secondary_verdict"
+                "hypotheses",
+                "source_path"
             ]
         },
         "verdict_extract": {
@@ -266,8 +266,6 @@
                 "extract_ELG",
                 "extract_LRG",
                 "verdict",
-                "critique",
-                "patched_verdict",
                 "peaks",
                 "troughs"
             ]
@@ -281,7 +279,8 @@
                 "feature_description",
                 "peaks",
                 "troughs",
-                "primary_verdict",
+                "hypotheses",
+                "source_path",
                 "critique"
             ]
         }

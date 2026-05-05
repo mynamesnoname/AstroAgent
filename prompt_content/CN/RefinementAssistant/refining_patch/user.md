@@ -50,10 +50,12 @@ Neighbors: {{ t.left_neighbor }} | {{ t.right_neighbor }}
 
 ---
 
-## 待修补的裁决结论（第 1 位）
+## 待修补的分析路径：{{ source_path }}
+
+该路径下的定量分析假设如下：
 
 ```json
-{{ primary_verdict | tojson(indent=2) }}
+{{ hypotheses | tojson(indent=2) }}
 ```
 
 ---
@@ -64,4 +66,4 @@ Neighbors: {{ t.left_neighbor }} | {{ t.right_neighbor }}
 
 ---
 
-请先逐条回应上述质疑，再输出修订后的完整裁决结论。
+请根据上述质疑，直接输出修订后的假设列表 JSON 数组。

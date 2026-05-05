@@ -86,11 +86,19 @@ class SpectroState(MessagesState):
     extract_QSO: Optional[Dict[str, Any]] = field(default_factory=dict)
     extract_ELG: Optional[Dict[str, Any]] = field(default_factory=dict)
     extract_LRG: Optional[Dict[str, Any]] = field(default_factory=dict)
+    patched_extract_QSO: Optional[Dict[str, Any]] = field(default_factory=dict)  # After per-path critique+patch
+    patched_extract_ELG: Optional[Dict[str, Any]] = field(default_factory=dict)  # After per-path critique+patch
+    patched_extract_LRG: Optional[Dict[str, Any]] = field(default_factory=dict)  # After per-path critique+patch
+    critique_QSO: Optional[str] = None                    # Per-path critique result (QSO)
+    critique_ELG: Optional[str] = None                    # Per-path critique result (ELG)
+    critique_LRG: Optional[str] = None                    # Per-path critique result (LRG)
+    current_discussion_round: int = 0                     # Current critique+patch round counter
     verdict: Optional[str] = None                         # AnalysisAuditor auditing_verdict output
     verdict_extract: Optional[List[Dict[str, Any]]] = None  # AnalysisAuditor verdict_extract output
-    critique: Optional[str] = None                        # AnalysisAuditor auditing_critique output
-    patched_verdict: Optional[str] = None                 # RefinementAssistant refining_patch output
+    critique: Optional[str] = None                        # (legacy) kept for backward compat
+    patched_verdict: Optional[str] = None                 # (legacy) kept for backward compat
     final_report: Optional[str] = None                    # RefinementAssistant refining_final output
+    discussion_rounds: Optional[int] = None               # Number of critique+patch discussion rounds
     synthesis_QSO: Optional[str] = None
     rule_analysis_galaxy: Optional[List] = field(default_factory=list)
     # other Analysts

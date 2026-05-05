@@ -167,7 +167,7 @@ The following priority rules apply to the **cross-comparison of QSO/ELG/LRG**:
 3.  **Missing lines situation**: If important spectral lines theoretically fall within the observed range but are not matched, this should be questioned.
 4.  **Impact of width mismatch**: A broad peak matching a narrow line, or a narrow peak matching a broad line, should be questioned. However, an intermediate match does not constitute a veto.
 5.  **Redshift warning**: The credibility of a hypothesis with a warning is significantly reduced unless there is strong other supporting evidence.
-6.  **Degree of match between continuum morphology and classification**: Whether the overall trend of the continuum supports the physical picture of that type.
+6.  **Degree of match between continuum morphology and classification** (auxiliary reference only, NOT a primary criterion): Continuum morphology varies enormously by astrophysical state — QSO power-law spectra are completely different from host-dominated AGN galaxy spectra; ELG spectra are diverse (blue-high/red-low, monotonic increase, increase-then-decrease); LRG/BGS reddening levels vary — the overall continuum trend is for auxiliary reference only and must NOT be used as a basis for differentiation or rejection.
 
 **Notes**
 1.  **Lines not fully confirmed**: In the input analysis results for each type, `Adopted_pairs` indicates the finally adopted line pairings. In the `Hypothesis`, there may exist line pairings that have not been fully confirmed; these peaks may not have been fully adopted due to imperfections in the peak-finding algorithm leading to errors or overfitting, but can serve as supplements to `Adopted_pairs`. If some key lines are mentioned in the `Hypothesis`, they can still be used as supporting evidence.
@@ -177,10 +177,10 @@ The following priority rules apply to the **cross-comparison of QSO/ELG/LRG**:
 
 ### R2 Cross-Type Special Rules
 
-*   **Typical QSO vs ELG ambiguity**: If the QSO hypothesis relies on broad emission lines (Lyα/C IV/Mg II), and at least one broad line is not marked as width mismatch, with reasonable amplitude and a blue-tilted continuum, prioritize Typical QSO. If all broad lines are marked as width mismatch, or broad line amplitudes are abnormally low (inconsistent with the continuum trend), prioritize ELG. If no broad emission lines support the QSO hypothesis, ELG takes priority.
+*   **Typical QSO vs ELG ambiguity**: If the QSO hypothesis relies on broad emission lines (Lyα/C IV/Mg II), and at least one broad line is not marked as width mismatch, with reasonable amplitude, prioritize Typical QSO. If all broad lines are marked as width mismatch, or broad line amplitudes are abnormally low, prioritize ELG. If no broad emission lines support the QSO hypothesis, ELG takes priority.
 *   **Host galaxy-dominated AGN vs ELG ambiguity**: If a spectrum shows signs of both broad emission lines and a combination of narrow lines, and AGN characteristic emission lines (Ne [V], Mg II, C III]) are detected, prioritize host galaxy-dominated AGN, unless all broad lines are marked as width mismatch and there are no alternative matches. If no AGN characteristic emission lines are present, then ELG takes priority.
 *   **ELG vs LRG ambiguity**: If the O [III] doublet amplitude ratio is not close to 1:3 (5007 Å should be brighter), be cautious; if Ca K/Ca H matches are also present, prioritize LRG. If no absorption lines are present, then ELG takes priority.
-*   **QSO vs LRG ambiguity**: If the continuum is bright at the red end, the 4000 Å break is significant, absorption lines are significant, and there are no broad emission lines, favor LRG; if any broad lines are present, favor QSO.
+*   **QSO vs LRG ambiguity**: If the 4000 Å break is significant, absorption lines are significant, and there are no broad emission lines, favor LRG; if any broad lines are present, favor QSO.
 *   **Host galaxy-dominated AGN vs ELG/LRG/BGS ambiguity**: If the spectrum is clearly absorption-line-dominated, favor LRG/BGS; if all line matches are narrow, favor ELG; if strong characteristic AGN emission lines (Ne [V], C III], Mg II) are present, favor host galaxy-dominated AGN.
 
 ### R3 Elimination Mechanism
@@ -256,7 +256,7 @@ According to R1 priority, perform a comprehensive comparison of all hypotheses (
 - Number of independent constraints: strong (≥3) / moderate (2) / weak (1)
 - Missing lines situation: clean / partial / critical missing
 - width mismatch impact: negligible / minor / major
-- Continuum morphology match: consistent / ambiguous / inconsistent
+- Continuum morphology match (auxiliary reference only): consistent / ambiguous / inconsistent
 
 Combine with R2 cross-type special rules to explain the key distinguishing points among the hypotheses.
 

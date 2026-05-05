@@ -11,11 +11,23 @@ from AstroAgent.core.runtime.runtime_container import RuntimeContainer
 
 class AnalysisAuditor(BaseAgent):
     """
-    审查分析师：跨类型综合裁决，从 QSO/ELG/LRG 路径的定量分析摘要中选出最符合物理语义的结论
-    AnalysisAuditor: Cross-type verdict — selects the most physically consistent
-    classification from QSO/ELG/LRG extract summaries.
+    审查分析师：先对每条分析路径进行独立的 critique+patch 讨论，再进行跨类型综合裁决。
+    AnalysisAuditor: Runs per-path critique+patch discussion rounds first,
+    then performs cross-type verdict on the patched extracts.
     """
     agent_name = "AnalysisAuditor"
+
+    # Map source_path names to state keys
+    PATH_KEYS = {
+        "QSO":      "extract_QSO",
+        "ELG":      "extract_ELG",
+        "LRG/BGS":  "extract_LRG",
+    }
+    CRITIQUE_KEYS = {
+        "QSO":      "critique_QSO",
+        "ELG":      "critique_ELG",
+        "LRG/BGS":  "critique_LRG",
+    }
 
     def __init__(self, runtime: RuntimeContainer):
         super().__init__(runtime)
@@ -32,20 +44,32 @@ class AnalysisAuditor(BaseAgent):
         return True
 
     async def run(self, state: SpectroState) -> SpectroState:
+        """Phase 1: Per-path critique only (patching is handled by RefinementAssistant)."""
         if self._all_paths_inconclusive(state):
-            print("[AnalysisAuditor] All paths inconclusive — skipping verdict/critique/patch.")
+            print("[AnalysisAuditor] All paths inconclusive — skipping critique.")
+            # Skip all remaining rounds: set counter >= max
+            max_rounds = state.get('discussion_rounds') or self.runtime.configs.params.discussion_rounds
+            state['current_discussion_round'] = max_rounds
             return state
+
+        await self._run_per_path_critique(state)
+        state['current_discussion_round'] = state.get('current_discussion_round', 0) + 1
+        return state
+
+    async def run_verdict(self, state: SpectroState) -> SpectroState:
+        """Phase 3: Cross-type verdict (uses patched extracts when available)."""
+        if self._all_paths_inconclusive(state):
+            print("[AnalysisAuditor] All paths inconclusive — skipping verdict.")
+            return state
+
         await self.auditing_verdict(state)
         self._writer.write_verdict(state)
-        # print(f"Auditing verdict: {state['verdict']}")
         await self.verdict_extract(state)
-        # print(f"Verdict extract: {state['verdict_extract']}")
-        await self.auditing_critique(state)
-        self._writer.write_critique(state)
         return state
 
     async def auditing_verdict(self, state: SpectroState) -> SpectroState:
-        """Cross-type verdict: select the best hypothesis from extract_QSO/ELG/LRG."""
+        """Cross-type verdict: select the best hypothesis from extract_QSO/ELG/LRG.
+        Prefers patched extracts from per-path discussion rounds when available."""
         function_name = "auditing_verdict"
 
         continuum_description = state['continuum']['description']
@@ -55,17 +79,19 @@ class AnalysisAuditor(BaseAgent):
         peaks = state['peaks']
         troughs = state['troughs']
 
-        # Collect per-path extracts; use the step_F key produced by generic_extract.
-        # If a path was not run, the dict will be empty — pass None so the template
-        # can detect the absence cleanly.
-        def _get_extract(state_key: str):
+        # Prefer patched extracts from per-path discussion rounds; fall back to raw extracts.
+        def _get_extract(state_key: str, patched_key: str):
+            patched_data = state.get(patched_key) or {}
+            patched_step_f = patched_data.get('step_F')
+            if patched_step_f:
+                return patched_step_f
             data = state.get(state_key) or {}
             step_f = data.get('step_F')
             return step_f if step_f else None
 
-        extract_QSO = _get_extract('extract_QSO')
-        extract_ELG = _get_extract('extract_ELG')
-        extract_LRG = _get_extract('extract_LRG')
+        extract_QSO = _get_extract('extract_QSO', 'patched_extract_QSO')
+        extract_ELG = _get_extract('extract_ELG', 'patched_extract_ELG')
+        extract_LRG = _get_extract('extract_LRG', 'patched_extract_LRG')
 
         system_prompt, user_prompt = self.runtime.prompt_manager.load(
             state=state,
@@ -157,21 +183,48 @@ class AnalysisAuditor(BaseAgent):
             print(f"  [{i}] {item.get('Source_path','?')} | {item.get('Confidence','?')} | z={item.get('Suggested_redshift','?')}")
         return state
 
-    async def auditing_critique(self, state: SpectroState) -> SpectroState:
-        """Critique the top-1 verdict: surface physical loopholes and weak points."""
+    # ========================================================================
+    # Per-path critique (patching is handled by RefinementAssistant)
+    # ========================================================================
+
+    async def _run_per_path_critique(self, state: SpectroState) -> None:
+        """Run one round of per-path critique for all paths that have valid hypotheses.
+
+        Critiques are stored in state['critique_QSO/ELG/LRG'] and later
+        consumed by RefinementAssistant for patching.
+        """
+        for source_path, state_key in self.PATH_KEYS.items():
+            hypotheses = self._get_hypotheses(state, state_key)
+            if hypotheses is None:
+                print(f"[per-path critique] {source_path}: no valid hypotheses, skipping")
+                continue
+
+            print(f"[per-path critique] {source_path}: critiquing {len(hypotheses)} hypothesis/hypotheses")
+
+            critique = await self._per_path_auditing_critique(state, source_path, hypotheses)
+            state[self.CRITIQUE_KEYS[source_path]] = critique
+
+    def _get_hypotheses(self, state: SpectroState, state_key: str):
+        """Extract the step_F hypothesis list from a state extract key.
+        Prefers patched extracts (from previous discussion rounds) over raw extracts.
+        Returns None if no valid hypotheses exist."""
+        patched_key = f"patched_{state_key}"
+        for key in (patched_key, state_key):
+            data = state.get(key) or {}
+            step_f = data.get('step_F')
+            if step_f and any(item.get('Hypothesis') is not None for item in step_f):
+                return step_f
+        return None
+
+    async def _per_path_auditing_critique(
+        self, state: SpectroState, source_path: str, hypotheses: list
+    ) -> str | None:
+        """Critique the hypotheses within a single path."""
         function_name = "auditing_critique"
 
-        ve = state.get('verdict_extract') or []
-        if not ve:
-            print("[auditing_critique] verdict_extract is empty, skipping.")
-            return state
-
-        primary_verdict   = ve[0]
-        secondary_verdict = ve[1] if len(ve) > 1 else None
-
         continuum_description = state['continuum']['description']
-        feature_description   = state['qualitative_analysis']['lines']
-        wl_left  = state['spectrum']['new_wavelength'][0]
+        feature_description = state['qualitative_analysis']['lines']
+        wl_left = state['spectrum']['new_wavelength'][0]
         wl_right = state['spectrum']['new_wavelength'][-1]
 
         system_prompt, user_prompt = self.runtime.prompt_manager.load(
@@ -182,21 +235,20 @@ class AnalysisAuditor(BaseAgent):
             feature_description=feature_description,
             wl_left=wl_left,
             wl_right=wl_right,
-            primary_verdict=primary_verdict,
-            secondary_verdict=secondary_verdict,
+            hypotheses=hypotheses,
+            source_path=source_path,
         )
 
         result = await self.call_llm_with_context(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             parse_json=False,
-            description="Auditing critique",
+            description=f"Per-path critique ({source_path})",
             want_tools=False,
         )
 
-        state['critique'] = result
-        print(f"Auditing critique:\n{result}")
-        return state
+        print(f"[per-path critique] {source_path}:\n{result}")
+        return result
 
 
 # ============================================================================

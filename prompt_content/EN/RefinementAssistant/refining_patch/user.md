@@ -50,10 +50,12 @@ No significant trough features
 
 ---
 
-## Adjudication Conclusion to be Revised (1st)
+## Analysis Path to be Revised: {{ source_path }}
+
+The quantitative analysis hypotheses for this path are as follows:
 
 ```json
-{{ primary_verdict | tojson(indent=2) }}
+{{ hypotheses | tojson(indent=2) }}
 ```
 
 ---
@@ -64,4 +66,4 @@ No significant trough features
 
 ---
 
-Please first respond to the above critiques point by point, then output the revised complete adjudication conclusion.
+Please directly output the revised hypothesis list as a JSON array based on the above critiques.
