@@ -10,22 +10,14 @@
 
 ---
 
-## 待审查的裁决结论（第 1 位）
+## 待审查的分析路径：{{ source_path }}
 
-以下为 auditing_verdict 给出的最优裁决结果：
-
-```json
-{{ primary_verdict | tojson(indent=2) }}
-```
-
-{% if secondary_verdict %}
-## 备选结论（第 2 位）
+该路径下由其他 agent 生成的定量分析假设如下（至多 2 个假设）：
 
 ```json
-{{ secondary_verdict | tojson(indent=2) }}
+{{ hypotheses | tojson(indent=2) }}
 ```
-{% endif %}
 
 ---
 
-请对上述第 1 位裁决结论进行批判性复核，指出 1 到 4 条具体质疑点，并给出总体评价。
+请对上述 {{ source_path }} 路径的假设进行批判性复核，指出 1 到 4 条具体质疑点，并给出总体评价。

@@ -10,43 +10,95 @@ from AstroAgent.core.runtime.runtime_container import RuntimeContainer
 
 class RefinementAssistant(BaseAgent):
     """
-    修补者：根据 auditing_critique 的质疑，对 primary_verdict 进行逐条回应与修订。
-    Refinement Assistant: patch the primary verdict based on auditing_critique.
+    完善助手：负责 per-path 假设修补 + 最终报告撰写。
+    Refinement Assistant: per-path hypothesis patching + final report synthesis.
     """
     agent_name = "RefinementAssistant"
+
+    # Map source_path names to state keys
+    PATH_KEYS = {
+        "QSO":      "extract_QSO",
+        "ELG":      "extract_ELG",
+        "LRG/BGS":  "extract_LRG",
+    }
+    CRITIQUE_KEYS = {
+        "QSO":      "critique_QSO",
+        "ELG":      "critique_ELG",
+        "LRG/BGS":  "critique_LRG",
+    }
+    PATCHED_KEYS = {
+        "QSO":      "patched_extract_QSO",
+        "ELG":      "patched_extract_ELG",
+        "LRG/BGS":  "patched_extract_LRG",
+    }
 
     def __init__(self, runtime: RuntimeContainer):
         super().__init__(runtime)
         self._writer = ResultWriter()
 
     async def run(self, state: SpectroState) -> SpectroState:
-        await self.refining_patch(state)
-        self._writer.write_patched_verdict(state)
+        """Per-path patching phase: iterate all paths and patch hypotheses based on critiques."""
+        await self._per_path_refining_patch(state)
+        return state
+
+    async def run_final(self, state: SpectroState) -> SpectroState:
+        """Final report phase: generate the complete analysis report."""
         await self.refining_final(state)
         self._writer.write_final_report(state)
         return state
 
-    async def refining_patch(self, state: SpectroState) -> SpectroState:
-        """Patch the top-1 verdict by addressing each critique point."""
+    # ========================================================================
+    # Per-path refining patch
+    # ========================================================================
+
+    async def _per_path_refining_patch(self, state: SpectroState) -> None:
+        """Iterate QSO/ELG/LRG paths and patch hypotheses based on per-path critiques.
+
+        For each path that has both valid hypotheses and a critique, calls the
+        refining_patch prompt. Patched results are stored in patched_extract_*.
+
+        For rounds > 1, reads hypotheses from patched_extract_* (previous round).
+        """
+        for source_path, state_key in self.PATH_KEYS.items():
+            critique = state.get(self.CRITIQUE_KEYS[source_path])
+            if not critique:
+                print(f"[per-path patch] {source_path}: no critique, skipping")
+                continue
+
+            hypotheses = self._get_hypotheses(state, state_key)
+            if hypotheses is None:
+                print(f"[per-path patch] {source_path}: no valid hypotheses, skipping")
+                continue
+
+            print(f"[per-path patch] {source_path}: patching {len(hypotheses)} hypothesis/hypotheses")
+
+            patched = await self._patch_single_path(state, source_path, hypotheses, critique)
+            if patched is not None:
+                state[self.PATCHED_KEYS[source_path]] = {"step_F": patched}
+                print(f"[per-path patch] {source_path}: stored {len(patched)} patched hypothesis/hypotheses")
+
+    def _get_hypotheses(self, state: SpectroState, state_key: str):
+        """Extract the step_F hypothesis list. Prefers patched extracts (from previous rounds)."""
+        patched_key = f"patched_{state_key}"
+        for key in (patched_key, state_key):
+            data = state.get(key) or {}
+            step_f = data.get('step_F')
+            if step_f and any(item.get('Hypothesis') is not None for item in step_f):
+                return step_f
+        return None
+
+    async def _patch_single_path(
+        self, state: SpectroState, source_path: str, hypotheses: list, critique: str
+    ) -> list | None:
+        """Patch the hypotheses within a single path based on the critique.
+        Returns the patched hypothesis list (structured), or None on failure."""
         function_name = "refining_patch"
 
-        ve = state.get('verdict_extract') or []
-        if not ve:
-            print("[refining_patch] verdict_extract is empty, skipping.")
-            return state
-
-        critique = state.get('critique')
-        if not critique:
-            print("[refining_patch] critique is empty, skipping.")
-            return state
-
-        primary_verdict = ve[0]
-
         continuum_description = state['continuum']['description']
-        feature_description   = state['qualitative_analysis']['lines']
-        wl_left  = state['spectrum']['new_wavelength'][0]
+        feature_description = state['qualitative_analysis']['lines']
+        wl_left = state['spectrum']['new_wavelength'][0]
         wl_right = state['spectrum']['new_wavelength'][-1]
-        peaks   = state['peaks'] or []
+        peaks = state['peaks'] or []
         troughs = state['troughs'] or []
 
         system_prompt, user_prompt = self.runtime.prompt_manager.load(
@@ -59,34 +111,36 @@ class RefinementAssistant(BaseAgent):
             wl_right=wl_right,
             peaks=peaks,
             troughs=troughs,
-            primary_verdict=primary_verdict,
+            hypotheses=hypotheses,
+            source_path=source_path,
             critique=critique,
         )
 
         result = await self.call_llm_with_context(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
-            parse_json=False,
-            description="Refining patch",
+            parse_json=True,
+            description=f"Per-path refining patch ({source_path})",
             want_tools=True,
         )
 
-        state['patched_verdict'] = result
-        print(f"Refining patch:\n{result}")
-        return state
+        if isinstance(result, list):
+            print(f"[per-path patch] {source_path}: patched to {len(result)} hypothesis/hypotheses")
+            return result
+        elif isinstance(result, dict) and 'Hypothesis' in result:
+            print(f"[per-path patch] {source_path}: single hypothesis patched")
+            return [result]
+        else:
+            print(f"[per-path patch] {source_path}: unexpected result type, returning original")
+            return hypotheses
 
     async def refining_final(self, state: SpectroState) -> SpectroState:
         """Generate the complete final analysis report from all pipeline stages."""
         function_name = "refining_final"
 
         # Run final report as long as there is at least one upstream artifact to summarise.
-        # This covers three situations:
-        #   1. Normal path: patched_verdict exists
-        #   2. Inconclusive path (Hypothesis all-null): verdict is empty, but extract data exists
-        #   3. brute_force_matching skipped: extract is empty, but qualitative analysis exists
         has_upstream = (
-            state.get('patched_verdict')
-            or state.get('verdict')
+            state.get('verdict')
             or state.get('extract_QSO') or state.get('extract_ELG') or state.get('extract_LRG')
             or state.get('preliminary_classification_monkey')
         )
@@ -118,8 +172,6 @@ class RefinementAssistant(BaseAgent):
             extract_ELG=_get_extract('extract_ELG'),
             extract_LRG=_get_extract('extract_LRG'),
             verdict=state.get('verdict'),
-            critique=state.get('critique'),
-            patched_verdict=state.get('patched_verdict'),
             peaks=peaks,
             troughs=troughs,
         )

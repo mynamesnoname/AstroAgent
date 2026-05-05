@@ -98,16 +98,31 @@ class WorkflowOrchestrator:
         self._check_cancel()
         return result
     
-    async def _analysis_auditor_node(self, state: SpectroState) -> SpectroState:
+    async def _analysis_auditor_critique_node(self, state: SpectroState) -> SpectroState:
         self._check_cancel()
-        print('Stage 3: Analysis Auditor')
+        print('Stage 3a: Analysis Auditor — Per-path Critique')
         result = await self.spectro_agents["_Analysis_Auditor"].run(state)
         self._check_cancel()
         return result
 
-    async def _refinement_assistant_node(self, state: SpectroState) -> SpectroState:
+    async def _refinement_assistant_patch_node(self, state: SpectroState) -> SpectroState:
         self._check_cancel()
+        print('Stage 3b: Refinement Assistant — Per-path Patch')
         result = await self.spectro_agents["_Refinement_Assistant"].run(state)
+        self._check_cancel()
+        return result
+
+    async def _analysis_auditor_verdict_node(self, state: SpectroState) -> SpectroState:
+        self._check_cancel()
+        print('Stage 3c: Analysis Auditor — Cross-type Verdict')
+        result = await self.spectro_agents["_Analysis_Auditor"].run_verdict(state)
+        self._check_cancel()
+        return result
+
+    async def _refinement_assistant_final_node(self, state: SpectroState) -> SpectroState:
+        self._check_cancel()
+        print('Stage 3d: Refinement Assistant — Final Report')
+        result = await self.spectro_agents["_Refinement_Assistant"].run_final(state)
         self._check_cancel()
         return result
     
@@ -118,22 +133,45 @@ class WorkflowOrchestrator:
         self._check_cancel()
         return result
     
+    def _should_continue_discussion(self, state: SpectroState) -> str:
+        """Conditional routing: continue the critique→patch loop or proceed to verdict."""
+        max_rounds = state.get('discussion_rounds')
+        if max_rounds is None:
+            max_rounds = self.runtime.configs.params.discussion_rounds
+        max_rounds = max(1, max_rounds)
+        current = state.get('current_discussion_round', 0)
+        if current < max_rounds:
+            return "continue"
+        return "verdict"
+
     def _create_workflow(self) -> StateGraph:
 
         workflow = StateGraph(SpectroState)
 
         workflow.add_node("visual_interpreter", self._visual_interpreter_node)
         workflow.add_node("rule_analyst", self._rule_analyst_node)
-        workflow.add_node("analysis_auditor", self._analysis_auditor_node)
-        workflow.add_node("refinement_assistant", self._refinement_assistant_node)
+        workflow.add_node("analysis_auditor_critique", self._analysis_auditor_critique_node)
+        workflow.add_node("refinement_assistant_patch", self._refinement_assistant_patch_node)
+        workflow.add_node("analysis_auditor_verdict", self._analysis_auditor_verdict_node)
+        workflow.add_node("refinement_assistant_final", self._refinement_assistant_final_node)
         workflow.add_node("synthesis_host", self._synthesis_host_node)
 
         workflow.add_edge(START, 'visual_interpreter')
         workflow.set_entry_point("visual_interpreter")
         workflow.add_edge("visual_interpreter", "rule_analyst")
-        workflow.add_edge("rule_analyst", "analysis_auditor")
-        workflow.add_edge("analysis_auditor", "refinement_assistant")
-        workflow.add_edge("refinement_assistant", "synthesis_host")
+        workflow.add_edge("rule_analyst", "analysis_auditor_critique")
+        workflow.add_edge("analysis_auditor_critique", "refinement_assistant_patch")
+        # Loop: patch → critique if more rounds needed, else → verdict
+        workflow.add_conditional_edges(
+            "refinement_assistant_patch",
+            self._should_continue_discussion,
+            {
+                "continue": "analysis_auditor_critique",
+                "verdict": "analysis_auditor_verdict",
+            }
+        )
+        workflow.add_edge("analysis_auditor_verdict", "refinement_assistant_final")
+        workflow.add_edge("refinement_assistant_final", "synthesis_host")
         workflow.add_edge("synthesis_host", END)
 
         return workflow.compile()

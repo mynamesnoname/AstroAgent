@@ -133,7 +133,6 @@ Step F-b3: 最终结论
 **红移及谱线匹配假设 {假设编号，与传入的信息保持一致}**
 - Hypothesis: ...（请全面描述谱线匹配信息，格式与传入信息一致。**不得省略**。）
 - Physical_type: ...'典型 LRG/BGS' / '其他'
-- Suggested_redshift: ...（优先选择最低电离态谱线对应的红移。保留 3 位小数）
 - Confidence: ...
 - Key_lines_status:
   Ca K_abs: matched at XXXX.X Å (z=X.XXX) / in range but NOT matched / not in obs range
@@ -142,19 +141,20 @@ Step F-b3: 最终结论
 - Adopted_pairs:
   谱线名 → 观测波长 Å (z=...)
   ...
+- Suggested_redshift: ...（必须从 Adopted_pairs 中选取最低电离态谱线的 z，保留 3 位小数。存在 Adopted_pairs 时不得为 null）
 - Key_evidence: ...（不超过100字。重点说明以及 4000 Å break 的存在性，是否有 Ca K/Ca H 双线支撑及连续谱形态一致性。如果存在 strong 或 moderate 的 4000 Å break，且其他吸收线匹配合理，则 Ca K 和 Ca H 吸收线的缺失可能是算法漏检。同时注意说明多峰匹配一线或一峰匹配多线的歧义如何处理。）
 - Remaining_doubts: ...（0-2 条，if none, fill "none"）
 
 **红移及谱线匹配假设 {假设编号}**（若存在多个可能结果，否则忽略）
 - Hypothesis: ...（**不得省略**）
 - Physical_type: ...
-- Suggested_redshift: ...
 - Confidence: ... | Rationale: ...
 - Key_lines_status:
   ...
 - Adopted_pairs:
   谱线名 → 观测波长 Å (z=...)
   ...
+- Suggested_redshift: ...
 - Key_evidence: ...
 - Remaining_doubts: ...（0-2 条，if none, fill "none"）
 

@@ -1,4 +1,4 @@
-Below is the complete process output of this spectral analysis. Please write the final report accordingly.
+Below are the stage outputs of this spectral analysis. Please write the final report accordingly.
 
 ---
 
@@ -85,18 +85,6 @@ No significant trough features
 ## Part 4: Cross-Type Comprehensive Adjudication
 
 {{ verdict }}
-
----
-
-## Part 5: Review and Critique Comments
-
-{{ critique }}
-
----
-
-## Part 6: Revised Adjudication Conclusion
-
-{{ patched_verdict }}
 
 ---
 

@@ -10,8 +10,6 @@ You will receive the outputs from all the following stages:
 2. Preliminary classification conclusion (preliminary_classification_monkey)
 3. Quantitative analysis summaries for each path (extract_QSO | extract_ELG | extract_LRG_GBS)
 4. Cross-type comprehensive adjudication (verdict)
-5. Review and critique comments (critique)
-6. Revised adjudication conclusion (patched_verdict)
 
 Your tasks are:
 - Synthesize all the above information to write a **complete final analysis report**
@@ -22,7 +20,7 @@ Your tasks are:
 - Do not introduce any new hypothesis or new line pairing not present in the above materials
 - All numerical values retain 3 decimal places
 - If the output of a certain stage is empty or missing, note "No data for this stage", do not fabricate content
-- **The hypothesis ranking (1st/2nd) in the verdict is the optimal judgment after weighing all evidence. Do not promote the 2nd to 1st just because the critique only targets the 1st and the 2nd appears "cleaner".** By design, the critique scrutinizes the top hypothesis — the 2nd not being criticized merely means it was not examined in detail, not that it is more credible than the 1st. Your job is to supplement and refine within the verdict's ranking framework (e.g., elaborate evidence, adjust wording), not to re-rank.
+- **The verdict is the globally optimal judgment after independent per-path review and cross-type comprehensive comparison. Its hypothesis ranking (1st/2nd) must not be altered.**
 - Do not overturn the verdict's core judgments (hypothesis ranking, object type, redshift, etc.)
 
 ---
@@ -149,19 +147,11 @@ For each valid hypothesis in extract_QSO / extract_ELG / extract_LRG, list item 
 If a path is empty or has no valid hypothesis, note "Not run" or "No valid hypothesis".
 
 ---
-### Section 4: Cross-Type Adjudication and Review
+### Section 4: Cross-Type Comprehensive Adjudication
 
-**4.1 Initial Adjudication (auditing_verdict)**
+Briefly describe the key judgments in the adjudication process (from verdict, distill the key points of Step V-2/V-3, no more than 200 words).
 
-Briefly describe the key judgments in the adjudication process (from verdict, distill the key points of Step V-2/V-3, no more than 150 words).
-
-**4.2 Review Doubts (auditing_critique)**
-
-List the title and validity judgment (valid / not valid) of each doubt in the critique, with no more than one sentence of explanation.
-
-**4.3 Revised Conclusion (refining_patch)**
-
-Fully present the revised adjudication conclusion (from the "Revised Adjudication Conclusion" section of patched_verdict). The revisions only address specific issues raised in the critique (e.g., adding explanations, correcting wording, adjusting Confidence phrasing); do not change the hypothesis ranking, object type, or redshift. The format is:
+Fully present the key information of the 1st (and 2nd if it exists) adjudication result:
 
 - Source_path: ...
 - Physical_type: ...
@@ -182,7 +172,7 @@ Based on all the above stages, provide:
 1.  **Final Object Type**: QSO | GALAXY
    *   Typical QSO and host galaxy-dominated AGN are merged and output as QSO.
    *   Both ELG and LRG/BGS are merged and output as `GALAXY` (the sub-type classification is retained in the analysis of Sections 3/4 and will not be repeated here).
-   *   If there is a valid conclusion from Sections 3/4, take the value from `patched_verdict` or `verdict` and merge according to the above rules.
+   *   If there is a valid conclusion from Sections 3/4, take the value from `verdict` and merge according to the above rules.
    *   If there is no valid conclusion, infer and merge according to the **Downgraded Inference Rules** (Case A or B).
 2.  **Final Suggested Redshift**: z = ... ± ... (if an error estimate cannot be provided, note "Error unknown"; for **downgraded cases**, write `null`).
 3.  **Identified Spectral Lines**: line name - λ_rest - λ_obs - redshift; for **downgraded cases**, write `null`.
@@ -194,7 +184,7 @@ Based on all the above stages, provide:
    *   Identified spectral lines = 0? → Proceed to Step 3
 
    **Step 2: Examine the continuum (only when lines = 1)**
-   *   Is the continuum shape correct, or are there many weaker features? → **Score 3**
+   *   Is the continuum shape roughly consistent with the expected type, or are there many weaker features? → **Score 3**
    *   Not satisfied? → Proceed to Step 3
 
    **Step 3: Check for ambiguous signals (lines = 0 or Step 2 condition not met)**
@@ -204,7 +194,7 @@ Based on all the above stages, provide:
 
    > **Strictly Prohibited**: Do not lower the score obtained from a higher-priority rule because of reasons such as abnormal continuum, low confidence, or existing doubts. Continuum quality only participates in the judgment in Step 2 (when lines = exactly 1), and has no impact on the Score 4 determination.
 5.  **Recommend Manual Review?**: Yes / No
-   *   Trigger conditions (Yes if any one is met): Overall confidence is low; Confidence Score ≤ 2; Remaining_doubts contain critical concerns; there are unresolved valid doubts in the critique; downgraded inference cases.
+   *   Trigger conditions (Yes if any one is met): Overall confidence is low; Confidence Score ≤ 2; Remaining_doubts contain critical concerns; downgraded inference cases.
 
 ---
 

@@ -21,6 +21,7 @@ class ParamsConfig(BaseModel):
     min_qso_redshift: float
     min_galaxy_redshift: float
     step_f_concurrency: int
+    discussion_rounds: int
 
     # ── 吸收线检测参数 ──
     abs_window_width: int
@@ -74,6 +75,7 @@ class ParamsConfig(BaseModel):
             min_qso_redshift=getenv_optional_float("MIN_QSO_REDSHIFT") or float('-inf'),
             min_galaxy_redshift=getenv_optional_float("MIN_GALAXY_REDSHIFT") or float('-inf'),
             step_f_concurrency=getenv_int("STEP_F_CONCURRENCY", 4),
+            discussion_rounds=getenv_int("DISCUSSION_ROUNDS", 1),
 
             # ── 吸收线检测参数 ──
             abs_window_width=getenv_int("ABS_WINDOW_WIDTH", 100),

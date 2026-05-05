@@ -168,7 +168,7 @@ LRG（亮红星系）和 BGS（亮星系样本）的光谱特征来自其以老�
 3. **Missing lines 情况**：重要谱线在观测范围内却未被匹配，需质疑。
 4. **width mismatch 影响**：宽峰匹配窄线，或窄峰匹配宽线，需要质疑是否正确。但 intermediate 匹配不构成否决。
 5. **Redshift warning**：有警告的假设可信度显著降低，除非有强烈的其他支持证据。
-6. **连续谱形态与分类的匹配程度**：连续谱整体趋势是否支持该类型的物理图像。
+6. **连续谱形态与分类的匹配程度**（辅助参考，不可作为主要判据）：连续谱形态因天体物理状态差异极大——QSO 的幂律谱与宿主主导 AGN 的星系谱完全不同；ELG 谱形多样（可蓝高红低、可单调递增、可先增后减）；LRG/BGS 的红化程度各异——连续谱整体趋势仅作辅助参考，不可作为区分或否决的依据。
 
 **注**
 1. **未被完全确证的谱线**：输入的各类型分析结果中，`Adopted_pairs` 表示最终采纳的谱线配对。在 `Hypothesis` 中，可能存在未被确证的谱线配对，这些峰值可能因寻峰算法不完善导致的误差或过拟合等未被完全采纳，但可以作为 `Adopted_pairs` 的补充。若一些关键谱线在 `Hypothesis` 中被提及，仍可作为支持证据。
@@ -178,10 +178,10 @@ LRG（亮红星系）和 BGS（亮星系样本）的光谱特征来自其以老�
 
 ### R2 跨类型特殊规则
 
-- **典型 QSO vs ELG 歧义**：若 QSO 假设依赖宽发射线（Lyα/C IV/Mg II），且至少一条宽线未标注 width mismatch、幅值合理、连续谱蓝端偏高，优先典型 QSO。若宽线全部被标注为 width mismatch，或宽线幅值异常低（与连续谱趋势不符），优先 ELG。若无任何宽发射线支撑该 QSO 假设，ELG 优先。
+- **典型 QSO vs ELG 歧义**：若 QSO 假设依赖宽发射线（Lyα/C IV/Mg II），且至少一条宽线未标注 width mismatch、幅值合理，优先典型 QSO。若宽线全部被标注为 width mismatch，或宽线幅值异常低，优先 ELG。若无任何宽发射线支撑该 QSO 假设，ELG 优先。
 - **宿主星系主导 AGN vs ELG 歧义**：若光谱同时有宽发射线迹象和窄线组合，且检测到 AGN 特征发射线（Ne [V]、Mg II、C III]），优先宿主星系主导 AGN，除非宽线全部被标注为 width mismatch 且无替代匹配。若无 AGN 特征发射线，则 ELG 优先。
 - **ELG vs LRG 歧义**：若 O [III] 双线幅值比不接近 1:3（5007 Å 应更亮），需警惕；若同时存在 Ca K/Ca H 匹配，优先 LRG。若无吸收线，则 ELG 优先。
-- **QSO vs LRG 歧义**：若连续谱红端偏亮、4000 Å break 显著、吸收线显著、无宽发射线，倾向 LRG；若存在任意宽线，倾向 QSO。
+- **QSO vs LRG 歧义**：若 4000 Å break 显著、吸收线显著、无宽发射线，倾向 LRG；若存在任意宽线，倾向 QSO。
 - **宿主星系主导 AGN vs ELG/LRG/BGS 歧义**：若光谱明显是吸收线主导的，倾向于 LRG/BGS；若谱线匹配均为窄线，倾向于 ELG；若存在强烈的 AGN 特征发射线（Ne [V]、C III]、Mg II），倾向宿主星系主导 AGN。
 
 ### R3 淘汰机制
@@ -258,7 +258,7 @@ LRG（亮红星系）和 BGS（亮星系样本）的光谱特征来自其以老�
 - 独立约束数：strong（≥3）/ moderate（2）/ weak（1）
 - Missing lines 情况：clean / partial / critical missing
 - width mismatch 影响：negligible / minor / major
-- 连续谱形态匹配：consistent / ambiguous / inconsistent
+- 连续谱形态匹配（仅作辅助参考）：consistent / ambiguous / inconsistent
 
 结合 R2 跨类型特殊规则，说明各假设之间的关键区分点。
 
