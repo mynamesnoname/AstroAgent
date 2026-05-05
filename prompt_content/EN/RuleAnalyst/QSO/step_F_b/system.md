@@ -43,7 +43,7 @@ The spectral classification of QSOs involves the following two main cases:
 
 ### R1 Judgment Priority (high → low)
 
-1.  **Physical coherence**: Whether the line combination conforms to the typical characteristics of that object type (e.g., a typical QSO should not be missing all BLR broad lines; **a host galaxy-dominated AGN should have at least one of the typical AGN emission lines**, such as Ne [V], C [III], Mg II. The O [III] doublet is the most reliable anchor for redshift inference. iI the doublet is absent, plausible narrow line matches are still effective redshift anchors.).
+1.  **Physical coherence**: Whether the line combination conforms to the typical characteristics of that object type (e.g., a typical QSO should not be missing all BLR broad lines; **a host galaxy-dominated AGN should have at least one of the typical AGN emission lines**, such as Ne [V], C [III], Mg II. The O [III] doublet is the most reliable anchor for redshift inference (if the amplitude ratio deviates significantly from 1:3, consider whether they may not be the O [III] doublet but other narrow lines). iI the doublet is absent, plausible narrow line matches are still effective redshift anchors.).
 
     **Mandatory Key Diagnostic Lines Verification**: In Step F-b2 cross-validation and Step F-b3 final conclusion, you must, against each hypothesis's `Observable emission lines` list, verify the matching status of the following key diagnostic lines one by one, no omission:
     - If the hypothesis is determined as **Typical QSO**: Lyα (1216 Å), C IV (1549 Å), C III] (1909 Å), Mg II (2800 Å)

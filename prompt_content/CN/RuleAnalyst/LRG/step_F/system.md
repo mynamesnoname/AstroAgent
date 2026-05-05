@@ -42,7 +42,7 @@ LRG（亮红星系）和 BGS（亮星系样本）的光谱特征来自其以老�
     - Hγ 4341 Å（Balmer 系）
     - Hβ 4863 Å（Balmer 系）
     - O [III]a 4960 Å（NLR 禁线双线之一，弱线）
-    - O [III]b 5008 Å（NLR 禁线双线之一，强线，双线幅值比 O[III]a : O[III]b ≈ 1:3）
+    - O [III]b 5008 Å（NLR 禁线双线之一，强线，双线幅值比 O[III]a : O[III]b ≈ 1:3。若两线幅值比与 1:3 相差较远，需考虑是否并非 O [III] 双线，可能为其他窄线）
     - N [II]a 6549 Å（NLR 禁线）
     - Hα 6565 Å（Balmer 系，与 N [II] 常近邻）
     - N [II]b 6585 Å（NLR 禁线）
@@ -80,7 +80,7 @@ LRG（亮红星系）和 BGS（亮星系样本）的光谱特征来自其以老�
 | Hγ     | 4341.7 | both   | Balmer 系 |
 | Hβ     | 4862.7 | both   | Balmer 系 |
 | O [III]a | 4960.3 | narrow | NLR 禁线双线之一（弱线） |
-| O [III]b | 5008.2 | narrow | NLR 禁线双线之一（强线），双线幅值比 O[III]a : O[III]b ≈ 1:3 |
+| O [III]b | 5008.2 | narrow | NLR 禁线双线之一（强线），双线幅值比 O[III]a : O[III]b ≈ 1:3。若两线幅值比与 1:3 相差较远，需考虑是否并非 O [III] 双线，可能为其他窄线 |
 | N [II]a | 6549.8 | narrow | NLR 禁线 |
 | Hα     | 6564.6 | both   | Balmer 系，与 N [II] 常近邻 |
 | N [II]b | 6585.3 | narrow | NLR 禁线 |

@@ -28,13 +28,13 @@ The spectral classification of ELGs (Emission-Line Galaxies) involves the follow
 * **Emission-Line Features**: Emission lines are predominantly **narrow** (width typically < 1000 km/s, usually classified as narrow or intermediate by the peak-finding algorithm), with relatively significant amplitudes. **Genuine broad emission lines do not appear** (e.g., Lyα, C IV, C III], Mg II); if a peak labeled broad appears, it is necessary to first consider it is a spurious peak produced by overfitting of the peak-finding algorithm (usually with abnormally low amplitude, abnormally large width, inconsistent with the overall trend).
 * **Common Emission Lines**:
     - O [II] 3727 Å (doublet, but may appear as a single peak under insufficient resolution)
-    - O [III] 4959 Å and 5007 Å (doublet, amplitude ratio approx 1:3, 5007 Å brighter)
+    - O [III] 4959 Å and 5007 Å (doublet, amplitude ratio approx 1:3, 5007 Å brighter. If the amplitude ratio deviates significantly from 1:3, consider whether they may not be the O [III] doublet but other narrow lines such as Balmer series or N [II]/S [II] doublets)
     - Hβ 4861 Å
     - Hα 6563 Å
     - Ne [III] 3869 Å
     - Hγ 4340 Å, Hδ 4102 Å (weaker, possibly missing)
 * **Note**: Some ELGs may have other narrow emission lines as their primary observable features; O [II] or O [III] may be inconspicuous due to redshift, S/N, or physical reasons, and this does not exclude the ELG classification.
-* **Redshift Range**: Usually 0 < z < 1.5, commonly at z < 0.6.
+* **Redshift Range**: Usually 0 < z < 1.5.
 
 ### Misclassification Risk: Host galaxy-dominated AGN (a special type of QSO)
 Host galaxy-dominated AGN may be misclassified as ELG.
@@ -76,7 +76,7 @@ In the peak/trough-finding algorithm:
 | Hγ        | 4341.7              | both        | Balmer series |
 | Hβ        | 4862.7              | both        | Balmer series |
 | O [III]a  | 4960.3              | narrow      | One of the NLR forbidden doublet (weaker line) |
-| O [III]b  | 5008.2              | narrow      | One of the NLR forbidden doublet (stronger line), doublet amplitude ratio O[III]a : O[III]b ≈ 1:3 |
+| O [III]b  | 5008.2              | narrow      | One of the NLR forbidden doublet (stronger line), doublet amplitude ratio O[III]a : O[III]b ≈ 1:3. If the amplitude ratio deviates significantly from 1:3, consider whether they may not be the O [III] doublet but other narrow lines |
 | N [II]a   | 6549.8              | narrow      | NLR forbidden line |
 | Hα        | 6564.6              | both        | Balmer series, often adjacent to N [II] |
 | N [II]b   | 6585.3              | narrow      | NLR forbidden line |
@@ -110,7 +110,7 @@ In the peak/trough-finding algorithm:
 
 ELG emission lines are predominantly narrow, expected width classification is narrow or intermediate. If a peak matches narrow lines such as O [III], O [II], Hα, etc., but its width class is broad, it will be flagged `⚠ width mismatch` and requires close attention.
 
-1. **O [III] doublet is the preferred anchoring feature**: The doublet structure (amplitude ratio ≈ 1:3, λ₁=4959.1 Å, λ₂=5006.8 Å, λ₁ amplitude lower than λ₂) is the most reliable redshift anchor. If both lines are present and the amplitude ratio is reasonable (at least the amplitude ordering is correct), confidence increases significantly. If the O [III] doublet is absent, strictly check whether the matching of other lines is reasonable. 
+1. **O [III] doublet is the preferred anchoring feature**: The doublet structure (amplitude ratio ≈ 1:3, λ₁=4959.1 Å, λ₂=5006.8 Å, λ₁ amplitude lower than λ₂) is the most reliable redshift anchor. If both lines are present and the amplitude ratio is reasonable (at least the amplitude ordering is correct), confidence increases significantly. **If the amplitude ratio deviates significantly from 1:3, consider whether they may not be the O [III] doublet but other narrow lines (e.g., Balmer series or S [II] doublets).** If the O [III] doublet is absent, strictly check whether the matching of other lines is reasonable. 
 2. **O [II] 3727 Å is the secondary anchoring feature**: O [II] is one of the most common emission lines in ELGs, appearing as a single peak at low resolution. If consistent with the O [III] redshift, confidence further increases.
 3. **Hα/Hβ provide additional verification**: Balmer series lines are narrow in ELGs. If their redshifts are consistent with O [III] and O [II], this enhances the hypothesis credibility.
 4. **Broad line mismatch is a critical warning**: If an ELG has multiple broad-line matches (broad class and no narrow/intermediate alternative) with significant amplitudes, one should question the plausibility of this hypothesis.
