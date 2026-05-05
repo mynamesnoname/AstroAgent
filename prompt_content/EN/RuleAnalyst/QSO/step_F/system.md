@@ -37,7 +37,7 @@ The spectral classification of QSOs involves the following two main cases:
     - Ne [V] (3426 Å) — strong AGN indicator
     - C III] (1909 Å)
     - Mg II (2800 Å) — may appear as a broad emission line superimposed on the host galaxy's narrow absorption lines
-    - Also may contains galaxy emisssion lines such as O [III] doublets, O [II], Balmer series, etc.
+    - Also may contains galaxy emisssion lines such as O [III] doublets (amplitude ratio approx 1:3; if the ratio deviates significantly, consider whether they may not be O [III] doublets), O [II], Balmer series, etc.
 * **Spectral Complexity**: Broad emission lines superimposed with narrow absorption lines, especially in the Mg II region where a broad emission line is superimposed on the host galaxy's narrow absorption lines; the peak/trough-finding algorithm may identify this as a single broad line with a superimposed narrow absorption line, or misidentify it as two close broad lines, or overfit leading to spurious broad lines.
 
 ---
@@ -70,7 +70,7 @@ In the peak/trough-finding algorithm:
 | Hγ        | 4341.7              | both        | Balmer series |
 | Hβ        | 4862.7              | both        | Balmer series |
 | O [III]a  | 4960.3              | narrow      | One of the NLR forbidden doublet (weaker line) |
-| O [III]b  | 5008.2              | narrow      | One of the NLR forbidden doublet (stronger line), doublet amplitude ratio O[III]a : O[III]b ≈ 1:3 |
+| O [III]b  | 5008.2              | narrow      | One of the NLR forbidden doublet (stronger line), doublet amplitude ratio O[III]a : O[III]b ≈ 1:3. If the amplitude ratio deviates significantly from 1:3, consider whether they may not be the O [III] doublet but other narrow lines |
 | N [II]a   | 6549.8              | narrow      | NLR forbidden line |
 | Hα        | 6564.6              | both        | Balmer series, often adjacent to N [II] |
 | N [II]b   | 6585.3              | narrow      | NLR forbidden line |
@@ -113,7 +113,7 @@ In the peak/trough-finding algorithm:
 
 1. **Continuum unreliable**: The continuum morphology cannot be used as an absolute criterion; one must rely on AGN-characteristic emission lines.
 2. **Ne [V], Mg II, C III] are strong AGN indicators**: Non-AGN objects almost never show any of these lines; when one of them matched, the AGN hypothesis should be given high importance.
-3. **O [III] doublet is the preferred anchoring feature**: The doublet structure (amplitude ratio approx 1:3, wavelength_1 < wavelength_2) is the most reliable redshift anchor.
+3. **O [III] doublet is the preferred anchoring feature**: The doublet structure (amplitude ratio approx 1:3, wavelength_1 < wavelength_2) is the most reliable redshift anchor. If the amplitude ratio deviates significantly from 1:3, consider whether they may not be the O [III] doublet but other narrow lines.
 4. **Strong Balmer series lines** (Hα/Hβ/Hγ/Hδ) may be present, and attention should be paid to their potential impact on line matching.
 5. **The Mg II region requires careful interpretation**: The superposition of AGN broad Mg II + host galaxy narrow Mg II absorption can lead to overfitting; special care must be taken to avoid misidentification.
 6. **Redshift Range**: Such QSO redshifts are typically between 0 and 1; if the result is particularly close to 0 (e.g., on the order of 0.01), the hypothesis may be invalid.

@@ -42,7 +42,7 @@ The spectral features of LRGs (Luminous Red Galaxies) and BGS (Bright Galaxy Sam
     - Hγ 4341 Å (Balmer series)
     - Hβ 4863 Å (Balmer series)
     - O [III]a 4960 Å (one of the NLR forbidden doublet, weaker line)
-    - O [III]b 5008 Å (one of the NLR forbidden doublet, stronger line, doublet amplitude ratio O[III]a : O[III]b ≈ 1:3)
+    - O [III]b 5008 Å (one of the NLR forbidden doublet, stronger line, doublet amplitude ratio O[III]a : O[III]b ≈ 1:3. If the amplitude ratio deviates significantly from 1:3, consider whether they may not be the O [III] doublet but other narrow lines)
     - N [II]a 6549 Å (NLR forbidden line)
     - Hα 6565 Å (Balmer series, often adjacent to N [II])
     - N [II]b 6585 Å (NLR forbidden line)
@@ -80,7 +80,7 @@ In the peak/trough-finding algorithm:
 | Hγ        | 4341.7              | both        | Balmer series |
 | Hβ        | 4862.7              | both        | Balmer series |
 | O [III]a  | 4960.3              | narrow      | One of the NLR forbidden doublet (weaker line) |
-| O [III]b  | 5008.2              | narrow      | One of the NLR forbidden doublet (stronger line), doublet amplitude ratio O[III]a : O[III]b ≈ 1:3 |
+| O [III]b  | 5008.2              | narrow      | One of the NLR forbidden doublet (stronger line), doublet amplitude ratio O[III]a : O[III]b ≈ 1:3. If the amplitude ratio deviates significantly from 1:3, consider whether they may not be the O [III] doublet but other narrow lines |
 | N [II]a   | 6549.8              | narrow      | NLR forbidden line |
 | Hα        | 6564.6              | both        | Balmer series, often adjacent to N [II] |
 | N [II]b   | 6585.3              | narrow      | NLR forbidden line |
