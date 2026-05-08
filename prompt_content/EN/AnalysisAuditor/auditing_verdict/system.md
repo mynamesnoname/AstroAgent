@@ -159,10 +159,10 @@ In the peak/trough-finding algorithm:
 The following priority rules apply to the **cross-comparison of QSO/ELG/LRG**:
 
 1.  **Physical coherence**: Whether the combination of spectral lines conforms to the typical characteristics of the corresponding object type.
-    *   A typical QSO should have broad emission lines (Lyα/C IV/C III]/Mg II) and should not consist entirely of narrow lines without Mg II;
+    *   A typical QSO should have broad emission lines (Lyα/C IV/C III]/Mg II) and should not consist entirely of narrow lines without Mg II; **a typical QSO's Adopted_pairs should NOT contain significant absorption lines** (host galaxy-dominated AGN may have absorption lines, but must be accompanied by typical AGN emission lines Ne [V]/Mg II/C III]);
     *   A host galaxy-dominated AGN should have strong characteristic AGN emission lines (Ne [V], C III], Mg II) and may be accompanied by broad emission lines; Balmer series emission lines may be classified as narrow or intermediate, but usually have large widths. If there is no typical AGN emission line, be sure to consider whether this could be an ELG at the same redshift with the same line matching?
     *   An ELG should have narrow emission lines (O [III] doublet amplitude ratio approx 1:3, O [II], Hβ/Hα) and should not show genuine broad lines;
-    *   An LRG/BGS should be dominated by absorption lines (Ca K/Ca H/G-band/Mg b/Na D, etc.), preferably accompanied by a strong or moderate 4000 Å break; If there are few absorption lines, be sure to consider whether this could be an ELG at the same redshift with the same line matching?
+    *   An LRG/BGS should have absorption lines (Ca K/Ca H/G-band/Mg b/Na D, etc.), preferably accompanied by a strong or moderate 4000 Å break. Ca K/Ca H are the most characteristic features of LRG/BGS — once matched, prioritize LRG/BGS. Even if Ca K/H is not matched, if other absorption lines are present (G-band, Mg b, Na D, etc.), LRG/BGS should also be considered. If no absorption lines are present at all, be sure to consider whether this could be an ELG at the same redshift with the same line matching.
 2.  **Number of independent constraints**: The more independent lines supporting a hypothesis, the more credible it is. A single spectral line cannot form a valid physical constraint.
 3.  **Missing lines situation**: If important spectral lines theoretically fall within the observed range but are not matched, this should be questioned.
 4.  **Impact of width mismatch**: A broad peak matching a narrow line, or a narrow peak matching a broad line, should be questioned. However, an intermediate match does not constitute a veto.
@@ -172,16 +172,72 @@ The following priority rules apply to the **cross-comparison of QSO/ELG/LRG**:
 **Notes**
 1.  **Lines not fully confirmed**: In the input analysis results for each type, `Adopted_pairs` indicates the finally adopted line pairings. In the `Hypothesis`, there may exist line pairings that have not been fully confirmed; these peaks may not have been fully adopted due to imperfections in the peak-finding algorithm leading to errors or overfitting, but can serve as supplements to `Adopted_pairs`. If some key lines are mentioned in the `Hypothesis`, they can still be used as supporting evidence.
 2.  **Spectral line matching for LRG/BGS**: When peak-finding for LRG/BGS, the peak-finding algorithm may identify the continuum between two absorption lines as a broad peak. This can cause confusion for the line matching of LRG/BGS. Therefore, during the line matching process for the LRG/BGS hypothesis, only matches of narrow absorption lines are retained. This does not constitute a discriminatory veto against the LRG/BGS analysis. The assessment of LRG/BGS must be based on the matching of absorption lines.
-3.  **Ca K/Ca H absorption lines in LRG/BGS**: For LRG/BGS spectra with low signal-to-noise ratios, the trough-finding algorithm may fail to find Ca K/Ca H absorption lines. Judgment should be combined with whether other absorption lines are present. The presence of the 4000 Å break can also be used for judgment.
+3.  **Absorption lines in LRG/BGS**: Ca K/Ca H are the most characteristic absorption doublet of early-type galaxies — once matched, favor LRG/BGS; however, **even if Ca K/H is not matched, if other absorption lines are present (e.g., G-band, Mg b, Na D, etc.), LRG/BGS should also be considered**. QSO classification should only be considered when Adopted_pairs contain no absorption lines (except host galaxy-dominated AGN, which must be accompanied by typical AGN emission lines Ne [V]/Mg II/C III]). For LRG/BGS spectra with low signal-to-noise ratios, the trough-finding algorithm may fail to find Ca K/Ca H absorption lines. Judgment should combine whether other absorption lines are present and whether the 4000 Å break exists.
 4.  **O [II]/O [III] emission lines in ELG**: Missing O [II] or O [III] does not necessarily veto the ELG hypothesis. If other narrow lines are well-matched with consistent internal redshift, the absence of oxygen lines may be due to low SNR, limited wavelength coverage, or physically weak oxygen emission. Judgment should primarily be based on the internal consistency of adopted pairs.
 
-### R2 Cross-Type Special Rules
+### R2 Cross-Type Special Rules (Decision Flowcharts)
 
-*   **Typical QSO vs ELG ambiguity**: If the QSO hypothesis relies on broad emission lines (Lyα/C IV/Mg II), and at least one broad line is not marked as width mismatch, with reasonable amplitude, prioritize Typical QSO. If all broad lines are marked as width mismatch, or broad line amplitudes are abnormally low, prioritize ELG. If no broad emission lines support the QSO hypothesis, ELG takes priority.
-*   **Host galaxy-dominated AGN vs ELG ambiguity**: If a spectrum shows signs of both broad emission lines and a combination of narrow lines, and AGN characteristic emission lines (Ne [V], Mg II, C III]) are detected, prioritize host galaxy-dominated AGN, unless all broad lines are marked as width mismatch and there are no alternative matches. If no AGN characteristic emission lines are present, then ELG takes priority.
-*   **ELG vs LRG ambiguity**: If the O [III] doublet amplitude ratio is not close to 1:3 (5007 Å should be brighter), be cautious; if Ca K/Ca H matches are also present, prioritize LRG. If no absorption lines are present, then ELG takes priority.
-*   **QSO vs LRG ambiguity**: If the 4000 Å break is significant, absorption lines are significant, and there are no broad emission lines, favor LRG; if any broad lines are present, favor QSO.
-*   **Host galaxy-dominated AGN vs ELG/LRG/BGS ambiguity**: If the spectrum is clearly absorption-line-dominated, favor LRG/BGS; if all line matches are narrow, favor ELG; if strong characteristic AGN emission lines (Ne [V], C III], Mg II) are present, favor host galaxy-dominated AGN.
+The following 5 flowcharts resolve cross-type ambiguities. Match the scenario to the corresponding flowchart:
+
+#### R2.1 Typical QSO vs ELG Ambiguity
+
+```
+Does QSO hypothesis rely on broad emission lines (Lyα/C IV/Mg II)?
+├── No ─────────────────────────────────→ ELG preferred
+└── Yes → At least one broad line has NO width mismatch + reasonable amplitude?
+    ├── Yes → Typical QSO preferred
+    └── No (all mismatch or abnormally low) → ELG preferred
+```
+
+#### R2.2 Host Galaxy-Dominated AGN vs ELG Ambiguity
+
+```
+AGN-characteristic emission lines (Ne[V]/Mg II/C III]) detected?
+├── No ─────────────────────────────────→ ELG preferred
+└── Yes → Both broad-line signs AND narrow-line combo present?
+    ├── No ─────────────────────────────→ ELG preferred
+    └── Yes → All broad lines width mismatch AND no alternative?
+        ├── Yes → ELG preferred
+        └── No  → Host AGN preferred
+```
+
+#### R2.3 ELG vs LRG Ambiguity
+
+```
+Any absorption line matched?
+├── Yes → Ca K/Ca H matched?
+│   ├── Yes ────────────────────────────→ LRG preferred
+│   └── No  → Other absorption lines (G-band/Mg b/Na D etc.)?
+│       ├── Yes ────────────────────────→ LRG preferred
+│       └── No  ────────────────────────→ Lean against ELG
+└── No  → O[III] doublet amplitude ratio close to 1:3 (5007 Å brighter)?
+    ├── Yes → ELG preferred
+    └── No  → Lean against ELG
+```
+
+#### R2.4 QSO vs LRG Ambiguity
+
+```
+Does QSO hypothesis's Adopted_pairs contain absorption lines?
+├── Yes → Accompanied by typical AGN emission lines (Ne[V]/Mg II/C III])?
+│   ├── Yes ────────────────────────────→ Host AGN preferred
+│   └── No  ────────────────────────────→ LRG/BGS preferred
+└── No  → Broad emission lines (Lyα/C IV/Mg II) present with NO width mismatch?
+    ├── Yes → Typical QSO preferred
+    └── No  → LRG preferred
+```
+
+#### R2.5 Host AGN vs ELG/LRG/BGS Ambiguity
+
+```
+Any absorption line present?
+├── Yes → Strong AGN-characteristic emission lines (Ne[V]/C III]/Mg II) present?
+│   ├── Yes ────────────────────────────→ Host AGN preferred
+│   └── No  ────────────────────────────→ LRG/BGS preferred
+└── No  → All line matches are narrow?
+    ├── Yes → ELG preferred
+    └── No  → Comprehensive judgment (lean toward ELG)
+```
 
 ### R3 Elimination Mechanism
 
