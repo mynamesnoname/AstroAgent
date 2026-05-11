@@ -16,7 +16,7 @@ log/
 
 # codearts
 .arts/
-.codeartsdoer/.codebaseignore
+.codeartsdoer/
 
 # Python
 __pycache__/
