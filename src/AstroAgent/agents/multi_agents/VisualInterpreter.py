@@ -4,8 +4,6 @@ import numpy as np
 # import pandas as pd
 import logging
 
-from astropy.io import fits
-from scipy.ndimage import gaussian_filter1d
 
 from AstroAgent.agents.common.state import SpectroState
 from AstroAgent.agents.common.base_agent import BaseAgent
@@ -13,7 +11,6 @@ from AstroAgent.agents.common.result_writer import ResultWriter
 
 from AstroAgent.core.runtime.runtime_container import RuntimeContainer
 
-from AstroAgent.agents.multi_agents.utils.usage import find_overlap_regions
 from AstroAgent.agents.multi_agents.utils.usage import safe_to_bool
 from AstroAgent.agents.multi_agents.utils.VI import (
     _detect_chart_border, _crop_img,
@@ -23,7 +20,8 @@ from AstroAgent.agents.multi_agents.utils.VI import (
     _detect_axis_ticks_paddle,
     run_continuum_fitting_masked,
     run_iterative_feature_detection,
-    brute_force_line_matching
+    brute_force_line_matching,
+    _load_spectrum_from_fits,
 )
 from AstroAgent.agents.multi_agents.utils.plot import (
     plot_spec_extract,
@@ -51,259 +49,14 @@ class VisualInterpreter(BaseAgent):
     # LLM 交互方法
     # ======================================================
 
-    def _load_spectrum_from_fits(self, state: SpectroState) -> SpectroState:
-        """
-        从 FITS 文件中读取光谱数据。
-        支持两种格式：
-        1. DESI 分波段格式（B/R/Z_WAVELENGTH, B/R/Z_FLUX 等 HDU）
-        2. 单表格格式（包含 WAVELENGTH/FLUX 列的 BinTableHDU）
-        """
-        fits_path = state['file_path']
-        
-        with fits.open(fits_path) as hdul:
-            # 获取所有 HDU 名称
-            hdu_names = [hdu.name.upper() for hdu in hdul]
-            logging.info(f"FITS HDU names: {hdu_names}")
-            
-            # 检测是否为 DESI 分波段格式
-            is_desi_format = all(
-                f'{band}_WAVELENGTH' in hdu_names and f'{band}_FLUX' in hdu_names
-                for band in ['B', 'R', 'Z']
-            )
-            
-            if is_desi_format:
-                # === DESI 分波段格式 ===
-                logging.info("Detected DESI multi-arm FITS format")
-                
-                # 读取元数据（如果存在）
-                if 'METADATA' in hdu_names:
-                    metadata_idx = hdu_names.index('METADATA')
-                    metadata = hdul[metadata_idx].data[0]
-                    logging.info(f"METADATA: TARGETID={metadata['TARGETID']}, "
-                                f"VI_SPECTYPE={metadata['VI_SPECTYPE']}, VI_Z={metadata['VI_Z']}")
-                
-                # 读取三个波段的数据并记录波长范围
-                band_names = ['B', 'R', 'Z']
-                wavelength_list = []
-                flux_list = []
-                ivar_list = []
-                mask_list = []  # SPECMASK 数据
-                band_wavelengths = []  # 各波段的波长范围
-                
-                for band in band_names:
-                    wave_hdu = hdul[f'{band}_WAVELENGTH']
-                    flux_hdu = hdul[f'{band}_FLUX']
-                    ivar_hdu = hdul[f'{band}_IVAR']
-                    
-                    wave_data = wave_hdu.data
-                    wavelength_list.append(wave_data)
-                    flux_list.append(flux_hdu.data)
-                    ivar_list.append(ivar_hdu.data)
-                    
-                    # 读取 SPECMASK（如果存在）
-                    mask_hdu_name = f'{band}_MASK'
-                    if mask_hdu_name in hdu_names:
-                        mask_data = hdul[mask_hdu_name].data
-                        mask_list.append(mask_data)
-                        # 统计该波段的 mask 情况
-                        unique_masks = np.unique(mask_data)
-                        if len(unique_masks) > 1 or unique_masks[0] != 0:
-                            logging.info(f"  {band}_MASK has non-zero values: {unique_masks}")
-                    else:
-                        # 如果没有 mask，假设所有像素都是好的
-                        mask_list.append(np.zeros(len(wave_data), dtype=np.uint32))
-                        logging.info(f"  {band}_MASK not found, assuming all pixels are good")
-                    
-                    # 记录该波段的波长范围
-                    band_wavelengths.append([float(wave_data.min()), float(wave_data.max())])
-                
-                
-                # 合并数组（保留完整的原始数据）
-                wavelength = np.concatenate(wavelength_list)
-                flux = np.concatenate(flux_list)
-                ivar = np.concatenate(ivar_list)
-                specmask = np.concatenate(mask_list)  # 合并 mask
-                
-                logging.info(f"Combined {len(wavelength)} wavelength points from 3 arms")
-                logging.info(f"Wavelength range: {wavelength.min():.2f} - {wavelength.max():.2f} Å")
-                
-                # 统计整体 mask 情况
-                n_masked = np.sum(specmask != 0)
-                if n_masked > 0:
-                    logging.info(f"SPECMASK: {n_masked} pixels ({100*n_masked/len(specmask):.2f}%) have quality issues")
-                    # 统计各种 mask 值的出现次数
-                    unique_vals, counts = np.unique(specmask[specmask != 0], return_counts=True)
-                    for val, cnt in zip(unique_vals, counts):
-                        bits_set = [i for i in range(32) if val & (1 << i)]
-                        logging.info(f"  Mask value {val} (bits {bits_set}): {cnt} pixels")
-                else:
-                    logging.info("SPECMASK: All pixels are clean (mask=0)")
-                
-                # === 构建 quality mask ===
-                # quality_mask[i] = True 表示该像素质量良好（specmask == 0 且 ivar > 0）
-                # 根据 DESI SPECMASK 文档，所有 bit 都代表质量问题，非零即不可用
-                # 同时额外检查 ivar > 0，防止 SPECMASK 漏标 ivar=0 的像素
-                quality_mask = (specmask == 0) & (ivar > 0)
-                
-                # === 引入 arm overlap mask ===                
-                overlap_regions = find_overlap_regions(band_names, band_wavelengths)
-                
-                # 构建 combined mask：True 表示保留
-                # 1. 不在重叠区域内
-                # 2. SPECMASK == 0（质量良好）
-                keep_mask = quality_mask.copy()
-                
-                if overlap_regions:
-                    logging.info(f"Detected {len(overlap_regions)} overlap regions: {overlap_regions}")
-                    
-                    for region_name, (ov_start, ov_end) in overlap_regions.items():
-                        in_overlap = (wavelength >= ov_start) & (wavelength <= ov_end)
-                        keep_mask &= ~in_overlap
-                        logging.info(f"  Masking overlap '{region_name}': [{ov_start:.2f}, {ov_end:.2f}], "
-                                    f"{in_overlap.sum()} points removed")
-                
-                # 应用 mask，只保留质量良好且非重叠区域的像素
-                # 注意：wavelength 和 flux 保留完整数据（用于 spectrum_dict['flux'] 和 ['wavelength']）
-                # new_wavelength、weighted_flux、ivar 只保留 mask 后的数据
-                wavelength_masked = wavelength[keep_mask]
-                flux_masked = flux[keep_mask]
-                ivar_masked = ivar[keep_mask]
-                
-                n_removed = len(wavelength) - len(wavelength_masked)
-                n_quality_removed = np.sum(~quality_mask)
-                logging.info(f"After masking: {len(wavelength_masked)} points remain "
-                            f"({n_removed} removed, including {n_quality_removed} from SPECMASK)")
-                
-                # DESI 格式只有 IVAR，不直接计算 SNR
-                # effective_snr 设为 None，下游模块可从 ivar 计算
-                effective_snr = None
-                has_ivar = True
-                
-            else:
-                # === 单表格格式 ===
-                logging.info("Detected single-table FITS format")
-                is_desi_format = False
-                overlap_regions = None
-                
-                # 查找包含数据的 HDU
-                data = None
-                for i, hdu in enumerate(hdul):
-                    if hdu.data is not None:
-                        data = hdu.data
-                        logging.info(f"Found data in HDU {i}")
-                        break
-                
-                if data is None:
-                    raise ValueError(f"No data found in FITS file: {fits_path}")
-                
-                
-                # 检查数据类型，确定如何提取列
-                if hasattr(data, 'dtype') and hasattr(data.dtype, 'names') and data.dtype.names is not None:
-                    # 这是 recarray（二进制表）
-                    col_names = data.dtype.names
-                    logging.info(f"FITS columns: {col_names}")
-                    
-                    # 查找波长和流量列（不区分大小写）
-                    wavelength_col = None
-                    flux_col = None
-                    snr_col = None
-                    ivar_col = None
-                    
-                    for name in col_names:
-                        name_upper = name.upper()
-                        if name_upper in ['WAVELENGTH', 'WAVE', 'LAMBDA']:
-                            wavelength_col = name
-                        elif name_upper in ['FLUX', 'F']:
-                            flux_col = name
-                        elif name_upper in ['SNR', 'SIGNAL_TO_NOISE']:
-                            snr_col = name
-                        elif name_upper in ['IVAR', 'INVERSE_VARIANCE']:
-                            ivar_col = name
-                    
-                    if wavelength_col is None or flux_col is None:
-                        raise ValueError(f"Required columns not found. Available: {col_names}")
-                    
-                    wavelength = np.array(data[wavelength_col])
-                    flux = np.array(data[flux_col])
-                    
-                    if snr_col is not None:
-                        effective_snr = np.array(data[snr_col])
-                        ivar = None
-                        has_ivar = False
-                    elif ivar_col is not None:
-                        ivar = np.array(data[ivar_col])
-                        effective_snr = None  # 只有 IVAR 时，SNR 设为 None
-                        has_ivar = True
-                    else:
-                        effective_snr = np.full_like(flux, 5.0, dtype=float)
-                        ivar = None
-                        has_ivar = False
-                else:
-                    # 普通数组，假设第一列是波长，第二列是流量
-                    wavelength = data[:, 0]
-                    flux = data[:, 1]
-                    effective_snr = np.full_like(flux, 5.0, dtype=float)
-                    ivar = None
-                    has_ivar = False
-            
-            # 确保是 numpy 数组
-            wavelength = np.array(wavelength, dtype=np.float64)
-            flux = np.array(flux, dtype=np.float64)
-            
-            # 处理 ivar
-            if has_ivar and ivar is not None:
-                ivar = np.array(ivar, dtype=np.float64)
-            
-            # 对于 DESI 格式，使用 mask 后的数据作为 new_wavelength/weighted_flux/ivar
-            # 对于其他格式，mask 后数据与原始数据相同
-            # 注意：保持 numpy 数组格式用于后续计算
-            # DESI 格式：应用 SPECMASK 和 overlap mask 后的数据
-            if is_desi_format:
-                new_wavelength = np.array(wavelength_masked, dtype=np.float64)
-                weighted_flux = np.array(flux_masked, dtype=np.float64)
-                ivar_final = np.array(ivar_masked, dtype=np.float64)
-            else:
-                new_wavelength = wavelength
-                weighted_flux = flux
-                ivar_final = ivar if has_ivar and ivar is not None else None
-
-            # 处理 effective_snr
-            if effective_snr is not None:
-                effective_snr = np.array(effective_snr, dtype=np.float64)
-                snr_medium = float(np.median(effective_snr))
-            elif ivar_final is not None:
-                # 从 IVAR 计算 SNR: SNR = FLUX * sqrt(IVAR)
-                ivar_safe = np.maximum(ivar_final, 0)  # 确保 IVAR 非负
-                effective_snr = weighted_flux * np.sqrt(ivar_safe)
-                snr_medium = float(np.median(effective_snr))
-            else:
-                # 没有数据时使用默认值
-                effective_snr = np.full_like(weighted_flux, 5.0, dtype=np.float64)
-                snr_medium = 5.0
-
-            
-            # smooth the spectrum
-            weighted_flux = gaussian_filter1d(weighted_flux, sigma=2)
-            
-            # 构建 spectrum_dict，与 _convert_to_spectrum 输出格式一致
-            # 最后统一转换为 list
-            spectrum_dict = {
-                'flux': flux.tolist(),
-                'wavelength': wavelength.tolist(),
-                'new_wavelength': new_wavelength.tolist(),
-                'weighted_flux': weighted_flux.tolist(),
-                'max_unresolved_flux': None,
-                'min_unresolved_flux': None,
-                'delta_flux': None,
-                'std_flux': None,
-                'effective_snr': effective_snr.tolist(),
-                'snr_medium': snr_medium,
-                'ivar': ivar_final.tolist() if ivar_final is not None else None,
-            }
-            
-            state['spectrum'] = spectrum_dict
-            
-        return state
+    def load_spectrum_from_fits(self, state: SpectroState) -> SpectroState:
+        """从 FITS 文件加载光谱数据，波段信息来自 .env 中的 ARM_NAME / ARM_WAVELENGTH_RANGE"""
+        params = self.runtime.configs.params
+        return _load_spectrum_from_fits(
+            state,
+            arm_names=params.arm_name,
+            arm_wavelength_ranges=params.arm_wavelength_range,
+        )
 
     async def detect_axis_ticks(self, state: SpectroState) -> SpectroState:
         """调用 VLM 检测坐标轴刻度"""
@@ -456,7 +209,7 @@ class VisualInterpreter(BaseAgent):
         params = self.runtime.configs.params
         try:
             if self.runtime.configs.io.input_format == 'fits':
-                self._load_spectrum_from_fits(state)
+                self.load_spectrum_from_fits(state)
             else:  
                 # === Phase A: 坐标轴检测与校准 ===
                 await self.detect_axis_ticks(state)
@@ -472,17 +225,11 @@ class VisualInterpreter(BaseAgent):
                 state["pixel_to_value"] = _pixel_tickvalue_fitting(state['tick_pixel_remap'])
 
                 # === Phase C: 光谱重建 ===
-                input_format = getattr(self.runtime.configs.params, 'input_format', 'image')
-                if input_format == 'fits':
-                    # FITS 格式：直接从文件读取光谱数据
-                    self._load_spectrum_from_fits(state)
-                else:
-                    # 图像格式：从图像中提取光谱
-                    arm_name = self.runtime.configs.params.arm_name
-                    arm_wavelength_range = self.runtime.configs.params.arm_wavelength_range
-                    state["spectrum"] = _convert_to_spectrum(
-                        state['crop_path'], state['pixel_to_value'], arm_name, arm_wavelength_range
-                    )
+                arm_name = self.runtime.configs.params.arm_name
+                arm_wavelength_range = self.runtime.configs.params.arm_wavelength_range
+                state["spectrum"] = _convert_to_spectrum(
+                    state['crop_path'], state['pixel_to_value'], arm_name, arm_wavelength_range
+                )
 
             plot_spec_extract(state)
             plot_spectrum_snr(state)
