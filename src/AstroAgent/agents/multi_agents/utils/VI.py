@@ -1,8 +1,10 @@
 import os
 import json
-# import logging
+import logging
 import cv2
 import numpy as np
+from astropy.io import fits
+from scipy.ndimage import gaussian_filter1d
 import pandas as pd
 # import matplotlib.pyplot as plt
 import pytesseract
@@ -13,6 +15,7 @@ from scipy.optimize import curve_fit
 # from scipy.stats import mode
 
 from AstroAgent.agents.common.state import SpectroState
+from AstroAgent.agents.multi_agents.utils.usage import find_overlap_regions
 
 
 # ===========================================================
@@ -332,8 +335,6 @@ def _convert_to_spectrum(crop_path, axis_fitting_info, band_names=None, band_wav
     输出：
     - spectrum_dict: 包含转换后的波长、flux 和平均后的波长与flux的字典
     """
-    from AstroAgent.agents.multi_agents.utils.usage import find_overlap_regions
-
     # Step 1: 提取曲线像素点
     points, gray = _process_and_extract_curve_points(crop_path)
 
@@ -416,6 +417,326 @@ def _convert_to_spectrum(crop_path, axis_fitting_info, band_names=None, band_wav
     }
 
     return spectrum_dict
+
+
+# ===========================================================
+# Step 1.10: Load Spectrum from FITS
+# ===========================================================
+
+def _load_spectrum_from_fits(state: SpectroState,
+                           arm_names=None,
+                           arm_wavelength_ranges=None) -> SpectroState:
+    """
+    从 FITS 文件中读取光谱数据。
+    支持两种格式：
+    1. 多波段分波段格式（通过 arm_names 指定波段名，如 ['B','R','Z'] 或 ['U','V','I']）
+    2. 单表格格式（包含 WAVELENGTH/FLUX 列的 BinTableHDU）
+
+    Parameters
+    ----------
+    arm_names : list[str], optional
+        波段名称列表，如 ['B','R','Z']（DESI）或 ['U','V','I']（CSST）。
+        若为 None 则报错终止，要求用户在 .env 中配置。
+    arm_wavelength_ranges : list[list[float]], optional
+        各波段波长范围，如 [[3600,5800],[5760,7620],[7520,9824]]。
+        若为 None 则从数据中自动计算。用于波段重叠区域检测。
+    """
+    fits_path = state['file_path']
+
+    with fits.open(fits_path) as hdul:
+        # 获取所有 HDU 名称
+        hdu_names = [hdu.name.upper() for hdu in hdul]
+        logging.info(f"FITS HDU names: {hdu_names}")
+
+        # 检测是否为多波段分波段格式
+        # 若 arm_names 由外部配置提供，直接使用；否则自动从 HDU 名推断波段
+        if arm_names is not None:
+            band_names = arm_names
+            is_multi_arm = all(
+                f'{band}_WAVELENGTH' in hdu_names and f'{band}_FLUX' in hdu_names
+                for band in band_names
+            )
+        else:
+            # 未配置 arm_names，报错提示用户
+            raise ValueError(
+                "未配置多波段信息。请在 .env 中设置 ARM_NAME 和 ARM_WAVELENGTH_RANGE。\n"
+                "例如：\n"
+                "  ARM_NAME = B,R,Z\n"
+                "  ARM_WAVELENGTH_RANGE = 3600-5800,5760-7620,7520-9824\n"
+                "如果你使用 CSST 数据，请替换为 U,V,I 及对应波长范围。"
+            )
+
+        if is_multi_arm:
+            # === 多波段分波段格式 ===
+            logging.info(f"Detected multi-arm FITS format: {band_names}")
+
+            # 读取各波段的数据并记录波长范围
+            wavelength_list = []
+            flux_list = []
+            ivar_list = []
+            snr_list = []
+            mask_list = []
+            has_ivar = False
+            has_snr = False
+            band_wavelengths = []
+            if arm_wavelength_ranges is not None:
+                band_wavelengths = arm_wavelength_ranges
+
+            for band in band_names:
+                wave_hdu = hdul[f'{band}_WAVELENGTH']
+                flux_hdu = hdul[f'{band}_FLUX']
+
+                wave_data = wave_hdu.data
+                wavelength_list.append(wave_data)
+                flux_list.append(flux_hdu.data)
+
+                # 读取 IVAR / SNR（有则读，二者都有则都读）
+                ivar_hdu_name = f'{band}_IVAR'
+                snr_hdu_name = f'{band}_SNR'
+                band_has_ivar = ivar_hdu_name in hdu_names
+                band_has_snr = snr_hdu_name in hdu_names
+
+                if band_has_ivar:
+                    ivar_list.append(hdul[ivar_hdu_name].data)
+                    has_ivar = True
+                else:
+                    ivar_list.append(None)
+
+                if band_has_snr:
+                    snr_list.append(hdul[snr_hdu_name].data)
+                    has_snr = True
+                else:
+                    snr_list.append(None)
+
+                if not band_has_ivar and not band_has_snr:
+                    logging.warning(f"波段 {band} 缺少 IVAR 和 SNR，将使用默认 effective_snr=5.0")
+
+                # 读取 SPECMASK（如果存在）
+                mask_hdu_name = f'{band}_MASK'
+                if mask_hdu_name in hdu_names:
+                    mask_data = hdul[mask_hdu_name].data
+                    mask_list.append(mask_data)
+                    unique_masks = np.unique(mask_data)
+                    if len(unique_masks) > 1 or unique_masks[0] != 0:
+                        logging.info(f"  {band}_MASK has non-zero values: {unique_masks}")
+                else:
+                    mask_list.append(np.zeros(len(wave_data), dtype=np.uint32))
+                    logging.info(f"  {band}_MASK not found, assuming all pixels are good")
+
+                # 记录该波段的波长范围（未提供配置值时从数据计算）
+                if arm_wavelength_ranges is None:
+                    band_wavelengths.append([float(wave_data.min()), float(wave_data.max())])
+
+            # 校验各波段噪声数据一致性（不允许混合 IVAR/SNR）
+            all_have_ivar = all(x is not None for x in ivar_list)
+            all_have_snr = all(x is not None for x in snr_list)
+            if not all_have_ivar and any(x is not None for x in ivar_list):
+                raise ValueError(
+                    "部分波段有 IVAR 而部分没有，请确保所有波段的 IVAR 数据一致。"
+                    f"IVAR 状态: {['有' if x is not None else '无' for x in ivar_list]}"
+                )
+            if not all_have_snr and any(x is not None for x in snr_list):
+                raise ValueError(
+                    "部分波段有 SNR 而部分没有，请确保所有波段的 SNR 数据一致。"
+                    f"SNR 状态: {['有' if x is not None else '无' for x in snr_list]}"
+                )
+
+            # 合并数组
+            wavelength = np.concatenate(wavelength_list)
+            flux = np.concatenate(flux_list)
+
+            if has_ivar:
+                ivar = np.concatenate(ivar_list)  # 全部非 None，直接拼接
+            else:
+                ivar = None
+
+            if has_snr:
+                snr = np.concatenate(snr_list)  # 全部非 None，直接拼接
+            else:
+                snr = None
+
+            specmask = np.concatenate(mask_list)
+
+            logging.info(f"Combined {len(wavelength)} wavelength points from {len(band_names)} arms")
+            logging.info(f"Wavelength range: {wavelength.min():.2f} - {wavelength.max():.2f} Å")
+
+            # 统计整体 mask 情况
+            n_masked = np.sum(specmask != 0)
+            if n_masked > 0:
+                logging.info(f"SPECMASK: {n_masked} pixels ({100*n_masked/len(specmask):.2f}%) have quality issues")
+            else:
+                logging.info("SPECMASK: All pixels are clean (mask=0)")
+
+            # === 构建 quality mask ===
+            if has_ivar and ivar is not None:
+                quality_mask = (specmask == 0) & (ivar > 0)
+            else:
+                # 仅有 SNR 的情况（如 CSST）：mask 为 0 即表示好像素
+                quality_mask = (specmask == 0)
+
+            # === 引入 arm overlap mask ===
+            overlap_regions = find_overlap_regions(band_names, band_wavelengths)
+
+            keep_mask = quality_mask.copy()
+
+            if overlap_regions:
+                logging.info(f"Detected {len(overlap_regions)} overlap regions: {overlap_regions}")
+                for region_name, (ov_start, ov_end) in overlap_regions.items():
+                    in_overlap = (wavelength >= ov_start) & (wavelength <= ov_end)
+                    keep_mask &= ~in_overlap
+                    logging.info(f"  Masking overlap '{region_name}': [{ov_start:.2f}, {ov_end:.2f}], "
+                                f"{in_overlap.sum()} points removed")
+
+            # 应用 mask
+            wavelength_masked = wavelength[keep_mask]
+            flux_masked = flux[keep_mask]
+            ivar_masked = ivar[keep_mask] if ivar is not None else None
+            snr_masked = snr[keep_mask] if snr is not None else None
+
+            # 排序 + 同波长去重（取均值）
+            sort_idx = np.argsort(wavelength_masked)
+            wavelength_masked = wavelength_masked[sort_idx]
+            flux_masked = flux_masked[sort_idx]
+            ivar_masked = ivar_masked[sort_idx] if ivar_masked is not None else None
+            snr_masked = snr_masked[sort_idx] if snr_masked is not None else None
+
+            # 合并相同波长：取 flux / ivar / snr 的均值
+            _, unique_idx, dup_counts = np.unique(
+                wavelength_masked, return_index=True, return_counts=True
+            )
+            if len(unique_idx) < len(wavelength_masked):
+                n_dup = len(wavelength_masked) - len(unique_idx)
+                logging.warning(f"发现 {n_dup} 个重复波长点，将对 flux/ivar/snr 取均值")
+                new_wl = wavelength_masked[unique_idx]
+                new_flux = np.zeros(len(unique_idx))
+                new_ivar = np.zeros(len(unique_idx)) if ivar_masked is not None else None
+                new_snr = np.zeros(len(unique_idx)) if snr_masked is not None else None
+                for j, (start, count) in enumerate(
+                    zip(unique_idx, dup_counts)
+                ):
+                    sl = slice(start, start + count)
+                    new_flux[j] = np.mean(flux_masked[sl])
+                    if new_ivar is not None:
+                        new_ivar[j] = np.mean(ivar_masked[sl])
+                    if new_snr is not None:
+                        new_snr[j] = np.mean(snr_masked[sl])
+                wavelength_masked = new_wl
+                flux_masked = new_flux
+                ivar_masked = new_ivar
+                snr_masked = new_snr
+
+            n_removed = len(wavelength) - len(wavelength_masked)
+            n_quality_removed = np.sum(~quality_mask)
+            logging.info(f"After masking: {len(wavelength_masked)} points remain "
+                        f"({n_removed} removed, including {n_quality_removed} from SPECMASK)")
+
+            if has_snr and snr_masked is not None:
+                effective_snr = snr_masked.astype(np.float64)
+            else:
+                effective_snr = None
+
+        else:
+            # === 单表格格式 ===
+            logging.info("Detected single-table FITS format")
+            is_multi_arm = False
+            overlap_regions = None
+
+            data = None
+            for i, hdu in enumerate(hdul):
+                if hdu.data is not None:
+                    data = hdu.data
+                    logging.info(f"Found data in HDU {i}")
+                    break
+
+            if data is None:
+                raise ValueError(f"No data found in FITS file: {fits_path}")
+
+            if hasattr(data, 'dtype') and hasattr(data.dtype, 'names') and data.dtype.names is not None:
+                col_names = data.dtype.names
+                logging.info(f"FITS columns: {col_names}")
+
+                wavelength_col = None
+                flux_col = None
+                snr_col = None
+                ivar_col = None
+
+                for name in col_names:
+                    name_upper = name.upper()
+                    if name_upper in ['WAVELENGTH', 'WAVE', 'LAMBDA']:
+                        wavelength_col = name
+                    elif name_upper in ['FLUX', 'F']:
+                        flux_col = name
+                    elif name_upper in ['SNR', 'SIGNAL_TO_NOISE']:
+                        snr_col = name
+                    elif name_upper in ['IVAR', 'INVERSE_VARIANCE']:
+                        ivar_col = name
+
+                if wavelength_col is None or flux_col is None:
+                    raise ValueError(f"Required columns not found. Available: {col_names}")
+
+                wavelength = np.array(data[wavelength_col])
+                flux = np.array(data[flux_col])
+
+                if snr_col is not None:
+                    effective_snr = np.array(data[snr_col])
+                    ivar = None
+                    has_ivar = False
+                elif ivar_col is not None:
+                    ivar = np.array(data[ivar_col])
+                    effective_snr = None
+                    has_ivar = True
+                else:
+                    effective_snr = np.full_like(flux, 5.0, dtype=float)
+                    ivar = None
+                    has_ivar = False
+            else:
+                # 普通数组
+                wavelength = data[:, 0]
+                flux = data[:, 1]
+                effective_snr = np.full_like(flux, 5.0, dtype=float)
+                ivar = None
+                has_ivar = False
+
+        # 确保是 numpy 数组
+        wavelength = np.array(wavelength, dtype=np.float64)
+        flux = np.array(flux, dtype=np.float64)
+
+        if has_ivar and ivar is not None:
+            ivar = np.array(ivar, dtype=np.float64)
+
+        # 多波段格式：使用 mask 后的数据
+        if is_multi_arm:
+            new_wavelength = np.array(wavelength_masked, dtype=np.float64)
+            weighted_flux = np.array(flux_masked, dtype=np.float64)
+            ivar_final = np.array(ivar_masked, dtype=np.float64) if ivar_masked is not None else None
+        else:
+            new_wavelength = wavelength
+            weighted_flux = flux
+            ivar_final = ivar if has_ivar and ivar is not None else None
+
+        # 处理 effective_snr
+        if effective_snr is not None:
+            effective_snr = np.array(effective_snr, dtype=np.float64)
+        elif ivar_final is not None:
+            ivar_safe = np.maximum(ivar_final, 0)
+            effective_snr = weighted_flux * np.sqrt(ivar_safe)
+        else:
+            effective_snr = np.full_like(weighted_flux, 5.0, dtype=np.float64)
+
+        # smooth the spectrum
+        weighted_flux = gaussian_filter1d(weighted_flux, sigma=2)
+
+        # 构建 spectrum_dict
+        spectrum_dict = {
+            'new_wavelength': new_wavelength.tolist(),
+            'weighted_flux': weighted_flux.tolist(),
+            'effective_snr': effective_snr.tolist(),
+            'ivar': ivar_final.tolist() if ivar_final is not None else None,
+        }
+
+        state['spectrum'] = spectrum_dict
+
+    return state
 
 
 # ===========================================================
