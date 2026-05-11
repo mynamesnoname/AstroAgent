@@ -148,6 +148,11 @@ class RuleAnalyst(BaseAgent):
           benefit from any prefix-cache warm-up from step_0/step_x.
         """
 
+        prelim = state.get('preliminary_classification_monkey', [])
+        _is_qso = any(i['Category'] == 'QSO'     for i in prelim)
+        _is_elg = any(i['Category'] == 'ELG'     for i in prelim)
+        _is_lrg = any(i['Category'] == 'LRG/BGS' for i in prelim)
+
         # QSO / ELG / LRG 各自独立检查对应的暴力匹配结果
         # 无结果时写入占位信息并跳过对应分支
         _has_qso = bool(state.get('brute_force_matching_qso'))
@@ -166,13 +171,13 @@ class RuleAnalyst(BaseAgent):
                 "wavelength-line constraints). Quantitative analysis skipped."
             )
 
-        if not _has_qso:
+        if _is_qso and not _has_qso:
             state.setdefault('rule_analysis_QSO', {})['step_F'] = _no_match_placeholder()
 
-        if not _has_elg:
+        if _is_elg and not _has_elg:
             state.setdefault('rule_analysis_ELG', {})['step_F'] = _no_match_placeholder()
 
-        if not _has_lrg_bgs:
+        if _is_lrg and not _has_lrg_bgs:
             state.setdefault('rule_analysis_LRG', {})['step_F'] = _no_match_placeholder()
 
         # 若所有匹配均为空，无需继续
@@ -182,17 +187,17 @@ class RuleAnalyst(BaseAgent):
         peaks = state['peaks']
         troughs = state['troughs']
 
-        if _has_qso:
+        if _is_qso and _has_qso:
             await self.QSO_step_F_pipeline(state, peaks, troughs)
             await self.QSO_generic_extract(state, source_step="step_F")
             self._writer.write_rule_analysis_qso(state)
 
-        if _has_elg:
+        if _is_elg and _has_elg:
             await self.ELG_step_F_pipeline(state, peaks, troughs)
             await self.ELG_generic_extract(state, source_step="step_F")
             self._writer.write_rule_analysis_elg(state)
 
-        if _has_lrg_bgs:
+        if _is_lrg and _has_lrg_bgs:
             await self.LRG_step_F_pipeline(state, peaks, troughs)
             await self.LRG_generic_extract(state, source_step="step_F")
             self._writer.write_rule_analysis_lrg(state)
@@ -278,7 +283,6 @@ class RuleAnalyst(BaseAgent):
         wl_left = state['spectrum']['new_wavelength'][0]
         wl_right = state['spectrum']['new_wavelength'][-1]
         tol_wavelength = self.runtime.configs.params.tol_wavelength_qso
-        preliminary_classification = None
         for i in state['preliminary_classification_monkey']:
             if i['Category'] == 'QSO':
                 preliminary_classification = i
@@ -350,7 +354,6 @@ class RuleAnalyst(BaseAgent):
         wl_left = state['spectrum']['new_wavelength'][0]
         wl_right = state['spectrum']['new_wavelength'][-1]
         tol_wavelength = self.runtime.configs.params.tol_wavelength_qso
-        preliminary_classification = None
         for i in state['preliminary_classification_monkey']:
             if i['Category'] == 'QSO':
                 preliminary_classification = i
@@ -496,7 +499,6 @@ class RuleAnalyst(BaseAgent):
         wl_left = state['spectrum']['new_wavelength'][0]
         wl_right = state['spectrum']['new_wavelength'][-1]
         tol_wavelength = self.runtime.configs.params.tol_wavelength_galaxy
-        preliminary_classification = None
         for i in state['preliminary_classification_monkey']:
             if i['Category'] == 'ELG':
                 preliminary_classification = i
@@ -568,7 +570,6 @@ class RuleAnalyst(BaseAgent):
         wl_left = state['spectrum']['new_wavelength'][0]
         wl_right = state['spectrum']['new_wavelength'][-1]
         tol_wavelength = self.runtime.configs.params.tol_wavelength_galaxy
-        preliminary_classification = None
         for i in state['preliminary_classification_monkey']:
             if i['Category'] == 'ELG':
                 preliminary_classification = i
@@ -776,7 +777,6 @@ class RuleAnalyst(BaseAgent):
         wl_left = state['spectrum']['new_wavelength'][0]
         wl_right = state['spectrum']['new_wavelength'][-1]
         tol_wavelength = self.runtime.configs.params.tol_wavelength_galaxy
-        preliminary_classification = None
         for i in state['preliminary_classification_monkey']:
             if i['Category'] == 'LRG/BGS':
                 preliminary_classification = i
