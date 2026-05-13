@@ -4,6 +4,9 @@
 data/
 test_set/
 
+# Paper
+_paper/
+
 # Logs
 log/
 
