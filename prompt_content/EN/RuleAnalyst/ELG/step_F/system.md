@@ -151,6 +151,17 @@ Each matching result contains the following fields:
    - If the list is empty (none), it indicates that all emission lines within the observed range for this hypothesis's redshift range have been matched.
 8. **In emission/absorption matches, a single peak/trough may match multiple lines, or multiple peaks/troughs may match the same line.** This arises from limitations of the peak/trough-finding algorithm (may identify noise or fluctuations on a broad line as multiple lines), and line blending/proximity.
 
+### R4: Calculation Restrictions
+
+**Strictly prohibited — Do NOT perform any of the following numerical calculations yourself:**
+- Computing observed wavelength from rest wavelength and redshift (λ_obs = λ_rest × (1+z))
+- Computing redshift from observed and rest wavelengths
+- Estimating whether a spectral line falls within the observed wavelength range
+
+**Reason**: All such calculations have already been performed by the brute-force matching algorithm and are provided in the input fields. If a line is absent from `Observable emission lines` / `Observable absorption lines`, it is definitively outside the observed range. If `Missing emission lines` / `Missing absorption lines` is `(none)`, then every line in range has been matched.
+
+You are only required to perform **physical reasoning and judgment** based on these pre-computed fields. Do not second-guess them with your own calculations. Any conclusion drawn from self-calculated line positions is invalid and will mislead subsequent stages.
+
 ---
 
 ## Analysis Steps
@@ -197,7 +208,12 @@ Based on Step F-1, conduct physical semantic verification:
     - Does the O [III] doublet exist? Is the amplitude ratio reasonable?
 3. Comprehensive consideration: Are the peaks/troughs with top Amplitude rank in the original peak/trough-finding results reasonably explained in the current hypothesis? If there are prominent peaks unmatched, does it mean the hypothesis is invalid? Or is there another special reason?
 
-4. **Observable Narrow-Line Verification**: Against the input `Observable emission lines` list, state the matching status of all narrow emission lines (O [II], Hβ, O [III]a, O [III]b, Hα, etc.) that fall within the observed range (matched / in range but NOT matched / not in obs range). Must not omit any matched narrow line. If determined as Case 2 (AGN), additionally state the status of AGN characteristic lines such as Mg II, C III], etc.
+4. **Observable Narrow-Line Verification**: For each narrow emission line within the observed range, determine its status **exclusively by reading the `Observable emission lines` and `Missing emission lines` fields** — do NOT recalculate its position yourself:
+    - If the line appears in `Observable emission lines` as [matched at ...] → output "matched at XXXX.X Å (z=X.XXX)"
+    - If the line appears in `Observable emission lines` as [NOT matched] → output "in range but NOT matched"
+    - If the line is **absent from `Observable emission lines`** → output "not in obs range" (the algorithm has determined its redshifted position is outside the observed wavelength range; do not dispute this)
+    - The `Missing emission lines` field provides a secondary check: if a line is truly in range but unmatched, it MUST appear there.
+    Must not omit any matched narrow line. If determined as Case 2 (AGN), additionally state the status of AGN characteristic lines such as Mg II, C III], etc.
    **Note**: O [II] or O [III] being in range but NOT matched does not directly veto the hypothesis. If other narrow lines are well-matched with consistent internal redshift, the absence of oxygen lines may be due to low SNR, limited wavelength coverage, or physically weak oxygen emission. Key_lines_status must record the status but this should not be the sole elimination criterion.
 
 ### Step F-3: Conclusion for This Hypothesis
@@ -224,6 +240,7 @@ Provide a single hypothesis assessment conclusion (no cross-hypothesis compariso
 6. **Final Adopted Pairs**: Based on Step F-1/F-2 reasoning, provide the finally adopted observed wavelength and z value for each matched emission line (select the best when multiple candidates exist, directly list if no multiple candidates). Format:
    - `line name → observed wavelength Å (z=redshift value)`
    - Unmatched lines are not listed; absorption lines are not included in this item
+   - **Width mismatch constraint**: A line flagged ⚠ width mismatch should be placed in **Concerns**, not Adopted_pairs, unless a width-consistent alternative match exists for the same line. A line whose observed width contradicts its physical width class is not a reliable redshift anchor.
 
 ---
 

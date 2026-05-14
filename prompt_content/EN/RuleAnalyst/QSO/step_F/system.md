@@ -152,8 +152,22 @@ Each matching result contains the following fields:
    - If the list is empty (none), it indicates that all emission lines within the observed range for this hypothesis's redshift range have been matched.
 8. **In emission/absorption matches, a single peak/trough may match multiple lines, or multiple peaks/troughs may match the same line.** This arises from limitations of the peak/trough-finding algorithm (may identify noise or fluctuations on a broad line as multiple lines), and line blending/proximity.
 
----
+### R5: Calculation Restrictions
 
+**Strictly prohibited — Do NOT perform any of the following numerical calculations yourself:**
+- Computing observed wavelength from rest wavelength and redshift (λ_obs = λ_rest × (1+z))
+- Computing redshift from observed and rest wavelengths
+- Estimating whether a spectral line falls within the observed wavelength range
+
+**Reason**: All such calculations have already been performed by the brute-force matching algorithm and are provided in the input fields:
+- **`Observable emission lines`**: Lists all emission lines whose redshifted position falls within the observed range, with their matching status. If a line is absent from this list, it is definitively outside the observed range.
+- **`Missing emission lines`**: Lists all emission lines that are within the observed range but not matched. If this list is `(none)`, then every line in range has been matched.
+
+You are only required to perform **physical reasoning and judgment** based on these pre-computed fields. Do not second-guess them with your own calculations.
+
+**Consequence**: Any conclusion drawn from self-calculated line positions (e.g., claiming a line is "in range but not matched" when it is absent from `Observable emission lines`) is invalid and will mislead subsequent stages.
+
+---
 
 ## Steps
 
@@ -210,8 +224,11 @@ Based on Step F-1, conduct physical semantic verification:
     If determined as **Case 2 (Host galaxy-dominated AGN)**, must verify:
     - Ne [V] (3426 Å), C III] (1909 Å), Mg II (2800 Å), O [III]a (4960 Å), O [III]b (5008 Å)
     
-    For each key line, state: matched (with observed wavelength and z value) / in obs range but NOT matched / not in obs range.
-    If a key line is not in the `Observable emission lines` list, it means its redshifted position falls outside the observed range; mark as "not in obs range".
+    For each key line, determine its status **exclusively by reading the `Observable emission lines` and `Missing emission lines` fields** — do NOT recalculate its position yourself:
+    - If the line appears in `Observable emission lines` as [matched at ...] → output "matched at XXXX.X Å (z=X.XXX)"
+    - If the line appears in `Observable emission lines` as [NOT matched] → output "in range but NOT matched"
+    - If the line is **absent from `Observable emission lines`** → output "not in obs range" (the algorithm has determined its redshifted position is outside the observed wavelength range; do not dispute this)
+    - The `Missing emission lines` field provides a secondary check: if a line is truly in range but unmatched, it MUST appear there.
 
 ### Step F-3: Conclusion for This Hypothesis
 
@@ -231,6 +248,7 @@ Provide a single hypothesis assessment conclusion (no cross-hypothesis compariso
 6. **Final Adopted Pairs**: Based on Step F-1/F-2 reasoning, provide the finally adopted observed wavelength and z value for each matched emission line (select the best when multiple candidates exist, directly list if no multiple candidates). Format:
    - `line name → observed wavelength Å (z=redshift value)`
    - Unmatched lines are not listed; absorption lines are not included in this item
+   - **Width mismatch constraint**: A line flagged ⚠ width mismatch should be placed in **Concerns**, not Adopted_pairs, unless a width-consistent alternative match exists for the same line. A line whose observed width contradicts its physical width class is not a reliable redshift anchor.
 
 ---
 

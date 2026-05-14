@@ -8,10 +8,8 @@ from langchain.agents import create_agent
 from AstroAgent.manager.runtime.message_manager import create_message
 from AstroAgent.core.llm import _detect_vendor, _build_thinking_extra_body
 
-# ── 网络层错误关键字，断网/重联时会触发重试 ──
-_NETWORK_ERROR_KEYWORDS = (
-    "connectionerror",
-    "connecttimeout",
+# ── 连接错误关键字，断网/重联时会触发重试 + MCP 重置 ──
+_CONNECTION_ERROR_KEYWORDS = (
     "connection reset",
     "connection refused",
     "remotedisconnected",
@@ -19,11 +17,19 @@ _NETWORK_ERROR_KEYWORDS = (
     "apiconnectionerror",
     "connect error",
     "network",
-    "timed out",
-    "timeout",
     "broken pipe",
     "eof occurred",
     "ssl",
+)
+
+# ── 超时错误关键字，触发重试但不会重置 MCP ──
+_TIMEOUT_KEYWORDS = (
+    "connectionerror",
+    "connecttimeout",
+    "timed out",
+    "timeout",
+    "readtimeout",
+    "read timeout",
 )
 
 # ── API 限速/配额错误关键字 ──
@@ -35,14 +41,23 @@ _RATE_LIMIT_KEYWORDS = (
 )
 
 
-def _is_network_error(error_msg: str) -> bool:
-    """判断是否为网络层错误（断网、超时、连接失败等）。"""
-    return any(kw in error_msg for kw in _NETWORK_ERROR_KEYWORDS)
+def _is_connection_error(error_msg: str) -> bool:
+    """判断是否为连接层错误（断网、连接拒绝等），需要重置 MCP。"""
+    return any(kw in error_msg for kw in _CONNECTION_ERROR_KEYWORDS)
+
+
+def _is_timeout_error(error_msg: str) -> bool:
+    """判断是否为超时错误，重试但不需要重置 MCP。"""
+    return any(kw in error_msg for kw in _TIMEOUT_KEYWORDS)
 
 
 def _is_retryable_error(error_msg: str) -> bool:
-    """判断是否为可重试错误（网络错误 + 限速错误）。"""
-    return _is_network_error(error_msg) or any(kw in error_msg for kw in _RATE_LIMIT_KEYWORDS)
+    """判断是否为可重试错误（连接错误 + 超时 + 限速错误）。"""
+    return (
+        _is_connection_error(error_msg)
+        or _is_timeout_error(error_msg)
+        or any(kw in error_msg for kw in _RATE_LIMIT_KEYWORDS)
+    )
 
 
 class BaseAgent:
@@ -174,15 +189,21 @@ class BaseAgent:
                 error_msg = str(e).lower()
 
                 if attempt < max_retries and _is_retryable_error(error_msg):
-                    if _is_network_error(error_msg):
-                        # 网络错误：重置 agent 实例和 MCP 连接，让下次调用重建
+                    if _is_connection_error(error_msg):
+                        # 连接错误：重置 agent 实例和 MCP 连接，让下次调用重建
                         logging.warning(
-                            f"🌐 {description}遇到网络错误，重置连接后重试..."
+                            f"🌐 {description}遇到连接错误，重置连接后重试..."
                             f" (尝试 {attempt + 1}/{max_retries}): {str(e)}"
                         )
                         self._text_agent = None
                         self._vis_agent = None
                         await self.runtime.reset_mcp()
+                    elif _is_timeout_error(error_msg):
+                        # 超时错误：保留 MCP 连接和 agent，仅等待后重试
+                        logging.warning(
+                            f"⏱️ {description}遇到超时，{retry_delay}秒后重试..."
+                            f" (尝试 {attempt + 1}/{max_retries})"
+                        )
                     else:
                         # 限速/配额错误：等待后重试，不需要重置连接
                         logging.warning(

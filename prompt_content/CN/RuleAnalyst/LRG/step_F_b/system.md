@@ -54,6 +54,18 @@ LRG（亮红星系）和 BGS（亮星系样本）的光谱特征来自其以老�
 
 ## Rules
 
+### R0: 输入数据权威性与计算禁止
+
+**暴力匹配输入数据是所有波长范围和谱线存在性判断的权威依据。**
+
+1. **`Observable emission lines` / `Observable absorption lines`** 是判断某条谱线是否落在观测范围内的权威来源。若某条谱线**不在**此列表中，则**确定不在观测范围内**。不得质疑或覆盖此结论。
+2. **`Missing emission lines` / `Missing absorption lines`** 是判断哪些谱线在范围内但未被匹配的权威来源。若此列表为 `(none)`，则**观测范围内的每条谱线均已被匹配**，不存在隐藏的缺失谱线。
+3. **禁止自行计算谱线位置**（如 λ_obs = λ_rest × (1+z)）。算法已完成所有此类计算并将结果编码在上述两个字段中。自行计算可能引入错误并与权威输入数据矛盾。
+4. **信任 F-a 的 `Adopted_pairs` 与 `Concerns` 裁决**：逐假设分析（Step F-a）已对每条匹配进行了评估，并已就哪些谱线可靠（`Adopted_pairs`）、哪些存疑（`Concerns`）做出了权威裁决。在评估假设时：
+   - 主要依据 **`Adopted_pairs`** 进行判断——这才代表该假设实际主张的内容。
+   - 一条出现在原始暴力匹配数据中但**被排除在 `Adopted_pairs` 之外**的谱线（例如被 F-a 归入 `Concerns`），已被上游分析判定为不可靠。**不得**用此类谱线来质疑假设——F-a 已解决了这一矛盾。
+   - 反之，若某条关键诊断谱线出现在 `Adopted_pairs` 中但与声称的物理类型矛盾，则是真正的不一致，应予以标记。
+
 ### R1 评判优先级（高 → 低）
 
 1. **物理连贯性**：谱线组合是否符合该天体类型的典型特征（如应存在较多吸收线，尤其是 Ca K/Ca H 双线等，以及 4000 Å break）。
@@ -82,7 +94,7 @@ LRG（亮红星系）和 BGS（亮星系样本）的光谱特征来自其以老�
 
 ### Step F-b1: 总览与排序
 
-1. 简要列出所有假设摘要，标注每个假设的 N_emission + N_absorption 总数、有无 Redshift warning、width mismatch 数量
+1. 简要列出所有假设摘要，标注每个假设的 N_emission + N_absorption 总数、Adopted_pairs 数量、有无 Redshift warning、width mismatch 数量
 
 ### Step F-b2: 跨假设交叉验证
 
