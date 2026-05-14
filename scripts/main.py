@@ -156,9 +156,30 @@ async def main():
             return str(x)
 
         # ------------------------
+        # Prepare incremental CSV output
+        # ------------------------
+        csv_path = os.path.join(output_dir, "in_brief.csv")
+        csv_header = [
+            "file_name",
+            "type",
+            "score",
+            "redshift",
+            "redshift_rms",
+            "lines",
+            "human",
+            "type_2nd",
+            "redshift_2nd",
+            "redshift_rms_2nd",
+            "lines_2nd",
+        ]
+        # Write header once at the start (overwrite any previous run)
+        with open(csv_path, "w", newline="", encoding="utf-8") as f:
+            csv.writer(f).writerow(csv_header)
+
+        # ------------------------
         # Main processing loop
         # ------------------------
-        results = []
+        success_count = 0
         total = len(file_ids)
 
         for idx, file_name in enumerate(file_ids, start=1):
@@ -182,7 +203,7 @@ async def main():
                 logging.info(f"Image {file_name}.{format} processed")
 
                 in_brief = result.get("in_brief", {})
-                results.append([
+                row = [
                     file_name,
                     safe_str(in_brief.get("type")),
                     safe_str(in_brief.get("score")),
@@ -194,34 +215,18 @@ async def main():
                     safe_str(in_brief.get("redshift_2nd")),
                     safe_str(in_brief.get("redshift_rms_2nd")),
                     safe_str(in_brief.get("lines_2nd")),
-                ])
+                ]
+
+                # Append result immediately so it survives later failures
+                with open(csv_path, "a", newline="", encoding="utf-8") as f:
+                    csv.writer(f).writerow(row)
+                success_count += 1
 
             except Exception as e:
                 logging.exception(f"Failed to process image {file_name}.{format}: {e}")
 
-        # ------------------------
-        # Save results
-        # ------------------------
-        if results:
-            csv_path = os.path.join(output_dir, "in_brief.csv")
-            with open(csv_path, "w", newline="", encoding="utf-8") as f:
-                writer_ = csv.writer(f)
-                writer_.writerow([
-                    "file_name",
-                    "type",
-                    "score",
-                    "redshift",
-                    "redshift_rms",
-                    "lines",
-                    "human",
-                    "type_2nd",
-                    "redshift_2nd",
-                    "redshift_rms_2nd",
-                    "lines_2nd",
-                ])
-                writer_.writerows(results)
-
-            logging.info(f"Results saved to {csv_path}")
+        if success_count:
+            logging.info(f"{success_count} results saved to {csv_path}")
         else:
             logging.warning("No valid results to save")
 

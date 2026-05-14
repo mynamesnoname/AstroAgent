@@ -7,7 +7,7 @@ from langgraph.graph import StateGraph, END, START
 
 from AstroAgent.core.runtime.runtime_container import RuntimeContainer
 from AstroAgent.agents.common.state import SpectroState
-from AstroAgent.agents.common.base_agent import _is_network_error
+from AstroAgent.agents.common.base_agent import _is_connection_error, _is_timeout_error
 import copy
 
 #########################
@@ -209,14 +209,22 @@ class WorkflowOrchestrator:
 
             except Exception as e:
                 error_msg = str(e).lower()
-                if attempt < max_tries - 1 and _is_network_error(error_msg):
+                if attempt < max_tries - 1 and _is_connection_error(error_msg):
                     logging.warning(
-                        f"🌐 工作流遇到网络错误，{retry_delay}秒后重试..."
+                        f"🌐 工作流遇到连接错误，{retry_delay}秒后重试..."
                         f" (尝试 {attempt + 1}/{max_tries}): {e}"
                     )
                     await self.runtime.reset_mcp()
                     await asyncio.sleep(retry_delay)
                     # 重置中间结果，从干净状态重跑，避免脏数据（尤其是 List append 字段）污染
+                    current_state = copy.deepcopy(initial_state)
+                    logging.warning("🧹 已清除中间结果字段，将从头重新执行工作流")
+                elif attempt < max_tries - 1 and _is_timeout_error(error_msg):
+                    logging.warning(
+                        f"⏱️ 工作流遇到超时，{retry_delay}秒后重试..."
+                        f" (尝试 {attempt + 1}/{max_tries}): {e}"
+                    )
+                    await asyncio.sleep(retry_delay)
                     current_state = copy.deepcopy(initial_state)
                     logging.warning("🧹 已清除中间结果字段，将从头重新执行工作流")
                 else:

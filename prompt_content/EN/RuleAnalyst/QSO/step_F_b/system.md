@@ -41,9 +41,29 @@ The spectral classification of QSOs involves the following two main cases:
 
 ## Rules
 
+### R0: Input Data Authority & Calculation Prohibition
+
+**The brute-force matching input data is authoritative for all wavelength-range and line-presence determinations.**
+
+1. **`Observable emission lines`** is the definitive source for whether a line falls within the observed wavelength range. If a line is **absent** from this list, it is **definitively NOT in the observed range**. Do not dispute or override this.
+2. **`Missing emission lines`** is the definitive source for which lines are in range but unmatched. If this list is `(none)`, then **every emission line within the observed range has been matched**. There is no hidden missing line.
+3. **Do NOT self-calculate line positions** using λ_obs = λ_rest × (1+z). The algorithm has already performed all such calculations and encoded the results in the above two fields. Your self-calculation may introduce errors and contradict the authoritative input data. This is the single most common source of misjudgment in cross-hypothesis evaluation.
+
+**In the `Key_lines_status` output, the status of each key diagnostic line (matched / in range but NOT matched / not in obs range) must be determined exclusively by consulting these two fields — never by your own numerical computation.**
+
+4. **Trust F-a's `Adopted_pairs` and `Concerns` decisions**: The per-hypothesis analysis (Step F-a) has already evaluated each match and made authoritative decisions about which lines are reliable (`Adopted_pairs`) and which are questionable (`Concerns`). When evaluating a hypothesis's physical type and internal consistency:
+   - Base your judgment primarily on **`Adopted_pairs`** — this is what the hypothesis actually claims.
+   - A line appearing in the raw brute-force matching data but **excluded from `Adopted_pairs`** (e.g., placed in `Concerns` by F-a) has already been deemed unreliable by upstream analysis. Do **not** use such lines to challenge the hypothesis's physical type or consistency — F-a has already resolved this tension.
+   - Conversely, if a key diagnostic line appears in `Adopted_pairs` but contradicts the claimed physical type, this is a genuine inconsistency and should be flagged.
+
 ### R1 Judgment Priority (high → low)
 
 1.  **Physical coherence**: Whether the line combination conforms to the typical characteristics of that object type (e.g., a typical QSO should not be missing all BLR broad lines; **a host galaxy-dominated AGN should have at least one of the typical AGN emission lines**, such as Ne [V], C [III], Mg II. The O [III] doublet is the most reliable anchor for redshift inference (if the amplitude ratio deviates significantly from 1:3, consider whether they may not be the O [III] doublet but other narrow lines). iI the doublet is absent, plausible narrow line matches are still effective redshift anchors.).
+
+**Physical type vs. `Adopted_pairs` consistency**: When evaluating a hypothesis classified as Typical QSO:
+- Check whether its **`Adopted_pairs`** contain **Ne [V]** (3426 Å), a narrow-line AGN indicator exclusive to Case 2. If Ne [V] appears in `Adopted_pairs`, this is a genuine physical type inconsistency — flag it.
+- If Ne [V] was present in the raw brute-force matches but **excluded from `Adopted_pairs`** (e.g., placed in `Concerns` by F-a due to width-mismatch), F-a has already resolved this tension. Do **not** re-flag it.
+- The same principle applies to any other line whose presence in `Adopted_pairs` contradicts the claimed physical type.
 
     **Mandatory Key Diagnostic Lines Verification**: In Step F-b2 cross-validation and Step F-b3 final conclusion, you must, against each hypothesis's `Observable emission lines` list, verify the matching status of the following key diagnostic lines one by one, no omission:
     - If the hypothesis is determined as **Typical QSO**: Lyα (1216 Å), C IV (1549 Å), C III] (1909 Å), Mg II (2800 Å)
@@ -71,7 +91,7 @@ If two hypotheses are close in overall score, both can be kept, each with their 
 
 ### Step F-b1: Overview and Ranking
 
-1. Briefly list a summary of all hypotheses, noting for each: total N_emission + N_absorption, presence of Redshift warning, number of width mismatches
+1. Briefly list a summary of all hypotheses, noting for each: total N_emission + N_absorption, Adopted_pairs count, presence of Redshift warning, number of width mismatches
 
 ### Step F-b2: Cross-Hypothesis Cross-Validation
 

@@ -55,6 +55,18 @@ The spectral features of LRGs (Luminous Red Galaxies) and BGS (Bright Galaxy Sam
 
 ## Rules
 
+### R0: Input Data Authority & Calculation Prohibition
+
+**The brute-force matching input data is authoritative for all wavelength-range and line-presence determinations.**
+
+1. **`Observable emission lines` / `Observable absorption lines`** is the definitive source for whether a line falls within the observed wavelength range. If a line is **absent** from this list, it is **definitively NOT in the observed range**. Do not dispute or override this.
+2. **`Missing emission lines` / `Missing absorption lines`** is the definitive source for which lines are in range but unmatched. If this list is `(none)`, then **every line within the observed range has been matched**. There is no hidden missing line.
+3. **Do NOT self-calculate line positions** using λ_obs = λ_rest × (1+z). The algorithm has already performed all such calculations and encoded the results in the above two fields. Your self-calculation may introduce errors and contradict the authoritative input data.
+4. **Trust F-a's `Adopted_pairs` and `Concerns` decisions**: The per-hypothesis analysis (Step F-a) has already evaluated each match and made authoritative decisions about which lines are reliable (`Adopted_pairs`) and which are questionable (`Concerns`). When evaluating a hypothesis:
+   - Base your judgment primarily on **`Adopted_pairs`** — this is what the hypothesis actually claims.
+   - A line appearing in raw brute-force data but **excluded from `Adopted_pairs`** (e.g., placed in `Concerns` by F-a) has already been deemed unreliable by upstream analysis. Do **not** use such lines to challenge the hypothesis — F-a has already resolved this tension.
+   - Conversely, if a key diagnostic line appears in `Adopted_pairs` but contradicts the claimed physical type, this is a genuine inconsistency and should be flagged.
+
 ### R1 Judgment Priority (high → low)
 
 1. **Physical coherence**: Whether the line combination conforms to the typical characteristics of that object type (e.g., there should be numerous absorption lines, especially the Ca K/Ca H doublet, etc., and the 4000 Å break).
@@ -83,7 +95,7 @@ If two hypotheses are close in overall score, both can be kept, each with their 
 
 ### Step F-b1: Overview and Ranking
 
-1. Briefly list a summary of all hypotheses, noting for each: total N_emission + N_absorption, presence of Redshift warning, number of width mismatches
+1. Briefly list a summary of all hypotheses, noting for each: total N_emission + N_absorption, Adopted_pairs count, presence of Redshift warning, number of width mismatches
 
 ### Step F-b2: Cross-Hypothesis Cross-Validation
 

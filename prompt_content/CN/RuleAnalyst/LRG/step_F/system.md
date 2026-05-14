@@ -160,6 +160,19 @@ LRG（亮红星系）和 BGS（亮星系样本）的光谱特征来自其以老�
    - 典型 LRG/BGS 的 Dn4000 通常在 1.5–2.2 范围内（strong），Dn4000 < 1.3 对 LRG/BGS 假设是明显不利证据，需在 Step F-2 中说明。
    - `slope_3950_4000` 的绝对值通常显著大于 `slope_3850_3950` 和 `slope_4000_4100` 的绝对值，这是 4000 Å break 特征在斜率上的体现；若三段斜率无明显差异，则 break 特征弱。
 
+### R4: 计算限制
+
+**严格禁止 —— 不得自行进行以下任何数值计算：**
+- 根据静止波长和红移计算观测波长（λ_obs = λ_rest × (1+z)）
+- 根据观测波长和静止波长计算红移
+- 自行估计某条谱线是否落在观测波长范围内
+
+**原因**：所有这些计算已由暴力匹配算法完成，并已提供在输入字段中。若某条谱线不在 `Observable emission lines` / `Observable absorption lines` 列表中，则确定不在观测范围内。若 `Missing emission lines` / `Missing absorption lines` 为 `(none)`，则范围内的每条线均已被匹配。
+
+你只需要根据这些预计算字段进行**物理推理和判断**。不要用自己的计算质疑它们。任何基于自行计算谱线位置得出的结论均为无效，并将误导后续阶段。
+
+---
+
 ## Steps
 
 针对 user prompt 中给出的**当前单条假设**，依次完成以下步骤：
@@ -194,7 +207,12 @@ LRG（亮红星系）和 BGS（亮星系样本）的光谱特征来自其以老�
 
 2. **综合考量**：原寻谷结果中 Amplitude rank 靠前的谷（吸收特征），在当前假设中是否被合理解释？若有显著谷未被匹配，是否意味着假设不成立？
 
-3. **可观测吸收线核验**：对照输入的 `Observable absorption lines` 列表，逐条说明所有落在观测范围内的吸收线的匹配状态（已匹配 / 在范围但未匹配 / 不在范围），不得省略。**重要提示**：当前的寻峰/寻谷算法能力有限，Ca K（3935 Å）、Ca H（3970 Å）、G-band（4306 Å）等重要吸收线可能未被算法检出，因此 `Observable absorption lines` 中标注为 NOT matched 的吸收线不一定意味着假设不成立，需结合 4000 Å break 强度和其他吸收线的整体匹配情况综合判断。若存在 strong/moderate 的 4000 Å break 而 Ca K/Ca H 未匹配，很可能是算法漏检。
+3. **可观测吸收线核验**：对于观测范围内的每条吸收线，**仅通过查阅输入的 `Observable absorption lines` 和 `Missing absorption lines` 字段来判定其状态** —— 不得自行重新计算其位置：
+    - 若该谱线在 `Observable absorption lines` 中显示为 [matched at ...] → 输出 "matched at XXXX.X Å (z=X.XXX)"
+    - 若该谱线在 `Observable absorption lines` 中显示为 [NOT matched] → 输出 "in range but NOT matched"
+    - 若该谱线**不在 `Observable absorption lines` 列表中** → 输出 "not in obs range"（算法已判定其红移后位置超出观测波长范围；不得质疑此结论）
+    - `Missing absorption lines` 字段提供二次验证：若某条谱线确实在范围内但未匹配，它必须出现在该字段中。
+    逐条列出所有在观测范围内的吸收线，不得省略。**重要提示**：当前的寻峰/寻谷算法能力有限，Ca K（3935 Å）、Ca H（3970 Å）、G-band（4306 Å）等重要吸收线可能未被算法检出，因此 `Observable absorption lines` 中标注为 NOT matched 的吸收线不一定意味着假设不成立，需结合 4000 Å break 强度和其他吸收线的整体匹配情况综合判断。若存在 strong/moderate 的 4000 Å break 而 Ca K/Ca H 未匹配，很可能是算法漏检。
 
 ### Step F-3: 本条假设结论
 
@@ -211,6 +229,7 @@ LRG（亮红星系）和 BGS（亮星系样本）的光谱特征来自其以老�
 6. **最终采纳配对**：基于 Step F-1/F-2 的推理，对每条已匹配的吸收线（及弱发射线）给出最终采纳的观测波长及 z 值（有多候选时择优，无多候选时直接列出）。格式：
    - `谱线名 → 观测波长 Å (z=红移值)`
    - 未匹配的谱线不列出
+   - **宽度不匹配约束**：标注 ⚠ width mismatch 的谱线应放入 **Concerns** 而非 Adopted_pairs，除非同一谱线存在宽度一致的替代匹配。观测宽度与物理宽度类别矛盾的谱线不是可靠的红移锚点。
 
 ---
 

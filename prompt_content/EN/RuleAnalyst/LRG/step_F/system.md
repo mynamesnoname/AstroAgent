@@ -160,6 +160,19 @@ Each matching result contains the following fields:
    - Typical LRG/BGS have Dn4000 usually in the range 1.5–2.2 (strong). Dn4000 < 1.3 is clearly adverse evidence for the LRG/BGS hypothesis and should be noted in Step F-2.
    - The absolute value of `slope_3950_4000` is usually significantly larger than those of `slope_3850_3950` and `slope_4000_4100`; this is the manifestation of the 4000 Å break in slope. If the three slopes show no significant difference, the break feature is weak.
 
+### R4: Calculation Restrictions
+
+**Strictly prohibited — Do NOT perform any of the following numerical calculations yourself:**
+- Computing observed wavelength from rest wavelength and redshift (λ_obs = λ_rest × (1+z))
+- Computing redshift from observed and rest wavelengths
+- Estimating whether a spectral line falls within the observed wavelength range
+
+**Reason**: All such calculations have already been performed by the brute-force matching algorithm and are provided in the input fields. If a line is absent from `Observable emission lines` / `Observable absorption lines`, it is definitively outside the observed range. If `Missing emission lines` / `Missing absorption lines` is `(none)`, then every line in range has been matched.
+
+You are only required to perform **physical reasoning and judgment** based on these pre-computed fields. Do not second-guess them with your own calculations. Any conclusion drawn from self-calculated line positions is invalid and will mislead subsequent stages.
+
+---
+
 ## Steps
 
 For the **current single hypothesis** provided in the user prompt, complete the following steps in order:
@@ -194,7 +207,12 @@ Based on Step F-1, conduct physical semantic verification:
 
 2. **Comprehensive consideration**: Are the troughs with top Amplitude rank in the original trough-finding results (absorption features) reasonably explained in the current hypothesis? If there are prominent troughs unmatched, does it mean the hypothesis is invalid?
 
-3. **Observable Absorption Line Verification**: Against the input `Observable absorption lines` list, state the matching status of all absorption lines that fall within the observed range one by one (matched / in range but NOT matched / not in obs range), no omission. **Important Note**: The current peak/trough-finding algorithm has limited capability; important absorption lines such as Ca K (3935 Å), Ca H (3970 Å), G-band (4306 Å) may not be detected by the algorithm. Therefore, absorption lines marked as NOT matched in `Observable absorption lines` do not necessarily mean the hypothesis is invalid — judgment must be combined with the 4000 Å break strength and the overall matching status of other absorption lines. If there is a strong/moderate 4000 Å break but Ca K/Ca H are unmatched, it is very likely due to algorithmic missed detection.
+3. **Observable Absorption Line Verification**: For each absorption line within the observed range, determine its status **exclusively by reading the `Observable absorption lines` and `Missing absorption lines` fields** — do NOT recalculate its position yourself:
+    - If the line appears in `Observable absorption lines` as [matched at ...] → output "matched at XXXX.X Å (z=X.XXX)"
+    - If the line appears in `Observable absorption lines` as [NOT matched] → output "in range but NOT matched"
+    - If the line is **absent from `Observable absorption lines`** → output "not in obs range" (the algorithm has determined its redshifted position is outside the observed wavelength range; do not dispute this)
+    - The `Missing absorption lines` field provides a secondary check: if a line is truly in range but unmatched, it MUST appear there.
+    List all absorption lines within range, no omission. **Important Note**: The current peak/trough-finding algorithm has limited capability; important absorption lines such as Ca K (3935 Å), Ca H (3970 Å), G-band (4306 Å) may not be detected by the algorithm. Therefore, absorption lines marked as NOT matched in `Observable absorption lines` do not necessarily mean the hypothesis is invalid — judgment must be combined with the 4000 Å break strength and the overall matching status of other absorption lines. If there is a strong/moderate 4000 Å break but Ca K/Ca H are unmatched, it is very likely due to algorithmic missed detection.
 
 ### Step F-3: Conclusion for This Hypothesis
 
@@ -211,6 +229,7 @@ Provide a single hypothesis assessment conclusion (no cross-hypothesis compariso
 6. **Final Adopted Pairs**: Based on Step F-1/F-2 reasoning, provide the finally adopted observed wavelength and z value for each matched absorption line (and weak emission line) (select the best when multiple candidates exist, directly list if no multiple candidates). Format:
    - `line name → observed wavelength Å (z=redshift value)`
    - Unmatched lines may be omitted
+   - **Width mismatch constraint**: A line flagged ⚠ width mismatch should be placed in **Concerns**, not Adopted_pairs, unless a width-consistent alternative match exists for the same line. A line whose observed width contradicts its physical width class is not a reliable redshift anchor.
 
 
 ---
