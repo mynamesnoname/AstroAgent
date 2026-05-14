@@ -706,6 +706,7 @@ class RuleAnalyst(BaseAgent):
         wl_left = state['spectrum']['new_wavelength'][0]
         wl_right = state['spectrum']['new_wavelength'][-1]
         tol_wavelength = self.runtime.configs.params.tol_wavelength_galaxy
+        preliminary_classification = None
         for i in state['preliminary_classification_monkey']:
             if i['Category'] == 'LRG/BGS':
                 preliminary_classification = i
