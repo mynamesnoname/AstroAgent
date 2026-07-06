@@ -3,7 +3,6 @@ data/
 output/
 outputs/
 input/
-counter_fact_examples/
 
 # ── Git ──
 .git/
