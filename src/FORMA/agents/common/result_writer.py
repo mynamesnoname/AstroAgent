@@ -96,6 +96,11 @@ class ResultWriter:
                 f.write(r.get('report', '(no report)'))
                 f.write("\n")
 
+    def write(self, state: SpectroState) -> None:
+        """Write all result files for a completed analysis run."""
+        self.write_redshift_hypotheses(state)
+        self.write_hypothesis_analysis(state)
+
     # =========================
     # 🧰 Helpers
     # =========================

@@ -1,5 +1,5 @@
 import os
-import cv2
+# import cv2  # 已注释（2026-07-06）：PNG 通道已禁用，仅 _get_figsize 中非 FITS 路径使用
 import numpy as np
 import matplotlib.pyplot as plt
 from typing import List
@@ -24,17 +24,15 @@ def _get_figsize(state: SpectroState):
         # FITS 格式使用默认尺寸
         return (12, 4)
     
-    # 图像格式：根据图像尺寸计算
-    img = cv2.imread(file_path)
-    if img is None:
-        # 如果无法读取图像，返回默认尺寸
-        return (12, 4)
-    h, w = img.shape[:2]
-    # 对h和w反复除以10，直到二者中的一个第一次小于10
-    while h > 10 and w > 10:
-        h //= 10
-        w //= 10
-    return (w, h)
+    # 图像格式：根据图像尺寸计算（PNG 通道已禁用）
+    # if img is None:
+    #     return (12, 4)
+    # h, w = img.shape[:2]
+    # while h > 10 and w > 10:
+    #     h //= 10
+    #     w //= 10
+    # return (w, h)
+    return (12, 4)
 
 
 def plot_spectrum_snr(state: SpectroState):

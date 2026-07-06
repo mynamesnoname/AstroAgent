@@ -26,7 +26,7 @@ import numpy as np
 # config
 # ---------------------------------------------------------------------------
 LLM_MODEL = "deepseek-v4-pro"
-LLM_API_KEY = "REDACTED"
+LLM_API_KEY = os.environ.get("LLM_API_KEY", "")  # set in .env
 LLM_BASE_URL = "https://api.deepseek.com"
 
 NUM_RUNS = 100

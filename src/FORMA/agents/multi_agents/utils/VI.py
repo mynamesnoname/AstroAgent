@@ -3,7 +3,7 @@ import os
 import json
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
-import cv2
+# import cv2  # 已注释（2026-07-06）：PNG 通道已禁用，仅 _detect_chart_border 等 PNG 函数使用
 import numpy as np
 from astropy.io import fits
 # from scipy.ndimage import gaussian_filter1d
@@ -1081,6 +1081,11 @@ LRG_ANCHOR_EMISSION_LINES = {
 
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# brute_force_line_matching — 已弃用（2026-07-06）
+#   仅用于 REDROCK=false 路径。当前默认 REDROCK=true，使用 run_redrock_pipeline()。
+#   如需恢复，取消 VisualInterpreter.py 中 import 和调用处的注释即可。
+# ═══════════════════════════════════════════════════════════════════════════════
 def brute_force_line_matching(state, tol_wavelength=None):
     """
     暴力破解：对每个峰/谷假设其为某条发射/吸收线，计算红移，

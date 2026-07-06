@@ -29,7 +29,7 @@ import numpy as np
 # LLM_API_KEY = ""        # your API key
 # LLM_BASE_URL = ""       # e.g. "https://api.deepseek.com"
 
-LLM_API_KEY="REDACTED"
+LLM_API_KEY = os.environ.get("LLM_API_KEY", "")  # set in .env
 LLM_BASE_URL="https://api.deepseek.com"
 LLM_MODEL="deepseek-v4-pro"
 

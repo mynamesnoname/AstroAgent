@@ -12,17 +12,16 @@ from FORMA.core.runtime.runtime_container import RuntimeContainer
 
 from FORMA.agents.multi_agents.utils.usage import safe_to_bool, find_overlap_regions
 from FORMA.agents.multi_agents.utils.VI import (
-    _detect_chart_border, _crop_img,
-    _remap_to_cropped_canvas, _pixel_tickvalue_fitting,
-    _convert_to_spectrum,
     # ═══════════════════════════════════════════════════════════════════
-    # PNG 通道已注释（2026-06-30）：PaddleOCR / Tesseract 安装繁琐。
-    # 如需恢复 PNG 输入，取消下面两行注释即可。
+    # PNG 通道已注释（2026-07-06）：以下函数依赖 cv2，仅 PNG 输入使用。
+    # _detect_chart_border, _crop_img,
+    # _remap_to_cropped_canvas, _pixel_tickvalue_fitting,
+    # _convert_to_spectrum,
     # _detect_axis_ticks_tesseract,
     # _detect_axis_ticks_paddle,
     # ═══════════════════════════════════════════════════════════════════
     run_continuum_fitting_masked,
-    brute_force_line_matching,
+    # brute_force_line_matching,  # 已注释（2026-07-06）：仅 REDROCK=false 时使用
     _load_spectrum_from_fits,
     run_redshift_scoring_v2,
     run_redshift_scoring_v3,
@@ -320,8 +319,8 @@ class VisualInterpreter(BaseAgent):
                 'snr_thresh': params.cwt_snr_thresh,
                 'min_ridge_length': params.cwt_min_ridge_length,
                 'n_scales': params.cwt_n_scales,
-                'min_scale': params.cwt_min_scale,
-                'max_scale': params.cwt_max_scale,
+                'min_scale': params.cwt_min_width,
+                'max_scale': params.cwt_max_width,
             }
 
             feature_result = run_cwt_feature_detection(
@@ -363,34 +362,38 @@ class VisualInterpreter(BaseAgent):
 
             plot_features(state)
 
-            tol_wavelength = self.runtime.configs.params.tol_wavelength
+            # tol_wavelength = self.runtime.configs.params.tol_wavelength  # 已注释（2026-07-06）
 
             print(params.redrock)
-            if params.redrock:
-                # ── Redrock 路径：运行 rrdesi 替代 brute-force line matching ──
-                if params.rr_template_dir is None:
-                    raise ValueError(
-                        "REDROCK=true but RR_TEMPLATE_DIR is not set in .env"
-                    )
-                if params.use_archetypes and params.archetype_dir is None:
-                    raise ValueError(
-                        "REDROCK=true, USE_ARCHETYPES=true but ARCHETYPE_DIR is not set in .env"
-                    )
-                state['redshift_hypotheses'] = run_redrock_pipeline(
-                    input_fits=state['file_path'],
-                    output_dir=state['output_dir'],
-                    file_name=state['file_name'],
-                    rr_template_dir=params.rr_template_dir,
-                    archetype_dir=params.archetype_dir,
-                    use_archetypes=params.use_archetypes,
-                    nminima=params.rr_nminima,
-                    nnearest=params.rr_nnearest,
-                    omp_num_threads=params.rr_omp_num_threads,
+            # ═══════════════════════════════════════════════════════════════
+            # REDROCK 路径：运行 rrdesi 生成红移假设。
+            # 原 brute_force_line_matching 分支已注释（2026-07-06），
+            # 如需恢复 REDROCK=false 路径，取消下面和 import 处的注释。
+            # ═══════════════════════════════════════════════════════════════
+            if params.rr_template_dir is None:
+                raise ValueError(
+                    "REDROCK=true but RR_TEMPLATE_DIR is not set in .env"
                 )
-            else:
-                state['redshift_hypotheses'] = brute_force_line_matching(
-                    state, tol_wavelength,
+            if params.use_archetypes and params.archetype_dir is None:
+                raise ValueError(
+                    "REDROCK=true, USE_ARCHETYPES=true but ARCHETYPE_DIR is not set in .env"
                 )
+            state['redshift_hypotheses'] = run_redrock_pipeline(
+                input_fits=state['file_path'],
+                output_dir=state['output_dir'],
+                file_name=state['file_name'],
+                rr_template_dir=params.rr_template_dir,
+                archetype_dir=params.archetype_dir,
+                use_archetypes=params.use_archetypes,
+                nminima=params.rr_nminima,
+                nnearest=params.rr_nnearest,
+                omp_num_threads=params.rr_omp_num_threads,
+            )
+            # ── 原 REDROCK=false 分支（已注释）────────────────────
+            # else:
+            #     state['redshift_hypotheses'] = brute_force_line_matching(
+            #         state, tol_wavelength,
+            #     )
 
             ResultWriter().write_redshift_hypotheses(state)
 

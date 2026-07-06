@@ -31,6 +31,53 @@ The pipeline is currently configured to use the following model via API:
 
 ---
 
+## Quick Start with Docker (Recommended)
+
+The easiest way to run FORMA is via Docker. The image bundles Python 3.12, all dependencies, and the Redrock redshift fitter.
+
+### Prerequisites
+
+- [Docker](https://docs.docker.com/get-docker/) and Docker Compose v2+
+
+### 1. Configure your `.env` file
+
+Create a `.env` file with your LLM credentials (paths are set inside the container — you only need API keys):
+
+```bash
+cp .env_example .env
+# Edit .env: set LLM_API_KEY, LLM_BASE_URL, LLM_MODEL
+# Do NOT set INPUT_DIR / OUTPUT_DIR — Docker handles those via volumes
+```
+
+### 2. CLI mode (single or batch)
+
+```bash
+# Single FITS file
+INPUT_DIR_HOST=/path/to/your/fits \
+OUTPUT_DIR_HOST=/path/to/results \
+docker compose run -e FILE_NAME=QSO_116 -e RUN_MODE=s forma-cli
+
+# Batch (all .fits files in the input directory)
+INPUT_DIR_HOST=/path/to/your/fits \
+OUTPUT_DIR_HOST=/path/to/results \
+docker compose run -e RUN_MODE=b -e FILE_BATCH_HEADER=QSO_ -e FILE_BATCH_START=0 -e FILE_BATCH_END=100 forma-cli
+```
+
+Results are written to `OUTPUT_DIR_HOST` on your machine.
+
+### 3. WebUI mode
+
+```bash
+docker compose up forma-web
+# Open http://localhost:7860 in your browser
+```
+
+Upload FITS files, configure parameters, and view results — all from the browser.
+
+> **Note:** The first `docker compose build` will take 5–10 minutes (Redrock C extensions compilation). Subsequent builds use cached layers.
+
+---
+
 ## Dependencies & Installation
 ### 1. OCR Engine
 

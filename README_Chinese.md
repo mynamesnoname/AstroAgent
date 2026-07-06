@@ -40,6 +40,53 @@
 
 ---
 
+## Docker 快速开始（推荐）
+
+使用 Docker 是运行 FORMA 最简单的方式。镜像内包含 Python 3.12、全部依赖，以及 Redrock 红移拟合器。
+
+### 前置条件
+
+- [Docker](https://docs.docker.com/get-docker/) 和 Docker Compose v2+
+
+### 1. 配置 `.env` 文件
+
+创建 `.env` 文件，填入 LLM 凭证（路径由 Docker 自动处理，只需填 API 密钥）：
+
+```bash
+cp .env_example .env
+# 编辑 .env：设置 LLM_API_KEY、LLM_BASE_URL、LLM_MODEL
+# 不要设置 INPUT_DIR / OUTPUT_DIR — Docker 通过卷挂载处理路径
+```
+
+### 2. CLI 模式（单文件或批处理）
+
+```bash
+# 单文件
+INPUT_DIR_HOST=/path/to/your/fits \
+OUTPUT_DIR_HOST=/path/to/results \
+docker compose run -e FILE_NAME=QSO_116 -e RUN_MODE=s forma-cli
+
+# 批处理（处理输入目录下所有 .fits 文件）
+INPUT_DIR_HOST=/path/to/your/fits \
+OUTPUT_DIR_HOST=/path/to/results \
+docker compose run -e RUN_MODE=b -e FILE_BATCH_HEADER=QSO_ -e FILE_BATCH_START=0 -e FILE_BATCH_END=100 forma-cli
+```
+
+结果将写入宿主机的 `OUTPUT_DIR_HOST` 路径。
+
+### 3. WebUI 模式
+
+```bash
+docker compose up forma-web
+# 浏览器打开 http://localhost:7860
+```
+
+上传 FITS 文件、配置参数、查看结果——全部在浏览器中完成。
+
+> **注意：** 首次 `docker compose build` 需要 5–10 分钟（Redrock C 扩展编译）。后续构建使用缓存层，速度很快。
+
+---
+
 ## 依赖与安装（Dependencies & Installation）
 
 ### 1. OCR 引擎

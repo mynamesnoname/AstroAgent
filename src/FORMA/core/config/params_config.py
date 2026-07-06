@@ -14,7 +14,12 @@ class ParamsConfig(BaseModel):
     arm_name: Optional[List[str]]
     arm_wavelength_range: Optional[List[List[float]]]
     ocr: str
-    tol_wavelength: int
+    # ═══════════════════════════════════════════════════════════════════════
+    # tol_wavelength — 已注释（2026-07-06）
+    #   该参数仅用于 brute_force_line_matching（REDROCK=false 路径）。
+    #   默认 REDROCK=true，不再需要此参数。
+    # ═══════════════════════════════════════════════════════════════════════
+    # tol_wavelength: int
     harness_concurrency: int
     self_evolve: bool
     redrock: bool
@@ -33,8 +38,8 @@ class ParamsConfig(BaseModel):
     cwt_snr_thresh: float
     cwt_min_ridge_length: int
     cwt_n_scales: int
-    cwt_min_scale: float
-    cwt_max_scale: float
+    cwt_min_width: float
+    cwt_max_width: float
 
     @classmethod
     def from_env(cls) -> "ParamsConfig":
@@ -57,7 +62,7 @@ class ParamsConfig(BaseModel):
             arm_name=arm_name,
             arm_wavelength_range=arm_wavelength_range,
             ocr=os.getenv("OCR") or "paddle",
-            tol_wavelength=getenv_int("TOL_WAVELENGTH", 80),
+            # tol_wavelength=getenv_int("TOL_WAVELENGTH", 80),  # 已注释（2026-07-06）
             harness_concurrency=getenv_int("HARNESS_CONCURRENCY", 3),
             self_evolve=os.getenv("SELF_EVOLVE", "false").lower() in ("true", "1", "yes"),
             redrock=os.getenv("REDROCK", "true").lower() in ("true", "1", "yes"),
@@ -74,10 +79,10 @@ class ParamsConfig(BaseModel):
 
             # ── CWT 特征检测参数 ──
             cwt_snr_thresh=getenv_float("CWT_SNR_THRESH", 5.0),
-            cwt_min_ridge_length=getenv_int("CWT_MIN_RIDGE_LENGTH", 2),
+            cwt_min_ridge_length=getenv_int("CWT_MIN_RIDGE_LENGTH", 4),
             cwt_n_scales=getenv_int("CWT_N_SCALES", 24),
-            cwt_min_scale=getenv_float("CWT_MIN_SCALE", 1.0),
-            cwt_max_scale=getenv_float("CWT_MAX_SCALE", 80.0),
+            cwt_min_width=getenv_float("CWT_MIN_WIDTH", 1.0),
+            cwt_max_width=getenv_float("CWT_MAX_WIDTH", 80.0),
         )
 
     # ------------------------

@@ -36,6 +36,12 @@ log/
 .arts/
 .codeartsdoer/
 
+# WebUI persisted config
+.forma_webui_config.json
+
+# Docker (dev only — production uses the committed compose file)
+docker-compose.override.yml
+
 # claude
 .claude/
 
