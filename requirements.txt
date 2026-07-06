@@ -7,7 +7,7 @@ click==8.3.0
 colorlog==6.10.1
 cryptography==45.0.7
 cyclopts==4.1.0
-dashscope==1.24.5
+# dashscope==1.24.5
 dataclasses-json==0.6.7
 docopt==0.6.2
 dotenv==0.9.9
@@ -22,7 +22,7 @@ ftfy==6.3.1
 future==1.0.0
 google-ai-generativelanguage==0.7.0
 httpx==0.28.1
-huggingface_hub==1.2.3
+# huggingface_hub==1.2.3
 ipython==8.12.3
 jupyter==1.1.1
 langchain==1.2.0
@@ -32,13 +32,13 @@ langchain-google-genai==2.1.12
 langchain-openai==1.1.4
 langchain-text-splitters==0.3.11
 langgraph==1.0.3
-lightgbm==4.6.0
+# lightgbm==4.6.0
 matplotlib==3.10.6
 modelscope==1.33.0
 numpy==2.2.6
 openai==2.8.0
-opencv-contrib-python==4.10.0.84
-opencv-python==4.12.0.88
+# opencv-contrib-python==4.10.0.84
+# opencv-python==4.12.0.88
 openpyxl==3.1.5
 # ── OCR / PNG 通道（2026-06-30 注释：PNG 输入暂未启用）──────────
 # 恢复 PNG 通道时取消注释：paddleocr, paddlepaddle, paddlex, pytesseract
