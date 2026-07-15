@@ -98,7 +98,8 @@ class BaseAgent:
         """
         if self._SKILL_DIR is None:
             raise NotImplementedError(
-                f"{type(self).__name__} must set _SKILL_DIR to use _load_skill()"
+                f"{type(self).__name__} must set _SKILL_DIR to use _load_skill() / "
+                f"{type(self).__name__} 必须设置 _SKILL_DIR 才能使用 _load_skill()"
             )
         return self._SKILL_DIR / (name if name.endswith(".md") else f"{name}.md")
 
@@ -153,6 +154,8 @@ class BaseAgent:
                 if image_path:
                     if self._vis_model is None:
                         raise RuntimeError(
+                            "VLM not configured (VLM_API_KEY / VLM_MODEL / VLM_BASE_URL are empty). "
+                            "PNG channel is commented out, only FITS input is supported. / "
                             "VLM 未配置（VLM_API_KEY / VLM_MODEL / VLM_BASE_URL 为空）。"
                             "PNG 通道已注释，当前仅支持 FITS 输入。"
                         )
@@ -198,22 +201,28 @@ class BaseAgent:
                     if _is_connection_error(error_msg):
                         # connection error: retry after delay
                         logging.warning(
-                            f"🌐 {description} connection error, retrying..."
-                            f" (attempt {attempt + 1}/{max_retries}): {str(e)}"
+                            f"🌐 {description} connection error, retrying... "
+                            f"(attempt {attempt + 1}/{max_retries}): {str(e)} / "
+                            f"{description} 连接错误，正在重试..."
+                            f"（第 {attempt + 1}/{max_retries} 次）：{str(e)}"
                         )
                     elif _is_timeout_error(error_msg):
                         # 超时错误：仅等待后重试
                         logging.warning(
-                            f"⏱️ {description}遇到超时，{retry_delay}秒后重试..."
-                            f" (尝试 {attempt + 1}/{max_retries})"
+                            f"⏱️ {description} timed out, retrying in {retry_delay}s... "
+                            f"(attempt {attempt + 1}/{max_retries}) / "
+                            f"{description}遇到超时，{retry_delay}秒后重试..."
+                            f"（第 {attempt + 1}/{max_retries} 次）"
                         )
                     else:
                         # 限速/配额错误：等待后重试，不需要重置连接
                         logging.warning(
-                            f"⏳ {description}遇到限制，{retry_delay}秒后重试..."
-                            f" (尝试 {attempt + 1}/{max_retries})"
+                            f"⏳ {description} rate limited, retrying in {retry_delay}s... "
+                            f"(attempt {attempt + 1}/{max_retries}) / "
+                            f"{description}遇到限制，{retry_delay}秒后重试..."
+                            f"（第 {attempt + 1}/{max_retries} 次）"
                         )
                     await asyncio.sleep(retry_delay)
                 else:
-                    logging.error(f"❌ {description}失败: {str(e)}")
+                    logging.error(f"❌ {description} failed: {str(e)} / {description}失败：{str(e)}")
                     raise

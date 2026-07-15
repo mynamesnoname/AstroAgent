@@ -125,8 +125,8 @@ class ThisIsModel(BaseLLM):
             return client
         except KeyError as e:
             error_message = f"Configuration key missing: {str(e)}"
-            logging.error(f"LLM Client creation failed: {error_message}")
-            raise ValueError(f"LLM Client creation failed: {error_message}") from e
+            logging.error(f"LLM Client creation failed / LLM 客户端创建失败: {error_message}")
+            raise ValueError(f"LLM Client creation failed / LLM 客户端创建失败: {error_message}") from e
         except Exception as e:
-            logging.error(f"LLM Client creation failed: {str(e)}")
-            raise RuntimeError(f"LLM Client creation failed: {str(e)}") from e
+            logging.error(f"LLM Client creation failed / LLM 客户端创建失败: {str(e)}")
+            raise RuntimeError(f"LLM Client creation failed / LLM 客户端创建失败: {str(e)}") from e

@@ -53,7 +53,7 @@ class WorkflowOrchestrator:
         self.workflow = self._create_workflow()
 
 
-        print("🚀 工作流编排器初始化完成")
+        print("🚀 Workflow orchestrator initialized / 工作流编排器初始化完成")
 
     def _initialize_agents(self) -> Dict[str, Any]:
         """
@@ -68,7 +68,7 @@ class WorkflowOrchestrator:
             '_Feature_Auditor': self.AGENT_CLASSES['FeatureAuditor'](self.runtime),
             '_Report_Writer': self.AGENT_CLASSES['ReportWriter'](self.runtime)
         }
-        print(f"Initialized {len(spectro_agents)} agents")
+        print(f"Initialized {len(spectro_agents)} agents / 已初始化 {len(spectro_agents)} 个代理")
         return spectro_agents
 
     def _check_cancel(self):
@@ -78,11 +78,11 @@ class WorkflowOrchestrator:
         """
         if self.cancel_checker and callable(self.cancel_checker):
             if self.cancel_checker():
-                raise asyncio.CancelledError("分析已被用户取消 Analysis canceled by user")
+                raise asyncio.CancelledError("Analysis canceled by user / 分析已被用户取消")
 
     async def _visual_interpreter_node(self, state: SpectroState) -> SpectroState:
         self._check_cancel()
-        print('Stage 1: Visual Interpreter')
+        print('Stage 1: Visual Interpreter / 视觉解释')
         result = await self.spectro_agents["_Visual_Interpreter"].run(state, plot=True)
         self._check_cancel()
         # Flag empty spectra for early exit
@@ -90,7 +90,7 @@ class WorkflowOrchestrator:
         troughs = result.get("troughs") or []
         result["_no_features"] = (len(peaks) == 0 and len(troughs) == 0)
         if result["_no_features"]:
-            print("[VI] No emission or absorption features detected — aborting pipeline.")
+            print("[VI] No emission or absorption features detected — aborting pipeline. / 未检测到发射线或吸收线特征 — 终止管道。")
         return result
 
     def _has_features(self, state: SpectroState) -> str:
@@ -103,7 +103,7 @@ class WorkflowOrchestrator:
         """Write placeholder report and JSON when no features were detected."""
         import os, json as _json
         self._check_cancel()
-        print("Stage 1b: No features — writing placeholder report.")
+        print("Stage 1b: No features — writing placeholder report. / 无特征 — 写入占位报告。")
 
         wl = state["spectrum"]["wavelength"]
         wl_left = float(wl[0])
@@ -188,42 +188,42 @@ No spectral features were detected in this exposure. The spectrum appears to con
 
     async def _hypothesis_analyst_search_node(self, state: SpectroState) -> SpectroState:
         self._check_cancel()
-        print('Stage 2: Hypothesis Analyst — Single-Hypothesis Search')
+        print('Stage 2: Hypothesis Analyst — Single-Hypothesis Search / 假设分析 — 单假设搜索')
         result = await self.spectro_agents["_Hypothesis_Analyst"].run(state)
         self._check_cancel()
         return result
 
     async def _feature_auditor_node(self, state: SpectroState) -> SpectroState:
         self._check_cancel()
-        print('Stage 3: Feature Auditor — Cross-Hypothesis Verification')
+        print('Stage 3: Feature Auditor — Cross-Hypothesis Verification / 特征审计 — 跨假设验证')
         result = await self.spectro_agents["_Feature_Auditor"].run(state)
         self._check_cancel()
         return result
 
     async def _hypothesis_analyst_synthesize_node(self, state: SpectroState) -> SpectroState:
         self._check_cancel()
-        print('Stage 4: Hypothesis Analyst — Synthesis')
+        print('Stage 4: Hypothesis Analyst — Synthesis / 假设分析 — 综合')
         result = await self.spectro_agents["_Hypothesis_Analyst"].run_hypothesis_synthesis(state)
         self._check_cancel()
         return result
 
     async def _analysis_auditor_node(self, state: SpectroState) -> SpectroState:
         self._check_cancel()
-        print('Stage 5: Analysis Auditor — Synthesis Audit')
+        print('Stage 5: Analysis Auditor — Synthesis Audit / 分析审计 — 综合审查')
         result = await self.spectro_agents["_Analysis_Auditor"].run(state)
         self._check_cancel()
         return result
 
     async def _self_evolve_node(self, state: SpectroState) -> SpectroState:
         self._check_cancel()
-        print('Stage 2b: Self-Evolve — Ground-truth Check')
+        print('Stage 2b: Self-Evolve — Ground-truth Check / 自进化 — 真值校验')
         result = await self.spectro_agents["_Self_Evolve"].run(state)
         self._check_cancel()
         return result
 
     async def _report_writer_node(self, state: SpectroState) -> SpectroState:
         self._check_cancel()
-        print('Stage 6: Synthesis Host — Final Report & Info Extraction')
+        print('Stage 6: Report Writer — Final Report / 报告撰写 — 最终报告')
         result = await self.spectro_agents["_Report_Writer"].run(state)
         self._check_cancel()
         return result
@@ -259,7 +259,7 @@ No spectral features were detected in this exposure. The spectrum appears to con
 
     async def run_analysis_single(self, state, cancel_checker=None) -> SpectroState:
 
-        print("🚀 Start LLM Spectro Agent")
+        print("🚀 Starting FORMA analysis / 开始 FORMA 分析")
         # 存储取消检查器
         self.cancel_checker = cancel_checker
 
@@ -280,37 +280,39 @@ No spectral features were detected in this exposure. The spectrum appears to con
                 workflow_result = await self.workflow.ainvoke(current_state)
                 final_state = workflow_result
 
-                print("✅ 分析流程完成")
+                print("✅ Analysis complete / 分析流程完成")
                 return final_state
 
             except asyncio.CancelledError as e:
-                print(f"⚠️ 分析流程已取消: {e}")
+                print(f"⚠️ Analysis canceled / 分析已取消: {e}")
                 return current_state
 
             except Exception as e:
                 error_msg = str(e).lower()
                 if attempt < max_tries - 1 and _is_connection_error(error_msg):
                     logging.warning(
-                        f"🌐 工作流遇到连接错误，{retry_delay}秒后重试..."
-                        f" (尝试 {attempt + 1}/{max_tries}): {e}"
+                        f"🌐 Connection error, retrying in {retry_delay}s... / "
+                        f"连接错误，{retry_delay}秒后重试..."
+                        f" (attempt / 尝试 {attempt + 1}/{max_tries}): {e}"
                     )
                     await asyncio.sleep(retry_delay)
                     # 重置中间结果，从干净状态重跑，避免脏数据（尤其是 List append 字段）污染
                     current_state = copy.deepcopy(initial_state)
-                    logging.warning("🧹 已清除中间结果字段，将从头重新执行工作流")
+                    logging.warning("🧹 Cleared intermediate results, restarting from clean state / 已清除中间结果，从干净状态重新执行")
                 elif attempt < max_tries - 1 and _is_timeout_error(error_msg):
                     logging.warning(
-                        f"⏱️ 工作流遇到超时，{retry_delay}秒后重试..."
-                        f" (尝试 {attempt + 1}/{max_tries}): {e}"
+                        f"⏱️ Timeout, retrying in {retry_delay}s... / "
+                        f"超时，{retry_delay}秒后重试..."
+                        f" (attempt / 尝试 {attempt + 1}/{max_tries}): {e}"
                     )
                     await asyncio.sleep(retry_delay)
                     current_state = copy.deepcopy(initial_state)
-                    logging.warning("🧹 已清除中间结果字段，将从头重新执行工作流")
+                    logging.warning("🧹 Cleared intermediate results, restarting from clean state / 已清除中间结果，从干净状态重新执行")
                 else:
-                    print(f"❌ 分析流程失败: {e}")
+                    print(f"❌ Analysis failed / 分析流程失败: {e}")
                     traceback.print_exc()
                     return current_state
 
         # 所有重试耗尽
-        print(f"❌ 分析流程在 {max_tries} 次尝试后仍失败，放弃")
+        print(f"❌ Analysis failed after {max_tries} attempts, giving up / 分析在 {max_tries} 次尝试后仍失败，放弃")
         return current_state

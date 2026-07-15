@@ -35,7 +35,7 @@ class ReportWriter(BaseAgent):
 
         harness_dir = state.get("harness_dir")
         if not harness_dir or not os.path.isdir(harness_dir):
-            print("[ReportWriter] No harness_dir — skipping.")
+            print("[ReportWriter] No harness_dir — skipping. / 无 harness 目录 — 跳过。")
             state["final_report"] = None
             state["in_brief"] = {}
             return state
@@ -49,19 +49,19 @@ class ReportWriter(BaseAgent):
             "temperature": 0.3,
         }
 
-        print("[ReportWriter] Writing final report ...")
+        print("[ReportWriter] Writing final report ... / 正在写入最终报告 ...")
         stream_path = os.path.join(harness_dir, "report_writer/stream.md")
         try:
             final_report, in_brief = await report_writer_arun(
                 state, harness_dir, stream_md_path=stream_path, **llm_kwargs
             )
         except Exception as e:
-            logging.warning(f"[ReportWriter] Report writing failed: {e}")
+            logging.warning(f"[ReportWriter] Report writing failed: {e} / 报告写入失败：{e}")
             state["final_report"] = None
             state["in_brief"] = {}
             return state
 
         state["final_report"] = final_report
         state["in_brief"] = in_brief or {}
-        print(f"[ReportWriter] Report written. in_brief: {json.dumps(state['in_brief'], ensure_ascii=False) if state['in_brief'] else 'null'}")
+        print(f"[ReportWriter] Report written. / 报告已写入。 in_brief: {json.dumps(state['in_brief'], ensure_ascii=False) if state['in_brief'] else 'null'}")
         return state

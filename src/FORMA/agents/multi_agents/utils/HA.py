@@ -456,7 +456,7 @@ async def a_extract_harness_summaries(
                 content = resp.content if hasattr(resp, 'content') else str(resp)
                 return _parse_extraction_json(content) or {}
             except Exception as exc:
-                logging.warning(f"LLM text extraction failed: {exc}")
+                logging.warning(f"LLM text extraction failed: {exc} / LLM 文本提取失败：{exc}")
                 return {}
 
     async def _extract_one(idx: int, r: dict) -> str:

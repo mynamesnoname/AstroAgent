@@ -81,15 +81,16 @@ class SelfEvolve(BaseAgent):
                 return state
             logging.warning(
                 "[SelfEvolve] Both z and type needed for ground-truth check. "
-                "Got: z=%s, type=%s",
-                expected_z_str, expected_type,
+                "Got: z=%s, type=%s / 需要 z 和 type 进行真值检查。"
+                "当前值：z=%s，type=%s",
+                expected_z_str, expected_type, expected_z_str, expected_type,
             )
             return state
 
         try:
             expected_z = float(expected_z_str)
         except ValueError:
-            logging.warning("[SelfEvolve] Invalid z value: %s", expected_z_str)
+            logging.warning("[SelfEvolve] Invalid z value: %s / 无效的 z 值：%s", expected_z_str, expected_z_str)
             return state
 
         expected_type = str(expected_type)
@@ -137,7 +138,11 @@ class SelfEvolve(BaseAgent):
 
         logging.warning(
             "[SelfEvolve] MISMATCH (confidence=%s, in_scoring=%s): "
-            "z=%s type=%s vs expected z=%.4f type=%s",
+            "z=%s type=%s vs expected z=%.4f type=%s / "
+            "不匹配（置信度=%s，在评分中=%s）："
+            "z=%s type=%s 与预期 z=%.4f type=%s",
+            summary["confidence"], in_scoring, result_z, summary["classification"],
+            expected_z, expected_type,
             summary["confidence"], in_scoring, result_z, summary["classification"],
             expected_z, expected_type,
         )

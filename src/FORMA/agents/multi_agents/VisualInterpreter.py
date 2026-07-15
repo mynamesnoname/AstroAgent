@@ -259,9 +259,10 @@ class VisualInterpreter(BaseAgent):
             # ═════════════════════════════════════════════════════════════
             else:
                 raise NotImplementedError(
-                    "PNG 输入通道已暂时禁用（2026-06-30）。"
+                    "PNG input channel is temporarily disabled (2026-06-30). "
+                    "Only INPUT_FORMAT=fits is supported currently / PNG 输入通道已暂时禁用（2026-06-30）。"
                     "当前仅支持 INPUT_FORMAT=fits。"
-                    "如需恢复 PNG 支持，请参见 VisualInterpreter.py 中相关注释。"
+                    "To re-enable PNG support, see comments in VisualInterpreter.py / 如需恢复 PNG 支持，请参见 VisualInterpreter.py 中相关注释。"
                 )
             # else:
             #     # === Phase A: 坐标轴检测与校准 ===
@@ -372,11 +373,11 @@ class VisualInterpreter(BaseAgent):
             # ═══════════════════════════════════════════════════════════════
             if params.rr_template_dir is None:
                 raise ValueError(
-                    "REDROCK=true but RR_TEMPLATE_DIR is not set in .env"
+                    "REDROCK=true but RR_TEMPLATE_DIR is not set in .env / REDROCK=true 但 .env 中未设置 RR_TEMPLATE_DIR"
                 )
             if params.use_archetypes and params.archetype_dir is None:
                 raise ValueError(
-                    "REDROCK=true, USE_ARCHETYPES=true but ARCHETYPE_DIR is not set in .env"
+                    "REDROCK=true, USE_ARCHETYPES=true but ARCHETYPE_DIR is not set in .env / REDROCK=true, USE_ARCHETYPES=true 但 .env 中未设置 ARCHETYPE_DIR"
                 )
             state['redshift_hypotheses'] = run_redrock_pipeline(
                 input_fits=state['file_path'],
@@ -399,5 +400,5 @@ class VisualInterpreter(BaseAgent):
 
             return state
         except Exception as e:
-            print(f"run pipeline terminated with error: {e}")
+            print(f"Run pipeline terminated with error / 流水线运行出错: {e}")
             raise

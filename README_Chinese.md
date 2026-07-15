@@ -38,7 +38,7 @@ FORMA 利用大语言模型（LLMs）对一维天文光谱进行类似人类天�
 
 | 目录 | 说明 |
 |------|------|
-| [`basic/`](example/basic/) | 两条标准 DESI 光谱（`4.fits`、`116.fits`），用于快速测试管道。 |
+| [`basic/`](example/basic/) | 5 条 DESI 光谱，覆盖全部四个分类（QSO、LRG、ELG、BGS），全部为 DESI Visual Inspection (VI) Q4 最高质量等级。每条 FITS 的 `FIBERMAP` HDU 中保存了 VI 官方结果：`VI_Z`（红移）、`VI_SPECTYPE`（分类）、`VI_QUALITY`（1–4 质量等级）。 |
 | [`counter_fact_examples/`](example/counter_fact_examples/) | 伪造光谱，用于压力测试审计代理。一组删除了 Lyα 发射线，另一组将宽线 QSO 改为窄线。详见其 [README](example/counter_fact_examples/README.md)。 |
 
 ---

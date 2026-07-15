@@ -16,7 +16,7 @@ def getenv_int(name: str, default: int) -> int:
         try:
             return int(val.strip())
         except ValueError:
-            print(f"⚠️ {name} 格式错误: {val}，使用默认值 {default}")
+            print(f"⚠️ {name} invalid format / 格式错误: {val}, using default / 使用默认值 {default}")
     return default
 
 
@@ -26,7 +26,7 @@ def getenv_float(name: str, default: float) -> float:
         try:
             return float(val.strip())
         except ValueError:
-            print(f"⚠️ {name} 格式错误: {val}，使用默认值 {default}")
+            print(f"⚠️ {name} invalid format / 格式错误: {val}, using default / 使用默认值 {default}")
     return default
 
 
@@ -36,7 +36,7 @@ def getenv_optional_float(name: str) -> Optional[float]:
         try:
             return float(val.strip())
         except ValueError:
-            print(f"⚠️ {name} 格式错误: {val}，使用 None")
+            print(f"⚠️ {name} invalid format / 格式错误: {val}, using None / 使用 None")
     return None
 
 
@@ -46,5 +46,5 @@ def getenv_int_list(name: str, default: List[int]) -> List[int]:
         try:
             return [int(x.strip()) for x in val.split(",") if x.strip()]
         except ValueError:
-            print(f"⚠️ {name} 格式错误: {val}，使用默认值 {default}")
+            print(f"⚠️ {name} invalid format / 格式错误: {val}, using default / 使用默认值 {default}")
     return default

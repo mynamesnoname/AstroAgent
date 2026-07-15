@@ -20,7 +20,7 @@ class ModelConfig(BaseModel):
                 try:
                     return int(v.strip())
                 except ValueError:
-                    print(f"⚠️ MAX_TOKENS 格式错误: {v}，使用 None")
+                    print(f"⚠️ MAX_TOKENS invalid format / 格式错误: {v}, using None / 使用 None")
             return None
 
         llm={

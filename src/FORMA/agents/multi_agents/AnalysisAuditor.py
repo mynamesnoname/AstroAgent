@@ -1505,7 +1505,9 @@ async def _run_llm_agent(
     except Exception as exc:
         logging.warning(
             f"{log_prefix} Streaming path failed: {exc}. "
-            "Falling back to non-streaming ainvoke."
+            "Falling back to non-streaming ainvoke. / "
+            f"{log_prefix} 流式路径失败：{exc}。"
+            "回退到非流式 ainvoke。"
         )
         try:
             md.close()
@@ -1540,7 +1542,7 @@ async def _run_llm_agent(
         return _extract_json_block(raw_content, keys=json_keys)
 
     except Exception as exc:
-        logging.warning(f"{log_prefix} LLM call failed: {exc}")
+        logging.warning(f"{log_prefix} LLM call failed: {exc} / LLM 调用失败：{exc}")
         return None
 
 
@@ -1569,7 +1571,7 @@ class FeatureAuditor(BaseAgent):
         hypothesis_results = state.get("hypothesis_results") or []
 
         if not hypothesis_results:
-            print("[FeatureAuditor] No harness results — skipping.")
+            print("[FeatureAuditor] No harness results — skipping. / 无 harness 结果 — 跳过。")
             state["feature_audit_verdict"] = {
                 "skipped": True, "reason": "No harness results to audit.",
             }
@@ -1596,7 +1598,7 @@ class FeatureAuditor(BaseAgent):
         )
 
         if not matrix_rows:
-            print("[FeatureAuditor] No LIKELY/MARGINAL features found — skipping.")
+            print("[FeatureAuditor] No LIKELY/MARGINAL features found — skipping. / 未找到 LIKELY/MARGINAL 特征 — 跳过。")
             state["feature_audit_verdict"] = {
                 "skipped": True,
                 "reason": "No LIKELY or MARGINAL features to verify.",
@@ -1609,7 +1611,11 @@ class FeatureAuditor(BaseAgent):
             f"{stats['n_total_features']} features across "
             f"{len(stats['hypothesis_indices'])} hypotheses. "
             f"Edge: {stats['n_edge_blue']}B + {stats['n_edge_red']}R. "
-            f"Median |amp|: {stats['median_amplitude']:.4f}"
+            f"Median |amp|: {stats['median_amplitude']:.4f} / "
+            f"矩阵：{stats['n_rows']} 行，{stats['n_total_features']} 个特征，"
+            f"跨越 {len(stats['hypothesis_indices'])} 个假设。"
+            f"边缘：{stats['n_edge_blue']}B + {stats['n_edge_red']}R。"
+            f"中位数 |幅值|：{stats['median_amplitude']:.4f}"
         )
 
         # ── Build prompts ──
@@ -1674,12 +1680,13 @@ class FeatureAuditor(BaseAgent):
             if attempt < MAX_RETRIES - 1:
                 logging.warning(
                     f"[FeatureAuditor] LLM call {attempt+1}/{MAX_RETRIES} "
-                    f"produced no valid JSON, retrying..."
+                    f"produced no valid JSON, retrying... / "
+                    f"LLM 调用 {attempt+1}/{MAX_RETRIES} 未生成有效 JSON，正在重试..."
                 )
                 await asyncio.sleep(1)
 
         if parsed is None or not parsed.get("feature_verdicts"):
-            print("[FeatureAuditor] All retries exhausted — could not extract valid JSON.")
+            print("[FeatureAuditor] All retries exhausted — could not extract valid JSON. / 所有重试已耗尽 — 无法提取有效 JSON。")
             parsed = {
                 "skipped": True,
                 "reason": (
@@ -1705,10 +1712,11 @@ class FeatureAuditor(BaseAgent):
                 _write_cleaned_csvs(hypothesis_dir, hypothesis_results, feature_verdicts)
                 print(
                     f"[FeatureAuditor] Wrote cleaned CSVs for "
-                    f"{len(hypothesis_results)} hypotheses."
+                    f"{len(hypothesis_results)} hypotheses. / "
+                    f"已为 {len(hypothesis_results)} 个假设写入清洗后的 CSV。"
                 )
             except Exception as exc:
-                logging.warning(f"[FeatureAuditor] Failed to write cleaned CSVs: {exc}")
+                logging.warning(f"[FeatureAuditor] Failed to write cleaned CSVs: {exc} / 写入清洗后的 CSV 失败：{exc}")
 
         # ── Summary ──
         n_keep = sum(1 for v in feature_verdicts
@@ -1720,7 +1728,10 @@ class FeatureAuditor(BaseAgent):
         print(
             f"[FeatureAuditor] Verdicts: {n_keep} KEEP, {n_flag} FLAG, "
             f"{n_remove} REMOVE. Quality: {parsed.get('spectrum_quality', '?')}. "
-            f"Doublets verified: {len(parsed.get('doublet_verdicts', []))}."
+            f"Doublets verified: {len(parsed.get('doublet_verdicts', []))}. / "
+            f"判定：{n_keep} 个保留，{n_flag} 个标记，{n_remove} 个移除。"
+            f"质量：{parsed.get('spectrum_quality', '?')}。"
+            f"双线验证：{len(parsed.get('doublet_verdicts', []))} 个。"
         )
 
         # Save verdict JSON
@@ -1729,7 +1740,7 @@ class FeatureAuditor(BaseAgent):
             with open(verdict_path, "w", encoding="utf-8") as f:
                 json.dump(parsed, f, indent=2, ensure_ascii=False)
         except Exception as exc:
-            logging.warning(f"[FeatureAuditor] Failed to write verdict JSON: {exc}")
+            logging.warning(f"[FeatureAuditor] Failed to write verdict JSON: {exc} / 写入判定 JSON 失败：{exc}")
 
         return state
 
@@ -1770,7 +1781,7 @@ class AnalysisAuditor(BaseAgent):
 
         # ── Guard: no synthesis results ──
         if not rule_analysis or rule_analysis.get("redshift") is None:
-            print("[AnalysisAuditor] No valid synthesis verdict — skipping audit.")
+            print("[AnalysisAuditor] No valid synthesis verdict — skipping audit. / 无有效综合判定 — 跳过审计。")
             state["auditor_verdict"] = "SKIPPED: no synthesis verdict"
             state["auditor_verdict_json"] = {
                 "verdict": "UNCERTAIN",
@@ -1787,7 +1798,10 @@ class AnalysisAuditor(BaseAgent):
 
         print(
             "[AnalysisAuditor] Auditing synthesis verdict: z={}, classification={}, "
-            "confidence={}".format(
+            "confidence={} / 审计综合判定：z={}，分类={}，置信度={}".format(
+                rule_analysis.get("redshift"),
+                rule_analysis.get("classification", "?"),
+                rule_analysis.get("confidence", "?"),
                 rule_analysis.get("redshift"),
                 rule_analysis.get("classification", "?"),
                 rule_analysis.get("confidence", "?"),
@@ -1933,7 +1947,7 @@ class AnalysisAuditor(BaseAgent):
         )
 
         if parsed is None:
-            print("[AnalysisAuditor] Could not extract JSON from audit response.")
+            print("[AnalysisAuditor] Could not extract JSON from audit response. / 无法从审计响应中提取 JSON。")
             state["auditor_verdict"] = "ERROR: could not parse JSON"
             state["auditor_verdict_json"] = {
                 "verdict": "UNCERTAIN",
@@ -1955,7 +1969,15 @@ class AnalysisAuditor(BaseAgent):
         n_issues = len(parsed.get("spectrum_issues", []))
         print(
             "[AnalysisAuditor] Verdict: {} | Confidence: {} | Quality: {} | "
-            "Revisions: {} | Issues: {} | Reobserve: {}".format(
+            "Revisions: {} | Issues: {} | Reobserve: {} / "
+            "判定：{} | 置信度：{} | 质量：{} | "
+            "修订数：{} | 问题数：{} | 重新观测：{}".format(
+                parsed.get("verdict", "?"),
+                parsed.get("calibrated_confidence", "?"),
+                parsed.get("spectrum_quality", "?"),
+                n_revisions,
+                n_issues,
+                parsed.get("reobserve", False),
                 parsed.get("verdict", "?"),
                 parsed.get("calibrated_confidence", "?"),
                 parsed.get("spectrum_quality", "?"),
@@ -1966,9 +1988,9 @@ class AnalysisAuditor(BaseAgent):
         )
         if n_revisions:
             for rev in parsed["line_revisions"]:
-                print(f"  📝 {rev['line']} → {rev['action']}: {rev['reason']}")
+                print(f"  📝 {rev['line']} → {rev['action']}: {rev['reason']} / 修订：{rev['line']} → {rev['action']}：{rev['reason']}")
         if n_issues:
             for issue in parsed["spectrum_issues"]:
-                print(f"  ⚠ {issue}")
+                print(f"  ⚠ {issue} / 问题：{issue}")
 
         return state

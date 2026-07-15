@@ -122,7 +122,7 @@ def _detect_chart_border(
     """
     img = cv2.imread(image_path)
     if img is None:
-        raise ValueError(f"无法读取图像: {image_path}")
+        raise ValueError(f"Cannot read image / 无法读取图像: {image_path}")
 
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
@@ -136,7 +136,7 @@ def _detect_chart_border(
     # 查找轮廓
     contours, _ = cv2.findContours(morph, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     if not contours:
-        raise ValueError("未找到任何轮廓")
+        raise ValueError("No contours found / 未找到任何轮廓")
 
     # 找到最大轮廓
     contours = sorted(contours, key=cv2.contourArea, reverse=True)
@@ -164,7 +164,7 @@ def _crop_img(image_path: str, border_info: dict, save_path: str) -> str:
     """
     img = cv2.imread(image_path)
     if img is None:
-        raise ValueError(f"无法读取图像: {image_path}")
+        raise ValueError(f"Cannot read image / 无法读取图像: {image_path}")
 
     x = border_info['x']
     y = border_info['y']
@@ -174,7 +174,7 @@ def _crop_img(image_path: str, border_info: dict, save_path: str) -> str:
     img_cropped = img[y:y+h, x:x+w]
     cv2.imwrite(save_path, img_cropped)
 
-    print(f'cropped image is saved to {save_path}')
+    print(f'Cropped image saved to / 裁剪图像已保存至 {save_path}')
 
     return save_path
 
@@ -261,7 +261,7 @@ def _pixel_tickvalue_fitting(arr: list) -> dict:
             "rms": float(rms),
             "residuals": residual.tolist()
         }
-        print(f"{axis}: {results[axis]}")
+        print(f"Axis {axis} fit result / 轴 {axis} 拟合结果: {results[axis]}")
 
     return results
 
@@ -340,13 +340,13 @@ def _convert_to_spectrum(crop_path, axis_fitting_info, band_names=None, band_wav
     if band_names is not None and band_wavelengths is not None:
         overlap_regions = find_overlap_regions(band_names, band_wavelengths)
         if overlap_regions:
-            print(f"检测到 {len(overlap_regions)} 个重叠区域，将从光谱中移除: {overlap_regions}")
+            print(f"Detected {len(overlap_regions)} overlap regions, removing from spectrum / 检测到 {len(overlap_regions)} 个重叠区域，将从光谱中移除: {overlap_regions}")
             # 构建原始点的 mask：True 表示保留
             keep_mask = np.ones(len(wavelength), dtype=bool)
             for region_name, (ov_start, ov_end) in overlap_regions.items():
                 in_overlap = (wavelength >= ov_start) & (wavelength <= ov_end)
                 keep_mask &= ~in_overlap
-                print(f"  移除重叠区域 '{region_name}': [{ov_start}, {ov_end}]，共 {in_overlap.sum()} 个点")
+                print(f"  Removing overlap region '{region_name}': [{ov_start}, {ov_end}], {in_overlap.sum()} points / 移除重叠区域 '{region_name}': [{ov_start}, {ov_end}]，共 {in_overlap.sum()} 个点")
             wavelength = wavelength[keep_mask]
             flux = flux[keep_mask]
 
@@ -453,7 +453,7 @@ def _load_spectrum_from_fits(fits_path: str,
                     f"FITS {meta_hdu_name}: VI_Z={vi_z}, VI_SPECTYPE={vi_spectype}"
                 )
             except Exception as exc:
-                logging.warning(f"Failed to read FITS {meta_hdu_name}: {exc}")
+                logging.warning(f"Failed to read FITS {meta_hdu_name} / 读取 FITS 失败 {meta_hdu_name}: {exc}")
 
         # 检测是否为多波段分波段格式
         # 若 arm_names 由外部配置提供，直接使用；否则自动从 HDU 名推断波段
@@ -466,11 +466,11 @@ def _load_spectrum_from_fits(fits_path: str,
         else:
             # 未配置 arm_names，报错提示用户
             raise ValueError(
-                "未配置多波段信息。请在 .env 中设置 ARM_NAME 和 ARM_WAVELENGTH_RANGE。\n"
-                "例如：\n"
+                "Multi-arm information not configured. Set ARM_NAME and ARM_WAVELENGTH_RANGE in .env / 未配置多波段信息。请在 .env 中设置 ARM_NAME 和 ARM_WAVELENGTH_RANGE。\n"
+                "Example / 例如：\n"
                 "  ARM_NAME = B,R,Z\n"
                 "  ARM_WAVELENGTH_RANGE = 3600-5800,5760-7620,7520-9824\n"
-                "如果你使用 CSST 数据，请替换为 U,V,I 及对应波长范围。"
+                "If using CSST data, replace with U,V,I and corresponding wavelength ranges / 如果你使用 CSST 数据，请替换为 U,V,I 及对应波长范围。"
             )
 
         if is_multi_arm:
@@ -516,7 +516,7 @@ def _load_spectrum_from_fits(fits_path: str,
                     snr_list.append(None)
 
                 if not band_has_ivar and not band_has_snr:
-                    logging.warning(f"波段 {band} 缺少 IVAR 和 SNR，将使用默认 effective_snr=5.0")
+                    logging.warning(f"Arm {band} missing both IVAR and SNR, using default effective_snr=5.0 / 波段 {band} 缺少 IVAR 和 SNR，将使用默认 effective_snr=5.0")
 
                 # 读取 SPECMASK（如果存在）
                 mask_hdu_name = f'{band}_MASK'
@@ -539,13 +539,13 @@ def _load_spectrum_from_fits(fits_path: str,
             all_have_snr = all(x is not None for x in snr_list)
             if not all_have_ivar and any(x is not None for x in ivar_list):
                 raise ValueError(
-                    "部分波段有 IVAR 而部分没有，请确保所有波段的 IVAR 数据一致。"
-                    f"IVAR 状态: {['有' if x is not None else '无' for x in ivar_list]}"
+                    "Some arms have IVAR but others do not. Ensure all arms have consistent IVAR data / 部分波段有 IVAR 而部分没有，请确保所有波段的 IVAR 数据一致。"
+                    f" IVAR status / IVAR 状态: {['yes/有' if x is not None else 'no/无' for x in ivar_list]}"
                 )
             if not all_have_snr and any(x is not None for x in snr_list):
                 raise ValueError(
-                    "部分波段有 SNR 而部分没有，请确保所有波段的 SNR 数据一致。"
-                    f"SNR 状态: {['有' if x is not None else '无' for x in snr_list]}"
+                    "Some arms have SNR but others do not. Ensure all arms have consistent SNR data / 部分波段有 SNR 而部分没有，请确保所有波段的 SNR 数据一致。"
+                    f" SNR status / SNR 状态: {['yes/有' if x is not None else 'no/无' for x in snr_list]}"
                 )
 
             # 合并数组
@@ -613,7 +613,7 @@ def _load_spectrum_from_fits(fits_path: str,
             )
             if len(unique_idx) < len(wavelength_masked):
                 n_dup = len(wavelength_masked) - len(unique_idx)
-                logging.warning(f"发现 {n_dup} 个重复波长点，将对 flux/ivar/snr 取均值")
+                logging.warning(f"Found {n_dup} duplicate wavelengths, averaging flux/ivar/snr / 发现 {n_dup} 个重复波长点，将对 flux/ivar/snr 取均值")
                 new_wl = wavelength_masked[unique_idx]
                 new_flux = np.zeros(len(unique_idx))
                 new_ivar = np.zeros(len(unique_idx)) if ivar_masked is not None else None
@@ -656,7 +656,7 @@ def _load_spectrum_from_fits(fits_path: str,
                     break
 
             if data is None:
-                raise ValueError(f"No data found in FITS file: {fits_path}")
+                raise ValueError(f"No data found in FITS file / FITS 文件中未找到数据: {fits_path}")
 
             if hasattr(data, 'dtype') and hasattr(data.dtype, 'names') and data.dtype.names is not None:
                 col_names = data.dtype.names
@@ -679,7 +679,7 @@ def _load_spectrum_from_fits(fits_path: str,
                         ivar_col = name
 
                 if wavelength_col is None or flux_col is None:
-                    raise ValueError(f"Required columns not found. Available: {col_names}")
+                    raise ValueError(f"Required columns not found / 未找到所需列。Available / 可用列: {col_names}")
 
                 wavelength = np.array(data[wavelength_col])
                 flux = np.array(data[flux_col])
@@ -847,15 +847,15 @@ def select_chebyshev_degree(sp, min_degree=1, max_degree=10, verbose=False):
             res_mad = np.median(np.abs(rm - np.median(rm)))
             score = res_mad * 10.0 + (res_skew - 0.5) ** 2 * 5.0 + deg * 0.2
             if verbose:
-                print(f"  degree={deg}: skew={res_skew:.4f}, MAD={res_mad:.4e}, score={score:.4f}")
+                print(f"  degree={deg}: skew={res_skew:.4f}, MAD={res_mad:.4e}, score={score:.4f} / 阶数={deg}: 偏度={res_skew:.4f}, MAD={res_mad:.4e}, 得分={score:.4f}")
             if score < best_score:
                 best_score = score
                 best_degree = deg
         except Exception as e:
             if verbose:
-                print(f"  degree={deg}: 拟合失败 - {e}")
+                print(f"  degree={deg}: fit failed / 拟合失败 - {e}")
     if verbose:
-        print(f"最佳阶数: {best_degree}")
+        print(f"Best degree / 最佳阶数: {best_degree}")
     return best_degree
 
 
@@ -930,13 +930,13 @@ def run_continuum_fitting_masked(
         fit_mask &= ~in_region
 
     n_fit_pts = int(fit_mask.sum())
-    print(f'[Continuum masked] 共 {len(all_features)} 个特征，'
-          f'mask掉 {n_masked_pts} 个数据点，'
-          f'参与拟合点数: {n_fit_pts}/{len(wavelengths)}')
+    print(f'[Continuum masked] {len(all_features)} features total / 共 {len(all_features)} 个特征，'
+          f'masked {n_masked_pts} data points / mask掉 {n_masked_pts} 个数据点，'
+          f'fitting points / 参与拟合点数: {n_fit_pts}/{len(wavelengths)}')
 
     # 少于 20 个点时回退到未掉点的拟合
     if n_fit_pts < 20:
-        print('[Continuum masked] 可用点数不足 20，回退为全谱拟合')
+        print('[Continuum masked] Fewer than 20 usable points, falling back to full-spectrum fit / 可用点数不足 20，回退为全谱拟合')
         fit_mask = np.ones(len(wavelengths), dtype=bool)
 
     wave_fit = wavelengths[fit_mask]
@@ -951,7 +951,7 @@ def run_continuum_fitting_masked(
             verbose=verbose
         )
 
-    print(f'[Continuum masked] Chebyshev degree={chebyshev_degree}')
+    print(f'[Continuum masked] Chebyshev degree / 切比雪夫阶数 = {chebyshev_degree}')
 
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
@@ -1940,7 +1940,7 @@ def _run_redrock_subprocess(
 
     if use_archetypes:
         if archetype_dir is None:
-            raise ValueError("ARCHETYPE_DIR is not set but USE_ARCHETYPES=true")
+            raise ValueError("ARCHETYPE_DIR is not set but USE_ARCHETYPES=true / 未设置 ARCHETYPE_DIR 但 USE_ARCHETYPES=true")
         cmd.extend(["--archetypes", archetype_dir])
         cmd.extend(["--archetype-nnearest", str(nnearest)])
         cmd.extend(["--archetype-legendre-percamera", str(per_camera)])  # rrdesi expects "True"/"False"
@@ -1959,8 +1959,8 @@ def _run_redrock_subprocess(
     result = _subprocess.run(cmd, env=env, text=True, capture_output=True)
 
     if result.returncode != 0:
-        logging.error("Redrock failed (rc=%d): %s", result.returncode, result.stderr)
-        raise RuntimeError(f"Redrock exited with code {result.returncode}: {result.stderr}")
+        logging.error("Redrock failed / Redrock 失败 (rc=%d): %s", result.returncode, result.stderr)
+        raise RuntimeError(f"Redrock exited with code / 退出码 {result.returncode}: {result.stderr}")
 
     logging.info("Redrock finished successfully → %s", output_fits)
 
@@ -1978,7 +1978,7 @@ def _parse_rrdetails_h5(details_h5: str) -> list:
     try:
         import h5py
     except ImportError:
-        raise ImportError("h5py is required to parse rrdetails.h5. Install with: pip install h5py")
+        raise ImportError("h5py is required to parse rrdetails.h5 / 解析 rrdetails.h5 需要 h5py。Install with: pip install h5py")
 
     results = []
 
@@ -2142,7 +2142,7 @@ def run_redrock_pipeline(
     logging.info("Parsed %d redrock fit results from %s", len(redrock_results), details_h5)
 
     if not redrock_results:
-        logging.warning("Redrock returned no valid fits — falling back to empty hypotheses")
+        logging.warning("Redrock returned no valid fits — falling back to empty hypotheses / Redrock 未返回有效拟合结果，回退为空假设")
         return {"z": [], "zmedian": None, "hypotheses": []}
 
     return _redrock_to_hypotheses(redrock_results)

@@ -329,7 +329,7 @@ def plot_features(state: SpectroState, wavelength_label: bool = True):
     
     n_peaks_valid = len([p for p in peaks if p.get('wavelength') is not None])
     n_troughs_valid = len([t for t in troughs if t.get('wavelength') is not None and t.get('wavelength') > 0])
-    print(f"Plot {n_peaks_valid} peaks, {n_troughs_valid} troughs.")
+    print(f"Plot {n_peaks_valid} peaks, {n_troughs_valid} troughs. / 绘制 {n_peaks_valid} 个峰，{n_troughs_valid} 个谷。")
 
     fig.savefig(os.path.join(state['output_dir'], "visual_interpreter", f"{state['file_name']}_features.png"),
                 dpi=150, bbox_inches='tight')
@@ -501,4 +501,4 @@ def plot_harness_candidate(
     _os.makedirs(_os.path.dirname(output_path) or ".", exist_ok=True)
     fig.savefig(output_path, dpi=150, bbox_inches='tight')
     plt.close(fig)
-    print(f"Plot harness candidate: {n_em} emission, {n_abs} absorption → {output_path}")
+    print(f"Plot harness candidate: {n_em} emission, {n_abs} absorption → {output_path} / 绘制 harness 候选：{n_em} 个发射线，{n_abs} 个吸收线 → {output_path}")

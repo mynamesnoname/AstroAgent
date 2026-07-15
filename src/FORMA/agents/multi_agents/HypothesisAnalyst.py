@@ -113,7 +113,8 @@ class HypothesisAnalyst(BaseAgent):
             reason = feature_audit_verdict.get("reason", "No features to verify.")
             logging.error(
                 f"[HypothesisAnalyst] FeatureAuditor failed/skipped: {reason}. "
-                f"Terminating this spectrum's analysis."
+                f"Terminating this spectrum's analysis. / "
+                f"FeatureAuditor 失败/跳过：{reason}。终止对该光谱的分析。"
             )
             # Write partial outputs before aborting
             state['hypothesis_analysis'] = {
@@ -132,7 +133,8 @@ class HypothesisAnalyst(BaseAgent):
             }
             self._writer.write_hypothesis_analysis(state)
             raise FeatureAuditorFailed(
-                f"FeatureAuditor failed after all retries: {reason}"
+                f"FeatureAuditor failed after all retries: {reason} / "
+                f"FeatureAuditor 在全部重试后失败：{reason}"
             )
 
         # ── LLM synthesis ───────────────────────────────────────
@@ -197,7 +199,8 @@ class HypothesisAnalyst(BaseAgent):
 
             except Exception as exc:
                 logging.warning(
-                    f"Harness hypothesis {idx} (z={hyp['z']:.4f}) failed: {exc}"
+                    f"Harness hypothesis {idx} (z={hyp['z']:.4f}) failed: {exc} / "
+                    f"Harness 假设 {idx} (z={hyp['z']:.4f}) 失败：{exc}"
                 )
                 return {
                     'hypothesis_idx': idx + 1,
@@ -266,7 +269,8 @@ class HypothesisAnalyst(BaseAgent):
                 )
             except Exception as exc:
                 logging.warning(
-                    f"Failed to plot harness candidate {idx} (z={z:.4f}): {exc}"
+                    f"Failed to plot harness candidate {idx} (z={z:.4f}): {exc} / "
+                    f"绘制 harness 候选 {idx} (z={z:.4f}) 失败：{exc}"
                 )
 
     # =====================================================================

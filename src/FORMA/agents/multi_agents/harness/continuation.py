@@ -141,7 +141,9 @@ async def run_continuation_streaming(
         ctn_attempt += 1
         logging.warning(
             f"{log_prefix} output truncated (finish_reason=length), "
-            f"continuation attempt {ctn_attempt}/{max_attempts}..."
+            f"continuation attempt {ctn_attempt}/{max_attempts}... / "
+            f"输出被截断（finish_reason=length），"
+            f"第{ctn_attempt}/{max_attempts}次续写尝试..."
         )
         _ctn_md = None
         try:
@@ -209,7 +211,8 @@ async def run_continuation_streaming(
         except Exception as exc:
             logging.warning(
                 f"{log_prefix} continuation {ctn_attempt} failed: {exc}. "
-                "Returning truncated result."
+                "Returning truncated result. / "
+                f"续写第{ctn_attempt}次失败：{exc}。返回截断结果。"
             )
             if _ctn_md:
                 try:
@@ -222,7 +225,9 @@ async def run_continuation_streaming(
         logging.error(
             f"{log_prefix} ⚠️  STILL TRUNCATED after "
             f"{ctn_attempt} continuation attempt(s) — output may be incomplete, "
-            f"but pipeline will continue with partial result."
+            f"but pipeline will continue with partial result. / "
+            f"仍被截断（{ctn_attempt}次续写后）——输出可能不完整，"
+            f"但管道将继续使用部分结果。"
         )
 
     return accumulated_messages
@@ -270,7 +275,9 @@ async def run_continuation_ainvoke(
         ctn_attempt += 1
         logging.warning(
             f"{log_prefix} output truncated (non-streaming), "
-            f"continuation attempt {ctn_attempt}/{max_attempts}..."
+            f"continuation attempt {ctn_attempt}/{max_attempts}... / "
+            f"输出被截断（非流式），"
+            f"第{ctn_attempt}/{max_attempts}次续写尝试..."
         )
         try:
             continuation_msgs = list(messages)
@@ -291,7 +298,8 @@ async def run_continuation_ainvoke(
         except Exception as exc:
             logging.warning(
                 f"{log_prefix} continuation {ctn_attempt} failed: {exc}. "
-                "Returning truncated result."
+                "Returning truncated result. / "
+                f"续写第{ctn_attempt}次失败：{exc}。返回截断结果。"
             )
             break
 
@@ -299,7 +307,9 @@ async def run_continuation_ainvoke(
         logging.error(
             f"{log_prefix} ⚠️  STILL TRUNCATED after "
             f"{ctn_attempt} continuation attempt(s) — output may be incomplete, "
-            f"but pipeline will continue with partial result."
+            f"but pipeline will continue with partial result. / "
+            f"仍被截断（{ctn_attempt}次续写后）——输出可能不完整，"
+            f"但管道将继续使用部分结果。"
         )
 
     return messages
@@ -347,7 +357,9 @@ def run_continuation_invoke(
         ctn_attempt += 1
         logging.warning(
             f"{log_prefix} output truncated (sync), "
-            f"continuation attempt {ctn_attempt}/{max_attempts}..."
+            f"continuation attempt {ctn_attempt}/{max_attempts}... / "
+            f"输出被截断（同步），"
+            f"第{ctn_attempt}/{max_attempts}次续写尝试..."
         )
         try:
             continuation_msgs = list(messages)
@@ -368,7 +380,8 @@ def run_continuation_invoke(
         except Exception as exc:
             logging.warning(
                 f"{log_prefix} continuation {ctn_attempt} failed: {exc}. "
-                "Returning truncated result."
+                "Returning truncated result. / "
+                f"续写第{ctn_attempt}次失败：{exc}。返回截断结果。"
             )
             break
 
@@ -376,7 +389,9 @@ def run_continuation_invoke(
         logging.error(
             f"{log_prefix} ⚠️  STILL TRUNCATED after "
             f"{ctn_attempt} continuation attempt(s) — output may be incomplete, "
-            f"but pipeline will continue with partial result."
+            f"but pipeline will continue with partial result. / "
+            f"仍被截断（{ctn_attempt}次续写后）——输出可能不完整，"
+            f"但管道将继续使用部分结果。"
         )
 
     return messages

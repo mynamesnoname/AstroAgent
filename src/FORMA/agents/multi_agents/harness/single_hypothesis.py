@@ -600,7 +600,7 @@ def run(
             if not _is_retryable(e) or attempt >= _HTTP_RETRIES:
                 raise
             delay = _HTTP_DELAYS[min(attempt, len(_HTTP_DELAYS) - 1)]
-            logging.warning(f"HTTP retry {attempt + 1}/{_HTTP_RETRIES} in {delay}s: {e}")
+            logging.warning(f"HTTP retry {attempt + 1}/{_HTTP_RETRIES} in {delay}s: {e} / HTTP重试第{attempt + 1}/{_HTTP_RETRIES}次，等待{delay}秒：{e}")
             time.sleep(delay)
     else:
         raise last_exc
@@ -775,7 +775,7 @@ async def arun(
                 if not _is_retryable(e) or attempt >= _HTTP_RETRIES:
                     raise
                 delay = _HTTP_DELAYS[min(attempt, len(_HTTP_DELAYS) - 1)]
-                logging.warning(f"HTTP retry {attempt + 1}/{_HTTP_RETRIES} in {delay}s: {e}")
+                logging.warning(f"HTTP retry {attempt + 1}/{_HTTP_RETRIES} in {delay}s: {e} / HTTP重试第{attempt + 1}/{_HTTP_RETRIES}次，等待{delay}秒：{e}")
                 await asyncio.sleep(delay)
         else:
             raise last_exc
@@ -825,7 +825,7 @@ async def arun(
             if not _is_retryable(e) or attempt >= _HTTP_RETRIES:
                 raise
             delay = _HTTP_DELAYS[min(attempt, len(_HTTP_DELAYS) - 1)]
-            logging.warning(f"HTTP retry {attempt + 1}/{_HTTP_RETRIES} in {delay}s: {e}")
+            logging.warning(f"HTTP retry {attempt + 1}/{_HTTP_RETRIES} in {delay}s: {e} / HTTP重试第{attempt + 1}/{_HTTP_RETRIES}次，等待{delay}秒：{e}")
             await asyncio.sleep(delay)
     else:
         raise last_exc

@@ -298,7 +298,7 @@ async def analyze_failure(
             try:
                 blind_text = await _stream_one(md, "Round 1 — Blind Review", blind_prompt)
             except Exception as exc:
-                logging.warning(f"Failure analysis Round 1 stream failed: {exc}")
+                logging.warning(f"Failure analysis Round 1 stream failed: {exc} / 失败分析第1轮流式调用失败：{exc}")
                 return _fallback_analysis()
 
             blind_parsed = _parse_extraction_json(blind_text)
@@ -327,7 +327,7 @@ async def analyze_failure(
                     root_cause_agent, root_prompt, agent_config,
                 )
             except Exception as exc:
-                logging.warning(f"Failure analysis Round 2 stream failed: {exc}")
+                logging.warning(f"Failure analysis Round 2 stream failed: {exc} / 失败分析第2轮流式调用失败：{exc}")
                 return _fallback_analysis()
 
         parsed = _parse_extraction_json(root_text)
@@ -340,7 +340,7 @@ async def analyze_failure(
     try:
         blind_text = await _invoke_one(blind_prompt)
     except Exception as exc:
-        logging.warning(f"Failure analysis Round 1 failed: {exc}")
+        logging.warning(f"Failure analysis Round 1 failed: {exc} / 失败分析第1轮调用失败：{exc}")
         return _fallback_analysis()
 
     blind_parsed = _parse_extraction_json(blind_text)
@@ -371,7 +371,7 @@ async def analyze_failure(
         last_msg = messages[-1]
         root_text = last_msg.content if hasattr(last_msg, "content") else str(last_msg)
     except Exception as exc:
-        logging.warning(f"Failure analysis Round 2 failed: {exc}")
+        logging.warning(f"Failure analysis Round 2 failed: {exc} / 失败分析第2轮调用失败：{exc}")
         return _fallback_analysis()
 
     parsed = _parse_extraction_json(root_text)
@@ -516,7 +516,7 @@ async def analyze_failure_batch(
         except Exception as exc:
             md.write(f"\n\n> ❌ Batch analysis streaming failed: {exc}\n\n")
             md.flush()
-            logging.warning(f"Batch analysis LLM stream failed: {exc}")
+            logging.warning(f"Batch analysis LLM stream failed: {exc} / 批量分析 LLM 流式调用失败：{exc}")
             return None
 
     # Also write a clean markdown version (no prompt dump)

@@ -740,7 +740,8 @@ def _build_user_message(
     if feature_audit_verdict is None:
         logging.warning(
             "[synthesize] feature_audit_verdict is None — "
-            "FeatureAuditor may not have run. Using empty verdict."
+            "FeatureAuditor may not have run. Using empty verdict. / "
+            "feature_audit_verdict 为 None — FeatureAuditor 可能未运行。使用空判定。"
         )
         feature_audit_verdict = {"feature_verdicts": [], "global_issues": []}
 
@@ -1089,7 +1090,7 @@ async def arun(
             }
 
     except Exception as exc:
-        logging.warning(f"Synthesis agent failed: {exc}")
+        logging.warning(f"Synthesis agent failed: {exc} / 合成代理失败：{exc}")
         parsed = {
             "redshift": None,
             "anchor_line": None,

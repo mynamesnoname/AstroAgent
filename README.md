@@ -31,7 +31,7 @@ The [`example/`](example/) directory contains two ready-to-run cases:
 
 | Directory | Description |
 |-----------|-------------|
-| [`basic/`](example/basic/) | Two standard DESI spectra (`4.fits`, `116.fits`) — a quick way to test the pipeline. |
+| [`basic/`](example/basic/) | Five DESI spectra covering all four classes — QSO, LRG, ELG, BGS. All are DESI Visual Inspection (VI) Q4 (highest quality). The `FIBERMAP` HDU in each FITS file carries the official VI results: `VI_Z` (redshift), `VI_SPECTYPE` (class), `VI_QUALITY` (1–4). |
 | [`counter_fact_examples/`](example/counter_fact_examples/) | Forged spectra for stress-testing the auditor. Lyα is removed in one, narrow-line QSO impostor in the other. See its [README](example/counter_fact_examples/README.md) for details. |
 
 ---
