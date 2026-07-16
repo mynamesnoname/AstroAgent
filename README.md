@@ -36,7 +36,7 @@ The [`example/`](example/) directory contains two ready-to-run cases:
 
 ---
 
-## Quick Start with Docker (Recommended)
+## Quick Start with Docker
 
 The easiest way to run FORMA is via Docker. The image bundles Python 3.12, all dependencies, and the Redrock redshift fitter.
 
@@ -77,7 +77,7 @@ docker compose up forma-web
 
 ---
 
-## Manual Installation
+## Manual Installation (Recommended)
 
 If you prefer to run FORMA without Docker:
 

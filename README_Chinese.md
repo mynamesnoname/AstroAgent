@@ -43,7 +43,7 @@ FORMA 利用大语言模型（LLMs）对一维天文光谱进行类似人类天�
 
 ---
 
-## Docker 快速开始（推荐）
+## Docker 快速开始
 
 使用 Docker 是运行 FORMA 最简单的方式。镜像内包含 Python 3.12、全部依赖，以及 Redrock 红移拟合器。
 
@@ -59,7 +59,7 @@ cp .env_example .env
 # 不要设置 INPUT_DIR / OUTPUT_DIR — Docker 通过卷挂载处理路径
 ```
 
-### 2. CLI 模式（单文件或批处理）
+### 2. CLI 模式（单文件或批处理）（推荐）
 
 ```bash
 # 单文件
