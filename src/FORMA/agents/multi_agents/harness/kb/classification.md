@@ -64,7 +64,6 @@
 [Ne V] (3426 Å) is a high-ionization forbidden line almost never present in non-AGN objects. However, it is a weak line easily mimicked by noise. Before using [Ne V] as AGN evidence:
 1. Read the spectrum ±50 Å around the predicted observed wavelength.
 2. Verify the feature is a genuine emission peak rising clearly above the local continuum — not a continuum wiggle or noise spike.
-3. Weigh against Galaxy features: if Galaxy indicators (Ca K/H doublet, narrow emission lines with correct spacing) are clear and self-consistent while the [Ne V] feature is marginal, default to Galaxy.
 4. [Ne V] CAN independently support QSO classification — but only if the peak is visually convincing, not merely a CWT detection at the noise limit.
 
 ## Mg II Emission vs Absorption Coexistence

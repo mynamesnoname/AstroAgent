@@ -5,7 +5,6 @@ import matplotlib.pyplot as plt
 from typing import List
 # from scipy.ndimage import gaussian_filter1d
 from FORMA.agents.common.state import SpectroState
-from FORMA.agents.multi_agents.utils.usage import normalize_line_name
 
 
 # ===========================================================
@@ -405,12 +404,30 @@ def plot_harness_candidate(
 
     from FORMA.agents.multi_agents.harness.tools import EMISSION_LINES, ABSORPTION_LINES
 
+    #  bracket-normalisation lookup table (LLM may produce variants like "O [II]" or "O[II]")
+    _BRACKET_FIX: dict[str, str] = {
+        "O[II]": "[O II]", "N[II]a": "[N II]a", "N[II]b": "[N II]b",
+        "S[II]a": "[S II]a", "S[II]b": "[S II]b",
+        "O[III]a": "[O III]a", "O[III]b": "[O III]b", "Ne[V]": "[Ne V]",
+        "O II": "[O II]", "O IIIa": "[O III]a", "O IIIb": "[O III]b",
+        "N IIa": "[N II]a", "N IIb": "[N II]b",
+        "S IIa": "[S II]a", "S IIb": "[S II]b", "Ne V": "[Ne V]",
+    }
+
+    def _lookup_name(raw: str) -> str:
+        """Normalise line name just enough to look up EMISSION_LINES / ABSORPTION_LINES."""
+        import re
+        cleaned = re.sub(r'([A-Za-z]+)\s+\[([IVab]+)\]', r'\1[\2]', raw)
+        cleaned = _BRACKET_FIX.get(cleaned, cleaned)
+        if cleaned == "Mg_abs":
+            cleaned = "Mg I_abs"
+        return cleaned
+
     for row in adopted_lines:
         name = row.get("name", "")
-        # Normalize line name to canonical form (handles LLM-generated variants)
-        canonical_name = normalize_line_name(name)
-        is_emission = canonical_name in EMISSION_LINES
-        is_absorption = canonical_name in ABSORPTION_LINES
+        lookup = _lookup_name(name)
+        is_emission = lookup in EMISSION_LINES
+        is_absorption = lookup in ABSORPTION_LINES
 
         center = None
         for key in ("fitted_center", "predicted_obs"):
