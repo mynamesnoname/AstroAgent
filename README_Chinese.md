@@ -110,8 +110,7 @@ cp .env_example .env
 | `LLM_TEMPERATURE` | `0.1` | LLM 采样温度 |
 | `LLM_MAX_TOKENS` | API 默认 | 每次 LLM 响应的最大 token 数 |
 | `LLM_THINKING` | `disabled` | 思考模式（`enabled` / `disabled` / `none`） |
-| `REDROCK` | `true` | 启用 Redrock 红移拟合 |
-| `RR_TEMPLATE_DIR` | — | Redrock 模板路径 |
+| `RR_TEMPLATE_DIR` | *必填* | Redrock 模板路径（当前流程固定使用 Redrock） |
 | `ARCHETYPE_DIR` | — | Archetype 文件路径（可选） |
 | `USE_ARCHETYPES` | `true` | 拟合时使用 archetypes |
 | `NMINIMA` | `9` | 探索的红移极小值数量 |

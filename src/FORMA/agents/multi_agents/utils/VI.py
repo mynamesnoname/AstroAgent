@@ -1959,8 +1959,19 @@ def _run_redrock_subprocess(
     result = _subprocess.run(cmd, env=env, text=True, capture_output=True)
 
     if result.returncode != 0:
-        logging.error("Redrock failed / Redrock 失败 (rc=%d): %s", result.returncode, result.stderr)
-        raise RuntimeError(f"Redrock exited with code / 退出码 {result.returncode}: {result.stderr}")
+        # rrdesi may write tracebacks to stdout instead of stderr.  Preserve
+        # both streams so subprocess failures remain diagnosable upstream.
+        error_output = "\n".join(
+            part for part in (result.stderr.strip(), result.stdout.strip()) if part
+        ) or "(no subprocess output / 子进程无输出)"
+        logging.error(
+            "Redrock failed / Redrock 失败 (rc=%d): %s",
+            result.returncode,
+            error_output,
+        )
+        raise RuntimeError(
+            f"Redrock exited with code / 退出码 {result.returncode}: {error_output}"
+        )
 
     logging.info("Redrock finished successfully → %s", output_fits)
 

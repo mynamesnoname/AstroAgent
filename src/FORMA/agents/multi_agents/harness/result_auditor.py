@@ -44,7 +44,11 @@ def _load_skill() -> str:
 # Wavelength error lookup
 # ---------------------------------------------------------------------------
 
-def _lookup_wavelength_errors(harness_dir: str, output_dir: str) -> dict:
+def _lookup_wavelength_errors(
+    harness_dir: str,
+    output_dir: str,
+    spectrum_id: str = None,
+) -> dict:
     """Look up wavelength_error for each unique wavelength in all line CSVs.
 
     Reads ``{idx}_lines.csv`` and emission/absorption CSVs, builds a mapping
@@ -54,7 +58,7 @@ def _lookup_wavelength_errors(harness_dir: str, output_dir: str) -> dict:
     Returns a dict: {int(wavelength): wavelength_err}
     """
     errors: dict[int, float] = {}
-    spectrum_id = os.path.basename(os.path.normpath(harness_dir)).split("_")[0]
+    spectrum_id = spectrum_id or os.path.basename(os.path.normpath(harness_dir))
 
     csv_paths = []
     import glob as _glob
@@ -186,7 +190,11 @@ def _build_user_message(state: SpectroState, harness_dir: str) -> str:
 
     # ── Confirmed lines with wavelength errors ──
     confirmed_lines = auditor_json.get("confirmed_lines") or []
-    wavelength_errors = _lookup_wavelength_errors(harness_dir, output_dir)
+    wavelength_errors = _lookup_wavelength_errors(
+        harness_dir,
+        output_dir,
+        spectrum_id=state.get("file_name"),
+    )
     parts.append("## Confirmed Lines (with wavelength errors)")
     parts.append("")
     parts.append(_format_confirmed_lines_with_errors(confirmed_lines, wavelength_errors))

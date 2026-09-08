@@ -211,7 +211,9 @@ def find_features_cwt(wavelength, flux, snr_thresh=5.0, min_ridge_length=2,
                 'FWHM_A': float(fwhm_a),
                 'FWHM_km_s': float(fwhm_km_s),
                 'amplitude': float(amp),
-                'amplitude_err': float(amp * 0.15),
+                # Uncertainties are magnitudes and must never carry the sign
+                # of an absorption-line amplitude.
+                'amplitude_err': float(abs(amp) * 0.15),
                 'width_class': ('narrow' if fwhm_km_s < 1000 else
                                 'intermediate' if fwhm_km_s < 2000 else 'broad'),
                 'feature_type': feature_type,
@@ -301,7 +303,11 @@ def run_cwt_feature_detection(
         if not records:
             return pd.DataFrame()
         df = pd.DataFrame(records)
-        df['amplitude_rank'] = df['amplitude'].rank(ascending=False, method='min').astype(int)
+        # Rank by feature strength.  Absorption amplitudes are negative, so a
+        # signed descending rank would incorrectly put the shallowest trough first.
+        df['amplitude_rank'] = df['amplitude'].abs().rank(
+            ascending=False, method='min'
+        ).astype(int)
         df = df.sort_values('wavelength').reset_index(drop=True)
         return df
 
@@ -326,7 +332,9 @@ def run_cwt_feature_detection(
             elif col == 'index':
                 df_out[col] = range(len(df))
             elif col == 'amplitude_rank':
-                df_out[col] = df['amplitude'].rank(ascending=False, method='min').astype(int)
+                df_out[col] = df['amplitude'].abs().rank(
+                    ascending=False, method='min'
+                ).astype(int)
             elif col == 'integrated_flux':
                 df_out[col] = df['amplitude'] * df['FWHM_A'] / SIGMA_TO_FWHM * np.sqrt(2 * np.pi)
             elif col == 'flux_at_center':

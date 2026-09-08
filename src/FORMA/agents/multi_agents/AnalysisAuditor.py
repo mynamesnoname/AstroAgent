@@ -903,20 +903,19 @@ def _build_merged_verified_features(hypothesis_dir: str, best_idx: int = None) -
     return "\n".join(lines)
 
 
-def _build_cwt_catalog(hypothesis_dir: str) -> list[dict]:
+def _build_cwt_catalog(hypothesis_dir: str, spectrum_id: str = None) -> list[dict]:
     """Build a unified CWT feature catalog from redrock emission/absorption CSVs.
 
     Reads ``{spectrum_id}_emission.csv`` and ``{spectrum_id}_absorption.csv``
-    from the parent output directory (one level above hypothesis_dir).  These are
+    from the target output directory.  These are
     the FULL CWT peak/trough catalogs — every feature the CWT pipeline detected
     across the entire spectrum, NOT limited to hypothesis-matched features.
 
     Returns a list of dicts with keys: wavelength, amplitude, fwhm_km_s,
     ridge_length, snr, width_class, feature_type.
     """
-    # The output dir is the parent of hypothesis_dir
-    output_dir = os.path.dirname(os.path.normpath(hypothesis_dir))
-    spectrum_id = os.path.basename(os.path.normpath(hypothesis_dir)).split("_")[0]
+    output_dir = os.path.normpath(hypothesis_dir)
+    spectrum_id = spectrum_id or os.path.basename(output_dir)
 
     all_features: list[dict] = []
 
@@ -1823,7 +1822,10 @@ class AnalysisAuditor(BaseAgent):
         user_prompt = _build_synthesis_audit_user_message(state, hypothesis_dir)
 
         # ── Build CWT catalog (all features, all hypotheses) ──
-        _cwt_catalog = _build_cwt_catalog(hypothesis_dir)
+        _cwt_catalog = _build_cwt_catalog(
+            hypothesis_dir,
+            spectrum_id=state.get("file_name"),
+        )
 
         # ── Closure over spectrum arrays ──
         spec = state["spectrum"]

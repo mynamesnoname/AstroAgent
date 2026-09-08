@@ -50,7 +50,8 @@ class HypothesisAnalyst(BaseAgent):
         to cross-compare the (possibly cleaned) results.
         """
         params = self.runtime.configs.params
-        mode = "redrock" if params.redrock else "nomad"
+        # The current FITS pipeline requires Redrock for hypothesis generation.
+        mode = "redrock"
         state['_hypothesis_mode'] = mode  # stash for synthesize later
 
         hypotheses = collect_redshift_hypotheses(
@@ -324,5 +325,4 @@ class HypothesisAnalyst(BaseAgent):
             summaries=summaries,
             feature_audit_verdict=feature_audit_verdict,
         )
-
 

@@ -38,16 +38,13 @@ async def main():
         # Check directories
         # ------------------------
         if not input_dir:
-            logging.error("INPUT_DIR is not set")
-            return
+            raise ValueError("INPUT_DIR is not set / 未设置 INPUT_DIR")
 
         if not os.path.isdir(input_dir):
-            logging.error(f"Input directory does not exist: {input_dir}")
-            return
+            raise FileNotFoundError(f"Input directory does not exist: {input_dir}")
 
         if not output_dir:
-            logging.error("OUTPUT_DIR is not set")
-            return
+            raise ValueError("OUTPUT_DIR is not set / 未设置 OUTPUT_DIR")
 
         if not os.path.isdir(output_dir):
             logging.info(f"Output directory does not exist, creating: {output_dir}")
@@ -64,8 +61,10 @@ async def main():
                 raise ValueError("Batch mode is enabled but start/end are not set")
         else:
             if not io_config.file_name:
-                logging.error("IMAGE_NAME is not set for single image mode")
-                return
+                raise ValueError(
+                    "FILE_NAME is not set for single file mode / "
+                    "单文件模式下未设置 FILE_NAME"
+                )
             file_ids = [io_config.file_name]
             logging.info("Single image mode enabled")
 
@@ -105,6 +104,7 @@ async def main():
         # Main processing loop
         # ------------------------
         success_count = 0
+        failure_count = 0
         batch_num = 0  # batch failure analysis counter
         total = len(file_ids)
 
@@ -114,6 +114,7 @@ async def main():
 
             if not os.path.isfile(file_path):
                 logging.warning(f"Skipping missing file: {file_path}")
+                failure_count += 1
                 continue
 
             logging.info(f"Processing image {idx}/{total}: {file_name}.{format}")
@@ -125,10 +126,17 @@ async def main():
                     output_dir=output_dir
                 )
                 result = await orchestrator.run_analysis_single(state)
+
+                in_brief = result.get("in_brief")
+                if not isinstance(in_brief, dict) or not in_brief:
+                    raise RuntimeError(
+                        "Pipeline completed without a valid in_brief result / "
+                        "管道结束但未生成有效的 in_brief 结果"
+                    )
+
                 writer.write(result)
                 logging.info(f"Image {file_name}.{format} processed")
 
-                in_brief = result.get("in_brief", {})
                 lines_val = in_brief.get("lines")
                 if isinstance(lines_val, list):
                     lines_str = ", ".join(str(l) for l in lines_val)
@@ -184,6 +192,7 @@ async def main():
                             )
 
             except Exception as e:
+                failure_count += 1
                 logging.exception(f"Failed to process image {file_name}.{format}: {e}")
 
         if success_count:
@@ -217,10 +226,18 @@ async def main():
                         f"Final batch failure analysis #{batch_num} failed: {exc}"
                     )
 
+        if failure_count:
+            raise RuntimeError(
+                f"{failure_count} of {total} task(s) failed or were missing; "
+                f"{success_count} succeeded / {total} 个任务中有 {failure_count} 个失败或缺失，"
+                f"{success_count} 个成功"
+            )
+
         logging.info("All tasks completed")
 
     except Exception as e:
         logging.exception(f"Main program failed: {e}")
+        raise
 
 
 if __name__ == "__main__":

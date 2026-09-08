@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import traceback
 
 from typing import Dict, Any, List, Optional, Set, Union
 
@@ -285,7 +284,7 @@ No spectral features were detected in this exposure. The spectrum appears to con
 
             except asyncio.CancelledError as e:
                 print(f"⚠️ Analysis canceled / 分析已取消: {e}")
-                return current_state
+                raise
 
             except Exception as e:
                 error_msg = str(e).lower()
@@ -310,9 +309,11 @@ No spectral features were detected in this exposure. The spectrum appears to con
                     logging.warning("🧹 Cleared intermediate results, restarting from clean state / 已清除中间结果，从干净状态重新执行")
                 else:
                     print(f"❌ Analysis failed / 分析流程失败: {e}")
-                    traceback.print_exc()
-                    return current_state
+                    raise
 
-        # 所有重试耗尽
-        print(f"❌ Analysis failed after {max_tries} attempts, giving up / 分析在 {max_tries} 次尝试后仍失败，放弃")
-        return current_state
+        # 正常情况下最后一次失败会在上面的 except 中重新抛出；保留显式保护，
+        # 避免未来修改循环逻辑后把失败误当成成功返回。
+        raise RuntimeError(
+            f"Analysis failed after {max_tries} attempts / "
+            f"分析在 {max_tries} 次尝试后仍失败"
+        )

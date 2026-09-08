@@ -365,19 +365,17 @@ class VisualInterpreter(BaseAgent):
 
             # tol_wavelength = self.runtime.configs.params.tol_wavelength  # 已注释（2026-07-06）
 
-            print(params.redrock)
             # ═══════════════════════════════════════════════════════════════
-            # REDROCK 路径：运行 rrdesi 生成红移假设。
-            # 原 brute_force_line_matching 分支已注释（2026-07-06），
-            # 如需恢复 REDROCK=false 路径，取消下面和 import 处的注释。
+            # 当前 FITS 流程固定使用 Redrock（rrdesi）生成红移假设。
+            # The current FITS pipeline requires Redrock for hypothesis generation.
             # ═══════════════════════════════════════════════════════════════
             if params.rr_template_dir is None:
                 raise ValueError(
-                    "REDROCK=true but RR_TEMPLATE_DIR is not set in .env / REDROCK=true 但 .env 中未设置 RR_TEMPLATE_DIR"
+                    "RR_TEMPLATE_DIR is required by the Redrock pipeline / Redrock 管道要求设置 RR_TEMPLATE_DIR"
                 )
             if params.use_archetypes and params.archetype_dir is None:
                 raise ValueError(
-                    "REDROCK=true, USE_ARCHETYPES=true but ARCHETYPE_DIR is not set in .env / REDROCK=true, USE_ARCHETYPES=true 但 .env 中未设置 ARCHETYPE_DIR"
+                    "USE_ARCHETYPES=true but ARCHETYPE_DIR is not set in .env / USE_ARCHETYPES=true 但 .env 中未设置 ARCHETYPE_DIR"
                 )
             state['redshift_hypotheses'] = run_redrock_pipeline(
                 input_fits=state['file_path'],
@@ -390,12 +388,6 @@ class VisualInterpreter(BaseAgent):
                 nnearest=params.rr_nnearest,
                 omp_num_threads=params.rr_omp_num_threads,
             )
-            # ── 原 REDROCK=false 分支（已注释）────────────────────
-            # else:
-            #     state['redshift_hypotheses'] = brute_force_line_matching(
-            #         state, tol_wavelength,
-            #     )
-
             ResultWriter().write_redshift_hypotheses(state)
 
             return state

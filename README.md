@@ -103,8 +103,7 @@ Key variables (see `.env_example` for full list):
 | `LLM_TEMPERATURE` | `0.1` | LLM sampling temperature |
 | `LLM_MAX_TOKENS` | API default | Max tokens per LLM response |
 | `LLM_THINKING` | `disabled` | Thinking mode (`enabled` / `disabled` / `none`) |
-| `REDROCK` | `true` | Enable Redrock redshift fitter |
-| `RR_TEMPLATE_DIR` | — | Path to Redrock templates |
+| `RR_TEMPLATE_DIR` | *required* | Path to Redrock templates (the current pipeline always uses Redrock) |
 | `ARCHETYPE_DIR` | — | Path to archetype files (optional) |
 | `USE_ARCHETYPES` | `true` | Use archetypes in fitting |
 | `NMINIMA` | `9` | Redshift minima to explore |
